@@ -34,7 +34,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import APIKeyHeader
 from loguru import logger
 
-from kiro.config import PROXY_API_KEY
+from kiro.config import PROXY_API_KEY, API_KEY_MODE
 from kiro.models_anthropic import (
     AnthropicMessagesRequest,
     AnthropicMessagesResponse,
@@ -74,29 +74,46 @@ async def verify_anthropic_api_key(
 ) -> bool:
     """
     Verify API key for Anthropic API.
-    
+
+    In API_KEY_MODE the caller's token is the Kiro API key — we only check
+    that at least one auth header is present, not that it matches PROXY_API_KEY.
+
     Supports two authentication methods:
     1. x-api-key header (Anthropic native)
     2. Authorization: Bearer header (for compatibility)
-    
+
     Args:
         x_api_key: Value from x-api-key header
         authorization: Value from Authorization header
-    
+
     Returns:
         True if key is valid
-    
+
     Raises:
         HTTPException: 401 if key is invalid or missing
     """
+    if API_KEY_MODE:
+        if x_api_key or (authorization and authorization.startswith("Bearer ")):
+            return True
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "type": "error",
+                "error": {
+                    "type": "authentication_error",
+                    "message": "API_KEY_MODE is enabled: supply your Kiro API key via x-api-key or Authorization: Bearer",
+                },
+            },
+        )
+
     # Check x-api-key first (Anthropic native)
     if x_api_key and x_api_key == PROXY_API_KEY:
         return True
-    
+
     # Fall back to Authorization: Bearer
     if authorization and authorization == f"Bearer {PROXY_API_KEY}":
         return True
-    
+
     logger.warning("Access attempt with invalid API key (Anthropic endpoint)")
     raise HTTPException(
         status_code=401,
@@ -144,10 +161,15 @@ async def messages(
         HTTPException: On validation or API errors
     """
     logger.info(f"Request to /v1/messages (model={request_data.model}, stream={request_data.stream})")
-    
+
     if anthropic_version:
         logger.debug(f"Anthropic-Version header: {anthropic_version}")
-    
+
+    # In API_KEY_MODE, delegate to the dedicated handler
+    if API_KEY_MODE:
+        from kiro.api_key_mode import handle_chat_anthropic
+        return await handle_chat_anthropic(request, request_data, anthropic_version)
+
     auth_manager: KiroAuthManager = request.app.state.auth_manager
     model_cache: ModelInfoCache = request.app.state.model_cache
     

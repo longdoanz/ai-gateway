@@ -37,6 +37,7 @@ from loguru import logger
 from kiro.config import (
     PROXY_API_KEY,
     APP_VERSION,
+    API_KEY_MODE,
 )
 from kiro.models_openai import (
     OpenAIModel,
@@ -67,18 +68,28 @@ api_key_header = APIKeyHeader(name="Authorization", auto_error=False)
 async def verify_api_key(auth_header: str = Security(api_key_header)) -> bool:
     """
     Verify API key in Authorization header.
-    
-    Expects format: "Bearer {PROXY_API_KEY}"
-    
+
+    In API_KEY_MODE the Bearer token is the caller's Kiro API key — we only
+    check that it is present, not that it matches PROXY_API_KEY.
+
+    Expects format: "Bearer {PROXY_API_KEY}" (or any Bearer token in API_KEY_MODE)
+
     Args:
         auth_header: Authorization header value
-    
+
     Returns:
         True if key is valid
-    
+
     Raises:
         HTTPException: 401 if key is invalid or missing
     """
+    if API_KEY_MODE:
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(
+                status_code=401,
+                detail="API_KEY_MODE is enabled: supply your Kiro API key as 'Authorization: Bearer <key>'"
+            )
+        return True
     if not auth_header or auth_header != f"Bearer {PROXY_API_KEY}":
         logger.warning("Access attempt with invalid API key.")
         raise HTTPException(status_code=401, detail="Invalid or missing API Key")
@@ -172,7 +183,12 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
         HTTPException: On validation or API errors
     """
     logger.info(f"Request to /v1/chat/completions (model={request_data.model}, stream={request_data.stream})")
-    
+
+    # In API_KEY_MODE, delegate to the dedicated handler
+    if API_KEY_MODE:
+        from kiro.api_key_mode import handle_chat_openai
+        return await handle_chat_openai(request, request_data)
+
     auth_manager: KiroAuthManager = request.app.state.auth_manager
     model_cache: ModelInfoCache = request.app.state.model_cache
     
