@@ -43,6 +43,7 @@ from kiro.config import (
     BASE_RETRY_DELAY,
     FALLBACK_MODELS,
     FIRST_TOKEN_MAX_RETRIES,
+    FORCE_AUTO_MODEL,
     MAX_RETRIES,
     MODEL_CACHE_TTL,
     REGION,
@@ -421,6 +422,9 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
 
     conversation_id = generate_conversation_id()
 
+    if FORCE_AUTO_MODEL:
+        request_data.model = "auto"
+
     try:
         kiro_payload = build_kiro_payload(request_data, conversation_id, "")
     except ValueError as e:
@@ -557,6 +561,9 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
     model_cache: ModelInfoCache = request.app.state.model_cache
 
     conversation_id = generate_conversation_id()
+
+    if FORCE_AUTO_MODEL:
+        request_data.model = "auto"
 
     try:
         kiro_payload = anthropic_to_kiro(request_data, conversation_id, "")

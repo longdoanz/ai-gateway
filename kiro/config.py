@@ -103,6 +103,10 @@ PROXY_API_KEY: str = os.getenv("PROXY_API_KEY", "my-super-secret-password-123")
 # Server-side credentials (REFRESH_TOKEN, KIRO_CREDS_FILE, KIRO_CLI_DB_FILE) not required
 API_KEY_MODE: bool = os.getenv("API_KEY_MODE", "false").lower() in ("true", "1", "yes")
 
+# Force model to "auto" in API_KEY_MODE, ignoring whatever model the client requests.
+# Useful when you want all requests to use Kiro's automatic model selection.
+FORCE_AUTO_MODEL: bool = os.getenv("FORCE_AUTO_MODEL", "true").lower() in ("true", "1", "yes")
+
 # ==================================================================================================
 # VPN/Proxy Settings for Kiro API Access
 # ==================================================================================================

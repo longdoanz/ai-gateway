@@ -38,6 +38,7 @@ services:
       # When enabled, clients supply their own Kiro API key per-request.
       # Server-side credentials are not required in this mode.
       - API_KEY_MODE=${API_KEY_MODE:-false}
+      - FORCE_AUTO_MODEL=${FORCE_AUTO_MODEL:-true}
 
       # VPN/Proxy settings (for restricted networks)
       - VPN_PROXY_URL=${VPN_PROXY_URL:-}
