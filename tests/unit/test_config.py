@@ -804,3 +804,15 @@ class TestWebSearchConfig:
         
         print(f"Comparing WEB_SEARCH_ENABLED: Expected False, Got {config_module.WEB_SEARCH_ENABLED}")
         assert config_module.WEB_SEARCH_ENABLED is False
+
+def test_api_key_mode_default_false(monkeypatch):
+    monkeypatch.delenv("API_KEY_MODE", raising=False)
+    import importlib, kiro.config as cfg
+    importlib.reload(cfg)
+    assert cfg.API_KEY_MODE is False
+
+def test_api_key_mode_true_when_set(monkeypatch):
+    monkeypatch.setenv("API_KEY_MODE", "true")
+    import importlib, kiro.config as cfg
+    importlib.reload(cfg)
+    assert cfg.API_KEY_MODE is True

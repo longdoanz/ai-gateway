@@ -98,6 +98,11 @@ SERVER_PORT: int = int(os.getenv("SERVER_PORT", str(DEFAULT_SERVER_PORT)))
 # API key for proxy access (clients must pass it in Authorization header)
 PROXY_API_KEY: str = os.getenv("PROXY_API_KEY", "my-super-secret-password-123")
 
+# API Key Mode - users supply their own Kiro API key per-request
+# When enabled: Authorization: Bearer <kiro_api_key> is forwarded directly to Kiro
+# Server-side credentials (REFRESH_TOKEN, KIRO_CREDS_FILE, KIRO_CLI_DB_FILE) not required
+API_KEY_MODE: bool = os.getenv("API_KEY_MODE", "false").lower() in ("true", "1", "yes")
+
 # ==================================================================================================
 # VPN/Proxy Settings for Kiro API Access
 # ==================================================================================================
