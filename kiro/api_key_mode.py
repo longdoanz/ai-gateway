@@ -29,18 +29,23 @@ The client's Bearer token is forwarded directly to the Kiro API.
 """
 
 import asyncio
+import json
 import uuid
-from typing import Optional
+from typing import Any, Optional
 
 import httpx
 from fastapi import HTTPException, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 from loguru import logger
 
 from kiro.config import (
     BASE_RETRY_DELAY,
     FIRST_TOKEN_MAX_RETRIES,
     MAX_RETRIES,
+    REGION,
     STREAMING_READ_TIMEOUT,
+    get_kiro_api_host,
+    get_kiro_q_host,
 )
 from kiro.utils import get_machine_fingerprint
 
@@ -261,3 +266,340 @@ class ApiKeyModeClient:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         await self.close()
+
+
+# ==================================================================================================
+# ApiKeyAuthAdapter — duck-types KiroAuthManager for streaming functions
+# ==================================================================================================
+
+class ApiKeyAuthAdapter:
+    """
+    Minimal duck-type of KiroAuthManager for use in API_KEY_MODE.
+
+    The streaming and MCP helper functions accept a KiroAuthManager but only
+    use a small subset of its interface.  This adapter satisfies that interface
+    using the caller-supplied token and the default region from config.
+
+    Attributes:
+        api_host: Kiro generateAssistantResponse host
+        q_host: Kiro Q (MCP / ListAvailableModels) host
+        profile_arn: Always None in API_KEY_MODE
+        auth_type: Always KIRO_DESKTOP (no profileArn sent)
+        fingerprint: Machine fingerprint for User-Agent
+    """
+
+    def __init__(self, token: str, region: str = REGION):
+        self._token = token
+        self._region = region
+        self._fingerprint = get_machine_fingerprint()
+
+        # Resolve hosts from config helpers
+        self._api_host = get_kiro_api_host(region)
+        self._q_host = get_kiro_q_host(region)
+
+        # Import here to avoid circular imports at module load time
+        from kiro.auth import AuthType
+        self._auth_type = AuthType.KIRO_DESKTOP
+
+    async def get_access_token(self) -> str:
+        """Return the caller-supplied token directly (no refresh)."""
+        return self._token
+
+    async def force_refresh(self) -> str:
+        """No-op in API_KEY_MODE — token is owned by the caller."""
+        return self._token
+
+    @property
+    def api_host(self) -> str:
+        return self._api_host
+
+    @property
+    def q_host(self) -> str:
+        return self._q_host
+
+    @property
+    def profile_arn(self) -> None:
+        return None
+
+    @property
+    def auth_type(self):
+        from kiro.auth import AuthType
+        return AuthType.KIRO_DESKTOP
+
+    @property
+    def fingerprint(self) -> str:
+        return self._fingerprint
+
+    @property
+    def region(self) -> str:
+        return self._region
+
+
+# ==================================================================================================
+# Chat handlers
+# ==================================================================================================
+
+async def handle_chat_openai(request: Request, request_data: Any) -> Any:
+    """
+    Handle /v1/chat/completions in API_KEY_MODE.
+
+    Extracts the Kiro API key from the Authorization header, builds the Kiro
+    payload, and proxies the request using ApiKeyModeClient.
+
+    Args:
+        request: FastAPI Request (used to read the Authorization header and
+                 access app.state.http_client / app.state.model_cache).
+        request_data: Validated ChatCompletionRequest Pydantic model.
+
+    Returns:
+        StreamingResponse (stream=True) or JSONResponse (stream=False).
+    """
+    from kiro.converters_openai import build_kiro_payload
+    from kiro.streaming_openai import (
+        stream_with_first_token_retry,
+        collect_stream_response,
+    )
+    from kiro.utils import generate_conversation_id
+    from kiro.cache import ModelInfoCache
+
+    token = get_api_key_from_request(request)
+    auth_adapter = ApiKeyAuthAdapter(token)
+    model_cache: ModelInfoCache = request.app.state.model_cache
+
+    conversation_id = generate_conversation_id()
+
+    try:
+        kiro_payload = build_kiro_payload(request_data, conversation_id, "")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    url = f"{auth_adapter.api_host}/generateAssistantResponse"
+    logger.debug(f"[API_KEY_MODE] Kiro API URL: {url}")
+
+    if request_data.stream:
+        http_client = ApiKeyModeClient(token, shared_client=None)
+    else:
+        http_client = ApiKeyModeClient(token, shared_client=request.app.state.http_client)
+
+    try:
+        response = await http_client.request_with_retry("POST", url, kiro_payload, stream=True)
+
+        if response.status_code != 200:
+            try:
+                error_content = await response.aread()
+            except Exception:
+                error_content = b"Unknown error"
+            await http_client.close()
+            error_text = error_content.decode("utf-8", errors="replace")
+            try:
+                error_json = json.loads(error_text)
+                from kiro.kiro_errors import enhance_kiro_error
+                error_info = enhance_kiro_error(error_json)
+                error_text = error_info.user_message
+            except (json.JSONDecodeError, KeyError):
+                pass
+            return JSONResponse(
+                status_code=response.status_code,
+                content={"error": {"message": error_text, "type": "kiro_api_error", "code": response.status_code}},
+            )
+
+        messages_for_tokenizer = [msg.model_dump() for msg in request_data.messages]
+        tools_for_tokenizer = [t.model_dump() for t in request_data.tools] if request_data.tools else None
+
+        if request_data.stream:
+            async def stream_wrapper():
+                try:
+                    async def make_retry_request():
+                        return await http_client.request_with_retry("POST", url, kiro_payload, stream=True)
+
+                    async for chunk in stream_with_first_token_retry(
+                        make_request=make_retry_request,
+                        client=http_client.client,
+                        model=request_data.model,
+                        model_cache=model_cache,
+                        auth_manager=auth_adapter,
+                        initial_response=response,
+                        request_messages=messages_for_tokenizer,
+                        request_tools=tools_for_tokenizer,
+                    ):
+                        yield chunk
+                except GeneratorExit:
+                    pass
+                except Exception as e:
+                    try:
+                        yield "data: [DONE]\n\n"
+                    except Exception:
+                        pass
+                    raise
+                finally:
+                    await http_client.close()
+
+            return StreamingResponse(stream_wrapper(), media_type="text/event-stream")
+
+        else:
+            openai_response = await collect_stream_response(
+                http_client.client,
+                response,
+                request_data.model,
+                model_cache,
+                auth_adapter,
+                request_messages=messages_for_tokenizer,
+                request_tools=tools_for_tokenizer,
+            )
+            await http_client.close()
+            return JSONResponse(content=openai_response)
+
+    except HTTPException:
+        await http_client.close()
+        raise
+    except Exception as e:
+        await http_client.close()
+        logger.error(f"[API_KEY_MODE] Internal error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+
+
+async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_version: Optional[str] = None) -> Any:
+    """
+    Handle /v1/messages in API_KEY_MODE.
+
+    Extracts the Kiro API key from the Authorization or x-api-key header,
+    builds the Kiro payload, and proxies the request using ApiKeyModeClient.
+
+    Args:
+        request: FastAPI Request.
+        request_data: Validated AnthropicMessagesRequest Pydantic model.
+        anthropic_version: Value of the anthropic-version header (optional).
+
+    Returns:
+        StreamingResponse (stream=True) or JSONResponse (stream=False).
+    """
+    from kiro.converters_anthropic import anthropic_to_kiro
+    from kiro.streaming_anthropic import (
+        stream_with_first_token_retry_anthropic,
+        collect_anthropic_response,
+    )
+    from kiro.utils import generate_conversation_id
+    from kiro.cache import ModelInfoCache
+
+    # Support both Authorization: Bearer and x-api-key headers
+    raw_token = (
+        extract_bearer_token(request.headers.get("Authorization"))
+        or request.headers.get("x-api-key")
+    )
+    if not raw_token:
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "type": "error",
+                "error": {
+                    "type": "authentication_error",
+                    "message": "API_KEY_MODE is enabled: supply your Kiro API key via Authorization: Bearer or x-api-key",
+                },
+            },
+        )
+
+    auth_adapter = ApiKeyAuthAdapter(raw_token)
+    model_cache: ModelInfoCache = request.app.state.model_cache
+
+    conversation_id = generate_conversation_id()
+
+    try:
+        kiro_payload = anthropic_to_kiro(request_data, conversation_id, "")
+    except ValueError as e:
+        logger.error(f"[API_KEY_MODE] Conversion error: {e}")
+        return JSONResponse(
+            status_code=400,
+            content={"type": "error", "error": {"type": "invalid_request_error", "message": str(e)}},
+        )
+
+    url = f"{auth_adapter.api_host}/generateAssistantResponse"
+    logger.debug(f"[API_KEY_MODE] Kiro API URL: {url}")
+
+    if request_data.stream:
+        http_client = ApiKeyModeClient(raw_token, shared_client=None)
+    else:
+        http_client = ApiKeyModeClient(raw_token, shared_client=request.app.state.http_client)
+
+    messages_for_tokenizer = [msg.model_dump() for msg in request_data.messages]
+    tools_for_tokenizer = [t.model_dump() for t in request_data.tools] if request_data.tools else None
+    if isinstance(request_data.system, list):
+        system_for_tokenizer = [b.model_dump() if hasattr(b, "model_dump") else b for b in request_data.system]
+    else:
+        system_for_tokenizer = request_data.system
+
+    try:
+        response = await http_client.request_with_retry("POST", url, kiro_payload, stream=True)
+
+        if response.status_code != 200:
+            try:
+                error_content = await response.aread()
+            except Exception:
+                error_content = b"Unknown error"
+            await http_client.close()
+            error_text = error_content.decode("utf-8", errors="replace")
+            try:
+                error_json = json.loads(error_text)
+                from kiro.kiro_errors import enhance_kiro_error
+                error_info = enhance_kiro_error(error_json)
+                error_text = error_info.user_message
+            except (json.JSONDecodeError, KeyError):
+                pass
+            return JSONResponse(
+                status_code=response.status_code,
+                content={"type": "error", "error": {"type": "api_error", "message": error_text}},
+            )
+
+        if request_data.stream:
+            async def stream_wrapper():
+                try:
+                    async def make_retry_request():
+                        return await http_client.request_with_retry("POST", url, kiro_payload, stream=True)
+
+                    async for chunk in stream_with_first_token_retry_anthropic(
+                        make_request=make_retry_request,
+                        model=request_data.model,
+                        model_cache=model_cache,
+                        auth_manager=auth_adapter,
+                        initial_response=response,
+                        request_messages=messages_for_tokenizer,
+                        request_tools=tools_for_tokenizer,
+                        request_system=system_for_tokenizer,
+                    ):
+                        yield chunk
+                except GeneratorExit:
+                    pass
+                except Exception as e:
+                    try:
+                        error_event = json.dumps({
+                            "type": "error",
+                            "error": {"type": "api_error", "message": str(e)},
+                        })
+                        yield f"event: error\ndata: {error_event}\n\n"
+                    except Exception:
+                        pass
+                    raise
+                finally:
+                    await http_client.close()
+
+            return StreamingResponse(stream_wrapper(), media_type="text/event-stream")
+
+        else:
+            anthropic_response = await collect_anthropic_response(
+                response,
+                request_data.model,
+                model_cache,
+                auth_adapter,
+                request_messages=messages_for_tokenizer,
+                request_tools=tools_for_tokenizer,
+                request_system=system_for_tokenizer,
+            )
+            await http_client.close()
+            return JSONResponse(content=anthropic_response)
+
+    except HTTPException:
+        await http_client.close()
+        raise
+    except Exception as e:
+        await http_client.close()
+        logger.error(f"[API_KEY_MODE] Internal error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
