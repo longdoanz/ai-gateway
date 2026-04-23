@@ -9,8 +9,8 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Create non-root user for security
-RUN groupadd -r kiro && useradd -r -g kiro kiro
+# Create non-root user for security (UID 1000 to match host for bind mount)
+RUN groupadd -r -g 1000 kiro && useradd -r -u 1000 -g kiro kiro
 
 # Set working directory
 WORKDIR /app
@@ -24,6 +24,7 @@ COPY --chown=kiro:kiro . .
 
 # Create directory for debug logs with proper permissions
 RUN mkdir -p debug_logs && chown -R kiro:kiro debug_logs
+#COPY --chown=kiro:kiro /home/administrator/.local/share/kiro-cli/data.sqlite3 /app/data.sqlite3
 
 # Switch to non-root user
 USER kiro
