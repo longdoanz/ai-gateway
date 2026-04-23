@@ -147,15 +147,22 @@ async def get_models(request: Request):
 
     if API_KEY_MODE:
         from kiro.api_key_mode import get_models_cached, get_api_key_from_request
+        from kiro.config import HIDDEN_MODELS, HIDDEN_FROM_LIST
         api_key = get_api_key_from_request(request)
-        await get_models_cached(api_key, request.app.state)
-        # Fall through to use model_resolver (which includes hidden models)
+        raw_models = await get_models_cached(api_key, request.app.state)
+        model_ids = [m.get("modelId") or m.get("id") for m in raw_models if m.get("modelId") or m.get("id")]
+        for display_name in HIDDEN_MODELS:
+            if display_name not in model_ids:
+                model_ids.append(display_name)
+        model_ids = [m for m in model_ids if m not in HIDDEN_FROM_LIST]
+        models = [OpenAIModel(id=mid, object="model", created=0, owned_by="anthropic") for mid in model_ids if mid]
+        return ModelList(object="list", data=models)
 
     model_resolver: ModelResolver = request.app.state.model_resolver
-    
+
     # Get all available models from resolver (cache + hidden models)
     available_model_ids = model_resolver.get_available_models()
-    
+
     # Build OpenAI-compatible model list
     openai_models = [
         OpenAIModel(
@@ -165,7 +172,7 @@ async def get_models(request: Request):
         )
         for model_id in available_model_ids
     ]
-    
+
     return ModelList(data=openai_models)
 
 
