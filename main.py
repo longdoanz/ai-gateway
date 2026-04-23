@@ -73,6 +73,7 @@ from kiro.config import (
     HIDDEN_FROM_LIST,
     FALLBACK_MODELS,
     VPN_PROXY_URL,
+    API_KEY_MODE,
     _warn_timeout_configuration,
 )
 from kiro.auth import KiroAuthManager
@@ -203,14 +204,19 @@ if VPN_PROXY_URL:
 def validate_configuration() -> None:
     """
     Validates that required configuration is present.
-    
+
     Checks:
     - Either REFRESH_TOKEN, KIRO_CREDS_FILE, or KIRO_CLI_DB_FILE is configured
     - Supports both .env file (local) and environment variables (Docker)
-    
+    - Skipped entirely when API_KEY_MODE=true (credentials not required)
+
     Raises:
         SystemExit: If critical configuration is missing
     """
+    # In API_KEY_MODE, server-side credentials are not required
+    if API_KEY_MODE:
+        logger.info("API_KEY_MODE enabled: skipping server-side credential validation")
+        return
     errors = []
     
     # Check if .env file exists (optional - can use environment variables)
@@ -334,60 +340,68 @@ async def lifespan(app: FastAPI):
         follow_redirects=True
     )
     logger.info("Shared HTTP client created with connection pooling")
-    
-    # Create AuthManager
-    # Priority: SQLite DB > JSON file > environment variables
-    app.state.auth_manager = KiroAuthManager(
-        refresh_token=REFRESH_TOKEN,
-        profile_arn=PROFILE_ARN,
-        region=REGION,
-        creds_file=KIRO_CREDS_FILE if KIRO_CREDS_FILE else None,
-        sqlite_db=KIRO_CLI_DB_FILE if KIRO_CLI_DB_FILE else None,
-    )
-    
+
     # Create model cache
     app.state.model_cache = ModelInfoCache()
-    
-    # BLOCKING: Load models from Kiro API at startup
-    # This ensures the cache is populated BEFORE accepting any requests.
-    # No race conditions - requests only start after yield.
-    logger.info("Loading models from Kiro API...")
-    try:
-        token = await app.state.auth_manager.get_access_token()
-        from kiro.utils import get_kiro_headers
-        from kiro.auth import AuthType
-        headers = get_kiro_headers(app.state.auth_manager, token)
-        
-        # Build params - profileArn is only needed for Kiro Desktop auth
-        params = {"origin": "AI_EDITOR"}
-        if app.state.auth_manager.auth_type == AuthType.KIRO_DESKTOP and app.state.auth_manager.profile_arn:
-            params["profileArn"] = app.state.auth_manager.profile_arn
-        
-        list_models_url = f"{app.state.auth_manager.q_host}/ListAvailableModels"
-        logger.debug(f"Fetching models from: {list_models_url}")
-        
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.get(
-                list_models_url,
-                headers=headers,
-                params=params
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                models_list = data.get("models", [])
-                await app.state.model_cache.update(models_list)
-                logger.debug(f"Successfully loaded {len(models_list)} models from Kiro API")
-            else:
-                raise Exception(f"HTTP {response.status_code}")
-    except Exception as e:
-        # FALLBACK: Use built-in model list
-        logger.error(f"Failed to fetch models from Kiro API: {e}")
-        logger.error("Using pre-configured fallback models. Not all models may be available on your plan, or the list may be outdated.")
-        
-        # Populate cache with fallback models
+
+    if API_KEY_MODE:
+        # API_KEY_MODE: no server-side credentials needed.
+        # Skip auth_manager init and Kiro API model fetch; use fallback models.
+        logger.info("API_KEY_MODE enabled: skipping server-side auth and model fetch")
+        app.state.auth_manager = None
         await app.state.model_cache.update(FALLBACK_MODELS)
-        logger.debug(f"Loaded {len(FALLBACK_MODELS)} fallback models")
+        logger.info(f"Loaded {len(FALLBACK_MODELS)} fallback models (API_KEY_MODE)")
+    else:
+        # Create AuthManager
+        # Priority: SQLite DB > JSON file > environment variables
+        app.state.auth_manager = KiroAuthManager(
+            refresh_token=REFRESH_TOKEN,
+            profile_arn=PROFILE_ARN,
+            region=REGION,
+            creds_file=KIRO_CREDS_FILE if KIRO_CREDS_FILE else None,
+            sqlite_db=KIRO_CLI_DB_FILE if KIRO_CLI_DB_FILE else None,
+        )
+
+        # BLOCKING: Load models from Kiro API at startup
+        # This ensures the cache is populated BEFORE accepting any requests.
+        # No race conditions - requests only start after yield.
+        logger.info("Loading models from Kiro API...")
+        try:
+            token = await app.state.auth_manager.get_access_token()
+            from kiro.utils import get_kiro_headers
+            from kiro.auth import AuthType
+            headers = get_kiro_headers(app.state.auth_manager, token)
+
+            # Build params - profileArn is only needed for Kiro Desktop auth
+            params = {"origin": "AI_EDITOR"}
+            if app.state.auth_manager.auth_type == AuthType.KIRO_DESKTOP and app.state.auth_manager.profile_arn:
+                params["profileArn"] = app.state.auth_manager.profile_arn
+
+            list_models_url = f"{app.state.auth_manager.q_host}/ListAvailableModels"
+            logger.debug(f"Fetching models from: {list_models_url}")
+
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.get(
+                    list_models_url,
+                    headers=headers,
+                    params=params
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    models_list = data.get("models", [])
+                    await app.state.model_cache.update(models_list)
+                    logger.debug(f"Successfully loaded {len(models_list)} models from Kiro API")
+                else:
+                    raise Exception(f"HTTP {response.status_code}")
+        except Exception as e:
+            # FALLBACK: Use built-in model list
+            logger.error(f"Failed to fetch models from Kiro API: {e}")
+            logger.error("Using pre-configured fallback models. Not all models may be available on your plan, or the list may be outdated.")
+
+            # Populate cache with fallback models
+            await app.state.model_cache.update(FALLBACK_MODELS)
+            logger.debug(f"Loaded {len(FALLBACK_MODELS)} fallback models")
     
     # Add hidden models to cache (they appear in /v1/models but not in Kiro API)
     # Hidden models are added ALWAYS, regardless of API success/failure
