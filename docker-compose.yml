@@ -33,7 +33,12 @@ services:
       - KIRO_REGION=${KIRO_REGION:-us-east-1}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - DEBUG_MODE=${DEBUG_MODE:-off}
-      
+
+      # API Key Mode (optional)
+      # When enabled, clients supply their own Kiro API key per-request.
+      # Server-side credentials are not required in this mode.
+      - API_KEY_MODE=${API_KEY_MODE:-false}
+
       # VPN/Proxy settings (for restricted networks)
       - VPN_PROXY_URL=${VPN_PROXY_URL:-}
     
