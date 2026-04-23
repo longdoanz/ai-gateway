@@ -30,8 +30,9 @@ The client's Bearer token is forwarded directly to the Kiro API.
 
 import asyncio
 import json
+import time
 import uuid
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 import httpx
 from fastapi import HTTPException, Request
@@ -40,14 +41,60 @@ from loguru import logger
 
 from kiro.config import (
     BASE_RETRY_DELAY,
+    FALLBACK_MODELS,
     FIRST_TOKEN_MAX_RETRIES,
     MAX_RETRIES,
+    MODEL_CACHE_TTL,
     REGION,
     STREAMING_READ_TIMEOUT,
     get_kiro_api_host,
     get_kiro_q_host,
 )
 from kiro.utils import get_machine_fingerprint
+
+
+# Module-level cache for /v1/models in API_KEY_MODE: (models_list, fetched_at)
+_model_cache: Optional[tuple] = None
+
+
+async def get_models_cached(api_key: str, app_state) -> List[dict]:
+    """
+    Lazily fetch available models from Kiro using the caller's API key.
+
+    Caches results for MODEL_CACHE_TTL seconds. Falls back to FALLBACK_MODELS
+    on any error.
+
+    Args:
+        api_key: Kiro API key supplied by the client.
+        app_state: FastAPI app.state (unused, kept for interface symmetry).
+
+    Returns:
+        List of model dicts as returned by Kiro's ListAvailableModels endpoint.
+    """
+    global _model_cache
+
+    now = time.time()
+    if _model_cache is not None:
+        models, fetched_at = _model_cache
+        if now - fetched_at < MODEL_CACHE_TTL:
+            return models
+
+    q_host = get_kiro_q_host(REGION)
+    url = f"{q_host}/ListAvailableModels"
+    headers = build_api_key_headers(api_key)
+    params = {"origin": "AI_EDITOR"}
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            models = response.json().get("models", [])
+            _model_cache = (models, now)
+            return models
+        raise Exception(f"HTTP {response.status_code}")
+    except Exception as e:
+        logger.warning(f"[API_KEY_MODE] Failed to fetch models from Kiro API: {e}. Using fallback models.")
+        return FALLBACK_MODELS
 
 
 def extract_bearer_token(auth_header: Optional[str]) -> Optional[str]:
@@ -117,6 +164,7 @@ def build_api_key_headers(token: str) -> dict:
         "x-amzn-kiro-agent-mode": "vibe",
         "amz-sdk-invocation-id": str(uuid.uuid4()),
         "amz-sdk-request": "attempt=1; max=3",
+        "tokentype": "API_KEY",
     }
 
 
@@ -297,9 +345,7 @@ class ApiKeyAuthAdapter:
         self._api_host = get_kiro_api_host(region)
         self._q_host = get_kiro_q_host(region)
 
-        # Import here to avoid circular imports at module load time
-        from kiro.auth import AuthType
-        self._auth_type = AuthType.KIRO_DESKTOP
+        self._auth_type = "api_key"
 
     async def get_access_token(self) -> str:
         """Return the caller-supplied token directly (no refresh)."""
@@ -323,8 +369,7 @@ class ApiKeyAuthAdapter:
 
     @property
     def auth_type(self):
-        from kiro.auth import AuthType
-        return AuthType.KIRO_DESKTOP
+        return self._auth_type
 
     @property
     def fingerprint(self) -> str:

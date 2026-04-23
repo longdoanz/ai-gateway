@@ -144,7 +144,13 @@ async def get_models(request: Request):
         ModelList with available models in consistent format (with dots)
     """
     logger.info("Request to /v1/models")
-    
+
+    if API_KEY_MODE:
+        from kiro.api_key_mode import get_models_cached, get_api_key_from_request
+        api_key = get_api_key_from_request(request)
+        await get_models_cached(api_key, request.app.state)
+        # Fall through to use model_resolver (which includes hidden models)
+
     model_resolver: ModelResolver = request.app.state.model_resolver
     
     # Get all available models from resolver (cache + hidden models)
