@@ -1,0 +1,31 @@
+# Kiro Gateway - API Key Mode Image
+# Same as base image but defaults to API_KEY_MODE=true
+
+FROM python:3.10-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    API_KEY_MODE=true \
+    FORCE_AUTO_MODEL=true
+
+RUN groupadd -r -g 1000 kiro && useradd -r -u 1000 -g kiro kiro
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY --chown=kiro:kiro . .
+
+RUN mkdir -p debug_logs && chown -R kiro:kiro debug_logs
+
+USER kiro
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import httpx; httpx.get('http://localhost:8000/health', timeout=5)"
+
+CMD ["python", "main.py"]
