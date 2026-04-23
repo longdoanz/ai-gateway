@@ -251,9 +251,8 @@ class TestApiKeyAuthAdapter:
         assert adapter.profile_arn is None
 
     def test_auth_type_is_not_kiro_desktop(self):
-        from kiro.auth import AuthType
         adapter = ApiKeyAuthAdapter("tok")
-        assert adapter.auth_type != AuthType.KIRO_DESKTOP
+        assert adapter.auth_type == "api_key"
 
     def test_fingerprint_is_string(self):
         adapter = ApiKeyAuthAdapter("tok")

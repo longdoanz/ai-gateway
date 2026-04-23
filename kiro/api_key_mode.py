@@ -53,16 +53,17 @@ from kiro.config import (
 from kiro.utils import get_machine_fingerprint
 
 
-# Module-level cache for /v1/models in API_KEY_MODE: (models_list, fetched_at)
-_model_cache: Optional[tuple] = None
+# Module-level cache for /v1/models in API_KEY_MODE: api_key -> (models_list, fetched_at)
+_model_cache: dict = {}  # api_key -> (models_list, fetched_at)
+_model_cache_lock = asyncio.Lock()
 
 
 async def get_models_cached(api_key: str, app_state) -> List[dict]:
     """
     Lazily fetch available models from Kiro using the caller's API key.
 
-    Caches results for MODEL_CACHE_TTL seconds. Falls back to FALLBACK_MODELS
-    on any error.
+    Caches results per api_key for MODEL_CACHE_TTL seconds. Falls back to
+    FALLBACK_MODELS on any error.
 
     Args:
         api_key: Kiro API key supplied by the client.
@@ -74,27 +75,32 @@ async def get_models_cached(api_key: str, app_state) -> List[dict]:
     global _model_cache
 
     now = time.time()
-    if _model_cache is not None:
-        models, fetched_at = _model_cache
-        if now - fetched_at < MODEL_CACHE_TTL:
-            return models
+    cached = _model_cache.get(api_key)
+    if cached is not None and now - cached[1] < MODEL_CACHE_TTL:
+        return cached[0]
 
-    q_host = get_kiro_q_host(REGION)
-    url = f"{q_host}/ListAvailableModels"
-    headers = build_api_key_headers(api_key)
-    params = {"origin": "AI_EDITOR"}
+    async with _model_cache_lock:
+        cached = _model_cache.get(api_key)
+        if cached is not None and now - cached[1] < MODEL_CACHE_TTL:
+            return cached[0]
 
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.get(url, headers=headers, params=params)
-        if response.status_code == 200:
-            models = response.json().get("models", [])
-            _model_cache = (models, now)
-            return models
-        raise Exception(f"HTTP {response.status_code}")
-    except Exception as e:
-        logger.warning(f"[API_KEY_MODE] Failed to fetch models from Kiro API: {e}. Using fallback models.")
-        return FALLBACK_MODELS
+        q_host = get_kiro_q_host(REGION)
+        url = f"{q_host}/ListAvailableModels"
+        headers = build_api_key_headers(api_key)
+        params = {"origin": "AI_EDITOR"}
+
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.get(url, headers=headers, params=params)
+            if response.status_code == 200:
+                models = response.json().get("models", [])
+                _model_cache[api_key] = (models, now)
+                return models
+            raise Exception(f"HTTP {response.status_code}")
+        except Exception as e:
+            logger.warning(f"API_KEY_MODE: model fetch failed ({e}), using fallback")
+
+    return FALLBACK_MODELS
 
 
 def extract_bearer_token(auth_header: Optional[str]) -> Optional[str]:
@@ -385,6 +391,8 @@ class ApiKeyAuthAdapter:
 # ==================================================================================================
 
 async def handle_chat_openai(request: Request, request_data: Any) -> Any:
+    # Note: truncation recovery and web_search auto-injection (from routes_openai.py)
+    # are not applied in API_KEY_MODE. This is a known limitation.
     """
     Handle /v1/chat/completions in API_KEY_MODE.
 
@@ -504,6 +512,8 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
 
 
 async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_version: Optional[str] = None) -> Any:
+    # Note: truncation recovery and web_search auto-injection (from routes_anthropic.py)
+    # are not applied in API_KEY_MODE. This is a known limitation.
     """
     Handle /v1/messages in API_KEY_MODE.
 
