@@ -83,6 +83,7 @@ from kiro.routes_openai import router as openai_router
 from kiro.routes_anthropic import router as anthropic_router
 from kiro.exceptions import validation_exception_handler
 from kiro.debug_middleware import DebugLoggerMiddleware
+from kiro.usage.scheduler import is_db_configured, startup as usage_startup, shutdown as usage_shutdown
 
 
 # --- Loguru Configuration ---
@@ -429,11 +430,21 @@ async def lifespan(app: FastAPI):
         logger.debug(f"Model aliases configured: {list(MODEL_ALIASES.keys())}")
     if HIDDEN_FROM_LIST:
         logger.debug(f"Models hidden from list: {HIDDEN_FROM_LIST}")
-    
+
+    # --- Usage Management (opt-in when DATABASE_URL is set) ---
+    if is_db_configured():
+        await usage_startup()
+        from kiro.dashboard import dashboard_router
+        app.include_router(dashboard_router)
+        logger.info("Usage management: dashboard API mounted at /api/")
+
     yield
     
     # Graceful shutdown
     logger.info("Shutting down application...")
+    # Shutdown usage management
+    if is_db_configured():
+        await usage_shutdown()
     try:
         await app.state.http_client.aclose()
         logger.info("Shared HTTP client closed")
