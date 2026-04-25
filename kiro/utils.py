@@ -58,22 +58,18 @@ def get_machine_fingerprint() -> str:
         return hashlib.sha256(b"default-kiro-gateway").hexdigest()
 
 
-def get_kiro_headers(auth_manager: "KiroAuthManager", token: str) -> dict:
+def get_kiro_headers(auth_manager: "KiroAuthManager", token: str, stream: bool = False) -> dict:
     """
     Builds headers for Kiro API requests.
-    
-    Includes all necessary headers for authentication and identification:
-    - Authorization with Bearer token
-    - User-Agent mimicking real Kiro IDE installation
-    - AWS CodeWhisperer specific headers
-    
-    Header values are based on captured traffic from Kiro IDE.
-    See specs/getListModels.md for reference.
-    
+
+    Uses different SDK/module values for streaming vs non-streaming endpoints
+    to match real Kiro IDE traffic patterns.
+
     Args:
         auth_manager: Authentication manager for obtaining fingerprint
         token: Access token for authorization
-    
+        stream: If True, use streaming endpoint headers (generateAssistantResponse)
+
     Returns:
         Dictionary with headers for HTTP request
     """
@@ -81,23 +77,38 @@ def get_kiro_headers(auth_manager: "KiroAuthManager", token: str) -> dict:
         KIRO_IDE_VERSION, KIRO_SDK_VERSION, KIRO_OS_STRING,
         KIRO_NODEJS_VERSION, KIRO_API_MODULE, KIRO_API_MODULE_VERSION,
         KIRO_M_FLAGS,
+        KIRO_STREAMING_SDK_VERSION, KIRO_STREAMING_API_MODULE,
+        KIRO_STREAMING_API_MODULE_VERSION, KIRO_STREAMING_M_FLAGS,
     )
     fingerprint = auth_manager.fingerprint
-    
+
+    if stream:
+        sdk_ver = KIRO_STREAMING_SDK_VERSION
+        api_mod = KIRO_STREAMING_API_MODULE
+        api_mod_ver = KIRO_STREAMING_API_MODULE_VERSION
+        m_flags = KIRO_STREAMING_M_FLAGS
+        max_attempts = 3
+    else:
+        sdk_ver = KIRO_SDK_VERSION
+        api_mod = KIRO_API_MODULE
+        api_mod_ver = KIRO_API_MODULE_VERSION
+        m_flags = KIRO_M_FLAGS
+        max_attempts = 1
+
     return {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
         "User-Agent": (
-            f"aws-sdk-js/{KIRO_SDK_VERSION} ua/2.1 os/{KIRO_OS_STRING} "
+            f"aws-sdk-js/{sdk_ver} ua/2.1 os/{KIRO_OS_STRING} "
             f"lang/js md/nodejs#{KIRO_NODEJS_VERSION} "
-            f"api/{KIRO_API_MODULE}#{KIRO_API_MODULE_VERSION} "
-            f"m/{KIRO_M_FLAGS} KiroIDE-{KIRO_IDE_VERSION}-{fingerprint}"
+            f"api/{api_mod}#{api_mod_ver} "
+            f"m/{m_flags} KiroIDE-{KIRO_IDE_VERSION}-{fingerprint}"
         ),
-        "x-amz-user-agent": f"aws-sdk-js/{KIRO_SDK_VERSION} KiroIDE-{KIRO_IDE_VERSION}-{fingerprint}",
+        "x-amz-user-agent": f"aws-sdk-js/{sdk_ver} KiroIDE-{KIRO_IDE_VERSION}-{fingerprint}",
         "x-amzn-codewhisperer-optout": "true",
         "x-amzn-kiro-agent-mode": "vibe",
         "amz-sdk-invocation-id": str(uuid.uuid4()),
-        "amz-sdk-request": "attempt=1; max=1",
+        "amz-sdk-request": f"attempt=1; max={max_attempts}",
         "Connection": "close",
     }
 

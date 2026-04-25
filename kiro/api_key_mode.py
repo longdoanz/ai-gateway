@@ -163,7 +163,7 @@ def get_token_fingerprint(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def build_api_key_headers(token: str) -> dict:
+def build_api_key_headers(token: str, stream: bool = False) -> dict:
     """
     Build Kiro API request headers using a caller-supplied token.
 
@@ -174,6 +174,7 @@ def build_api_key_headers(token: str) -> dict:
 
     Args:
         token: Kiro access token supplied by the client.
+        stream: If True, use streaming endpoint headers (generateAssistantResponse).
 
     Returns:
         Dictionary of HTTP headers ready for use with httpx.
@@ -182,22 +183,38 @@ def build_api_key_headers(token: str) -> dict:
         KIRO_IDE_VERSION, KIRO_SDK_VERSION, KIRO_OS_STRING,
         KIRO_NODEJS_VERSION, KIRO_API_MODULE, KIRO_API_MODULE_VERSION,
         KIRO_M_FLAGS,
+        KIRO_STREAMING_SDK_VERSION, KIRO_STREAMING_API_MODULE,
+        KIRO_STREAMING_API_MODULE_VERSION, KIRO_STREAMING_M_FLAGS,
     )
     fingerprint = get_token_fingerprint(token)
+
+    if stream:
+        sdk_ver = KIRO_STREAMING_SDK_VERSION
+        api_mod = KIRO_STREAMING_API_MODULE
+        api_mod_ver = KIRO_STREAMING_API_MODULE_VERSION
+        m_flags = KIRO_STREAMING_M_FLAGS
+        max_attempts = 3
+    else:
+        sdk_ver = KIRO_SDK_VERSION
+        api_mod = KIRO_API_MODULE
+        api_mod_ver = KIRO_API_MODULE_VERSION
+        m_flags = KIRO_M_FLAGS
+        max_attempts = 1
+
     return {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
         "User-Agent": (
-            f"aws-sdk-js/{KIRO_SDK_VERSION} ua/2.1 os/{KIRO_OS_STRING} "
+            f"aws-sdk-js/{sdk_ver} ua/2.1 os/{KIRO_OS_STRING} "
             f"lang/js md/nodejs#{KIRO_NODEJS_VERSION} "
-            f"api/{KIRO_API_MODULE}#{KIRO_API_MODULE_VERSION} "
-            f"m/{KIRO_M_FLAGS} KiroIDE-{KIRO_IDE_VERSION}-{fingerprint}"
+            f"api/{api_mod}#{api_mod_ver} "
+            f"m/{m_flags} KiroIDE-{KIRO_IDE_VERSION}-{fingerprint}"
         ),
-        "x-amz-user-agent": f"aws-sdk-js/{KIRO_SDK_VERSION} KiroIDE-{KIRO_IDE_VERSION}-{fingerprint}",
+        "x-amz-user-agent": f"aws-sdk-js/{sdk_ver} KiroIDE-{KIRO_IDE_VERSION}-{fingerprint}",
         "x-amzn-codewhisperer-optout": "true",
         "x-amzn-kiro-agent-mode": "vibe",
         "amz-sdk-invocation-id": str(uuid.uuid4()),
-        "amz-sdk-request": "attempt=1; max=1",
+        "amz-sdk-request": f"attempt=1; max={max_attempts}",
         "Connection": "close",
         "tokentype": "API_KEY",
     }
@@ -281,7 +298,7 @@ class ApiKeyModeClient:
 
         for attempt in range(max_retries):
             try:
-                headers = build_api_key_headers(self.token)
+                headers = build_api_key_headers(self.token, stream=stream)
 
                 if stream:
                     req = client.build_request(method, url, json=json_data, headers=headers)

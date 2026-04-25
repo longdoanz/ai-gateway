@@ -209,8 +209,8 @@ class KiroHttpClient:
             try:
                 # Get current token
                 token = await self.auth_manager.get_access_token()
-                headers = get_kiro_headers(self.auth_manager, token)
-                
+                headers = get_kiro_headers(self.auth_manager, token, stream=stream)
+
                 if stream:
                     req = client.build_request(method, url, json=json_data, headers=headers)
                     logger.debug("Sending request to Kiro API...")

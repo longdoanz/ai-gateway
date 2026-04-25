@@ -514,14 +514,23 @@ WEB_SEARCH_ENABLED: bool = os.getenv("WEB_SEARCH_ENABLED", "true").lower() in ("
 # that mimic a real Kiro IDE installation. Update when new Kiro IDE versions
 # are captured via mitmproxy or similar tools.
 #
-# Source: specs/getListModels.md (captured from Kiro IDE 0.11.63)
+# Source: references/getListModels.md (captured from Kiro IDE 0.11.63)
 KIRO_IDE_VERSION: str = "0.11.63"
-KIRO_SDK_VERSION: str = "1.0.0"
 KIRO_OS_STRING: str = "win32#10.0.26200"
 KIRO_NODEJS_VERSION: str = "22.22.0"
+
+# Non-streaming endpoints (ListAvailableModels, getUsageLimits, etc.)
+KIRO_SDK_VERSION: str = "1.0.0"
 KIRO_API_MODULE: str = "codewhispererruntime"
 KIRO_API_MODULE_VERSION: str = "1.0.0"
 KIRO_M_FLAGS: str = "N,E"
+
+# Streaming endpoint (generateAssistantResponse)
+# Source: references/getAssistanceResponse.md
+KIRO_STREAMING_SDK_VERSION: str = "1.0.34"
+KIRO_STREAMING_API_MODULE: str = "codewhispererstreaming"
+KIRO_STREAMING_API_MODULE_VERSION: str = "1.0.34"
+KIRO_STREAMING_M_FLAGS: str = "E"
 
 # ==================================================================================================
 # Application Version
