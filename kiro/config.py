@@ -288,10 +288,9 @@ HIDDEN_FROM_LIST: List[str] = ["auto"]
 # - Update gateway regularly to get the latest model list
 FALLBACK_MODELS: List[Dict[str, str]] = [
     {"modelId": "auto"},
-    {"modelId": "claude-sonnet-4"},
+    {"modelId": "claude-opus-4.6"},
+    {"modelId": "claude-sonnet-4.6"},
     {"modelId": "claude-haiku-4.5"},
-    {"modelId": "claude-sonnet-4.5"},
-    {"modelId": "claude-opus-4.5"},
 ]
 
 # ==================================================================================================
@@ -506,6 +505,23 @@ AUTO_TRIM_PAYLOAD: bool = os.getenv("AUTO_TRIM_PAYLOAD", "false").lower() in ("t
 #
 # Note: Native Anthropic server-side tools (Path A) work ALWAYS, regardless of this setting
 WEB_SEARCH_ENABLED: bool = os.getenv("WEB_SEARCH_ENABLED", "true").lower() in ("true", "1", "yes")
+
+# ==================================================================================================
+# Kiro IDE Emulation Constants
+# ==================================================================================================
+
+# These values are used to build User-Agent and x-amz-user-agent headers
+# that mimic a real Kiro IDE installation. Update when new Kiro IDE versions
+# are captured via mitmproxy or similar tools.
+#
+# Source: specs/getListModels.md (captured from Kiro IDE 0.11.63)
+KIRO_IDE_VERSION: str = "0.11.63"
+KIRO_SDK_VERSION: str = "1.0.0"
+KIRO_OS_STRING: str = "win32#10.0.26200"
+KIRO_NODEJS_VERSION: str = "22.22.0"
+KIRO_API_MODULE: str = "codewhispererruntime"
+KIRO_API_MODULE_VERSION: str = "1.0.0"
+KIRO_M_FLAGS: str = "N,E"
 
 # ==================================================================================================
 # Application Version

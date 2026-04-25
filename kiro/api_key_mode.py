@@ -29,6 +29,7 @@ The client's Bearer token is forwarded directly to the Kiro API.
 """
 
 import asyncio
+import hashlib
 import json
 import time
 import uuid
@@ -51,7 +52,7 @@ from kiro.config import (
     get_kiro_api_host,
     get_kiro_q_host,
 )
-from kiro.utils import get_machine_fingerprint
+from kiro.utils import get_machine_fingerprint  # noqa: F401 - may be used by external code
 
 
 # Module-level cache for /v1/models in API_KEY_MODE: api_key -> (models_list, fetched_at)
@@ -144,12 +145,32 @@ def get_api_key_from_request(request: Request) -> str:
     return token
 
 
+def get_token_fingerprint(token: str) -> str:
+    """
+    Generates a unique fingerprint from a Kiro API token.
+    
+    In API Key Mode, each user has their own token, so we derive
+    a unique fingerprint per token. This makes each user look like
+    a separate Kiro IDE installation to AWS, which is more natural
+    than all users sharing the same server-level fingerprint.
+    
+    Args:
+        token: Kiro API key supplied by the client.
+    
+    Returns:
+        SHA256 hex digest of the token (64 chars).
+    """
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
 def build_api_key_headers(token: str) -> dict:
     """
     Build Kiro API request headers using a caller-supplied token.
 
     Produces the same header set as kiro.utils.get_kiro_headers() but
     accepts the token directly instead of obtaining it from an auth manager.
+    Uses a per-token fingerprint so each API key looks like a separate
+    Kiro IDE installation.
 
     Args:
         token: Kiro access token supplied by the client.
@@ -157,20 +178,27 @@ def build_api_key_headers(token: str) -> dict:
     Returns:
         Dictionary of HTTP headers ready for use with httpx.
     """
-    fingerprint = get_machine_fingerprint()
+    from kiro.config import (
+        KIRO_IDE_VERSION, KIRO_SDK_VERSION, KIRO_OS_STRING,
+        KIRO_NODEJS_VERSION, KIRO_API_MODULE, KIRO_API_MODULE_VERSION,
+        KIRO_M_FLAGS,
+    )
+    fingerprint = get_token_fingerprint(token)
     return {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
         "User-Agent": (
-            f"aws-sdk-js/1.0.27 ua/2.1 os/win32#10.0.19044 lang/js "
-            f"md/nodejs#22.21.1 api/codewhispererstreaming#1.0.27 m/E "
-            f"KiroIDE-0.7.45-{fingerprint}"
+            f"aws-sdk-js/{KIRO_SDK_VERSION} ua/2.1 os/{KIRO_OS_STRING} "
+            f"lang/js md/nodejs#{KIRO_NODEJS_VERSION} "
+            f"api/{KIRO_API_MODULE}#{KIRO_API_MODULE_VERSION} "
+            f"m/{KIRO_M_FLAGS} KiroIDE-{KIRO_IDE_VERSION}-{fingerprint}"
         ),
-        "x-amz-user-agent": f"aws-sdk-js/1.0.27 KiroIDE-0.7.45-{fingerprint}",
+        "x-amz-user-agent": f"aws-sdk-js/{KIRO_SDK_VERSION} KiroIDE-{KIRO_IDE_VERSION}-{fingerprint}",
         "x-amzn-codewhisperer-optout": "true",
         "x-amzn-kiro-agent-mode": "vibe",
         "amz-sdk-invocation-id": str(uuid.uuid4()),
-        "amz-sdk-request": "attempt=1; max=3",
+        "amz-sdk-request": "attempt=1; max=1",
+        "Connection": "close",
         "tokentype": "API_KEY",
     }
 
@@ -256,7 +284,6 @@ class ApiKeyModeClient:
                 headers = build_api_key_headers(self.token)
 
                 if stream:
-                    headers["Connection"] = "close"
                     req = client.build_request(method, url, json=json_data, headers=headers)
                     logger.debug("ApiKeyModeClient: sending streaming request to Kiro API")
                     response = await client.send(req, stream=True)
@@ -346,7 +373,7 @@ class ApiKeyAuthAdapter:
     def __init__(self, token: str, region: str = REGION):
         self._token = token
         self._region = region
-        self._fingerprint = get_machine_fingerprint()
+        self._fingerprint = get_token_fingerprint(token)
 
         # Resolve hosts from config helpers
         self._api_host = get_kiro_api_host(region)

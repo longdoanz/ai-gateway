@@ -1,0 +1,5 @@
+$env:NODE_TLS_REJECT_UNAUTHORIZED="0"
+$env:HTTPS_PROXY="http://127.0.0.1:8080"
+$env:HTTP_PROXY="http://127.0.0.1:8080"
+$env:NODE_EXTRA_CA_CERTS="C:\Users\longd\workspace\mitmproxy\mitmproxy-ca-cert.pem"
+& "C:\Users\longd\AppData\Local\Programs\Kiro\Kiro.exe"

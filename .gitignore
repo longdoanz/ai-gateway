@@ -25,6 +25,10 @@ debug*.json
 _notes/
 requests/
 
+# Background runner
+.kiro-gateway.pid
+kiro-gateway.log
+
 # Testing
 .pytest_cache/
 .coverage

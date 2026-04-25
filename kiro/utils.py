@@ -64,8 +64,11 @@ def get_kiro_headers(auth_manager: "KiroAuthManager", token: str) -> dict:
     
     Includes all necessary headers for authentication and identification:
     - Authorization with Bearer token
-    - User-Agent with fingerprint
+    - User-Agent mimicking real Kiro IDE installation
     - AWS CodeWhisperer specific headers
+    
+    Header values are based on captured traffic from Kiro IDE.
+    See specs/getListModels.md for reference.
     
     Args:
         auth_manager: Authentication manager for obtaining fingerprint
@@ -74,17 +77,28 @@ def get_kiro_headers(auth_manager: "KiroAuthManager", token: str) -> dict:
     Returns:
         Dictionary with headers for HTTP request
     """
+    from kiro.config import (
+        KIRO_IDE_VERSION, KIRO_SDK_VERSION, KIRO_OS_STRING,
+        KIRO_NODEJS_VERSION, KIRO_API_MODULE, KIRO_API_MODULE_VERSION,
+        KIRO_M_FLAGS,
+    )
     fingerprint = auth_manager.fingerprint
     
     return {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
-        "User-Agent": f"aws-sdk-js/1.0.27 ua/2.1 os/win32#10.0.19044 lang/js md/nodejs#22.21.1 api/codewhispererstreaming#1.0.27 m/E KiroIDE-0.7.45-{fingerprint}",
-        "x-amz-user-agent": f"aws-sdk-js/1.0.27 KiroIDE-0.7.45-{fingerprint}",
+        "User-Agent": (
+            f"aws-sdk-js/{KIRO_SDK_VERSION} ua/2.1 os/{KIRO_OS_STRING} "
+            f"lang/js md/nodejs#{KIRO_NODEJS_VERSION} "
+            f"api/{KIRO_API_MODULE}#{KIRO_API_MODULE_VERSION} "
+            f"m/{KIRO_M_FLAGS} KiroIDE-{KIRO_IDE_VERSION}-{fingerprint}"
+        ),
+        "x-amz-user-agent": f"aws-sdk-js/{KIRO_SDK_VERSION} KiroIDE-{KIRO_IDE_VERSION}-{fingerprint}",
         "x-amzn-codewhisperer-optout": "true",
         "x-amzn-kiro-agent-mode": "vibe",
         "amz-sdk-invocation-id": str(uuid.uuid4()),
-        "amz-sdk-request": "attempt=1; max=3",
+        "amz-sdk-request": "attempt=1; max=1",
+        "Connection": "close",
     }
 
 
