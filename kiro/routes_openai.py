@@ -176,6 +176,45 @@ async def get_models(request: Request):
     return ModelList(data=openai_models)
 
 
+@router.get("/v1/usage", dependencies=[Depends(verify_api_key)])
+async def get_usage(request: Request, resource_type: str = "AGENTIC_REQUEST"):
+    """
+    Proxy to Kiro getUsageLimits API. Only available in API_KEY_MODE.
+    """
+    if not API_KEY_MODE:
+        raise HTTPException(status_code=501, detail="Usage endpoint is only available in API_KEY_MODE")
+
+    from kiro.api_key_mode import get_usage_limits, get_api_key_from_request
+    api_key = get_api_key_from_request(request)
+    data = await get_usage_limits(api_key, resource_type=resource_type)
+
+    breakdown = data.get("usageBreakdownList", [])
+    credit = next((b for b in breakdown if b.get("resourceType") == "CREDIT"), None)
+
+    result = {
+        "subscription": data.get("subscriptionInfo", {}),
+        "daysUntilReset": data.get("daysUntilReset"),
+        "nextDateReset": data.get("nextDateReset"),
+        "overageConfiguration": data.get("overageConfiguration", {}),
+        "user": data.get("userInfo", {}),
+    }
+
+    if credit:
+        result["credit"] = {
+            "currentUsage": credit.get("currentUsage"),
+            "usageLimit": credit.get("usageLimit"),
+            "remaining": round((credit.get("usageLimit", 0) or 0) - (credit.get("currentUsageWithPrecision", 0) or 0), 2),
+            "overageRate": credit.get("overageRate"),
+            "overageCharges": credit.get("overageCharges"),
+            "overageCap": credit.get("overageCap"),
+            "unit": credit.get("unit"),
+        }
+
+    result["raw"] = data
+
+    return JSONResponse(content=result)
+
+
 @router.post("/v1/chat/completions", dependencies=[Depends(verify_api_key)])
 async def chat_completions(request: Request, request_data: ChatCompletionRequest):
     """

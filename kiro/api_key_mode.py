@@ -105,6 +105,49 @@ async def get_models_cached(api_key: str, app_state) -> List[dict]:
     return FALLBACK_MODELS
 
 
+async def get_usage_limits(api_key: str, resource_type: str = "AGENTIC_REQUEST") -> dict:
+    """
+    Fetch usage limits from Kiro API using the caller's API key.
+
+    Args:
+        api_key: Kiro API key supplied by the client.
+        resource_type: Resource type to query (default: AGENTIC_REQUEST).
+
+    Returns:
+        Raw JSON response from Kiro's getUsageLimits endpoint.
+
+    Raises:
+        HTTPException: On auth failure or unexpected errors.
+    """
+    q_host = get_kiro_q_host(REGION)
+    url = f"{q_host}/getUsageLimits"
+    headers = build_api_key_headers(api_key, stream=False)
+    params = {"origin": "AI_EDITOR", "resourceType": resource_type}
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.get(url, headers=headers, params=params)
+
+        if response.status_code == 200:
+            return response.json()
+
+        if response.status_code == 403:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid Kiro API key (received 403 from Kiro API)",
+            )
+
+        raise HTTPException(
+            status_code=response.status_code,
+            detail=f"Kiro API returned {response.status_code}: {response.text[:500]}",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"API_KEY_MODE: getUsageLimits failed: {e}")
+        raise HTTPException(status_code=502, detail=f"Failed to fetch usage limits: {e}")
+
+
 def extract_bearer_token(auth_header: Optional[str]) -> Optional[str]:
     """
     Extract the token value from an Authorization: Bearer <token> header.

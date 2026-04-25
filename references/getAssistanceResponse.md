@@ -25,5 +25,3 @@ Strict-Transport-Security: max-age=47304000; includeSubDomains
 X-Frame-Options: DENY
 Cache-Control: no-cache
 X-Content-Type-Options: nosniff
-
-4e3

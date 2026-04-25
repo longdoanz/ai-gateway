@@ -7,7 +7,7 @@ amz-sdk-request: attempt=1; max=1
 Authorization: Bearer token
 Connection: close
 
-curl -H 'x-amz-user-agent: aws-sdk-js/1.0.0 KiroIDE-0.11.63-89db0a9cea8c87596681f9c44ba98e0b9dc773f913d1e53e48eab0d5bba2befc' -H 'user-agent: aws-sdk-js/1.0.0 ua/2.1 os/win32#10.0.26200 lang/js md/nodejs#22.22.0 api/codewhispererruntime#1.0.0 m/N,E KiroIDE-0.11.63-89db0a9cea8c87596681f9c44ba98e0b9dc773f913d1e53e48eab0d5bba2befc' -H 'amz-sdk-invocation-id: 70b2c2ca-5aa3-433b-b2ef-b3ad2099c7f2' -H 'amz-sdk-request: attempt=1; max=1' -H 'Authorization: Bearer aoaAAAAAGnsEdsGTK8SUhQyTEHk6FHqvQOsqsdNS3dkIdGtRuWb9qe_3nGmseud_xul75BqM2xSY_sJFQQ6364mlgBbg0:MGQCMGC9cfoENdwajOAFIRKO7Ivy2NQ0aJdoFU8OOAAbDRZ/plcwCXJvqVj0vqVAE1NIJgIwDzEpRpdhzpGBievgPd2WuSzMp511zVEgWUGE3uXiPxOcFgpp3ZxU9rroZkbeGvvQ' -H 'Connection: close' 'https://q.us-east-1.amazonaws.com/getUsageLimits?origin=AI_EDITOR&profileArn=arn%3Aaws%3Acodewhisperer%3Aus-east-1%3A557690585382%3Aprofile%2FWAGWGX4DRUPU&resourceType=AGENTIC_REQUEST'
+curl -H 'x-amz-user-agent: aws-sdk-js/1.0.0 KiroIDE-0.11.63-89db0a9cea8c87596681f9c44ba98e0b9dc773f913d1e53e48eab0d5bba2befc' -H 'user-agent: aws-sdk-js/1.0.0 ua/2.1 os/win32#10.0.26200 lang/js md/nodejs#22.22.0 api/codewhispererruntime#1.0.0 m/N,E KiroIDE-0.11.63-89db0a9cea8c87596681f9c44ba98e0b9dc773f913d1e53e48eab0d5bba2befc' -H 'amz-sdk-invocation-id: 70b2c2ca-5aa3-433b-b2ef-b3ad2099c7f2' -H 'amz-sdk-request: attempt=1; max=1' -H 'Authorization: Bearer Token' -H 'Connection: close' 'https://q.us-east-1.amazonaws.com/getUsageLimits?origin=AI_EDITOR&profileArn=arn%3Aaws%3Acodewhisperer%3Aus-east-1%3A557690585382%3Aprofile%2FWAGWGX4DRUPU&resourceType=AGENTIC_REQUEST'
 
 
 
