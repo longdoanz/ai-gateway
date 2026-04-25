@@ -12,7 +12,16 @@ from kiro.db.models import ApiKey, KeyUsage, KiroUserMapping, SystemConfig, User
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-_fernet = Fernet(ENCRYPTION_KEY.encode()) if ENCRYPTION_KEY else None
+_fernet = None
+
+
+def _get_fernet() -> Fernet:
+    global _fernet
+    if _fernet is None:
+        if not ENCRYPTION_KEY:
+            raise RuntimeError("ENCRYPTION_KEY not configured")
+        _fernet = Fernet(ENCRYPTION_KEY.encode())
+    return _fernet
 
 
 def hash_password(password: str) -> str:
@@ -28,15 +37,11 @@ def hash_api_key(key: str) -> str:
 
 
 def encrypt_api_key(key: str) -> str:
-    if _fernet is None:
-        raise RuntimeError("ENCRYPTION_KEY not configured")
-    return _fernet.encrypt(key.encode()).decode()
+    return _get_fernet().encrypt(key.encode()).decode()
 
 
 def decrypt_api_key(encrypted: str) -> str:
-    if _fernet is None:
-        raise RuntimeError("ENCRYPTION_KEY not configured")
-    return _fernet.decrypt(encrypted.encode()).decode()
+    return _get_fernet().decrypt(encrypted.encode()).decode()
 
 
 def mask_key(key: str) -> tuple[str, str]:

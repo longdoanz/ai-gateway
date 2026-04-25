@@ -36,10 +36,10 @@ services:
       - DEBUG_MODE=${DEBUG_MODE:-off}
       - VPN_PROXY_URL=${VPN_PROXY_URL:-}
       - DATABASE_URL=postgresql+asyncpg://kiro:kiro_secret@postgres:5432/kiro_gateway
-      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-change-me-in-production-32chars!}
-      - JWT_SECRET=${JWT_SECRET:-change-me-jwt-secret-in-prod!}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - JWT_SECRET=${JWT_SECRET}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
     env_file:
       - .env
     volumes:

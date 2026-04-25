@@ -23,6 +23,23 @@ async def startup() -> None:
         logger.info("Usage management: DATABASE_URL not set, skipping init")
         return
 
+    # Validate required secrets
+    from kiro.config import ENCRYPTION_KEY, JWT_SECRET
+    if not ENCRYPTION_KEY:
+        logger.error("Usage management: ENCRYPTION_KEY is required when DATABASE_URL is set")
+        raise RuntimeError("ENCRYPTION_KEY is required")
+    if not JWT_SECRET:
+        logger.error("Usage management: JWT_SECRET is required when DATABASE_URL is set")
+        raise RuntimeError("JWT_SECRET is required")
+
+    # Validate Fernet key format
+    try:
+        from cryptography.fernet import Fernet
+        Fernet(ENCRYPTION_KEY.encode())
+    except Exception as e:
+        logger.error(f"Usage management: ENCRYPTION_KEY is not a valid Fernet key: {e}")
+        raise RuntimeError(f"Invalid ENCRYPTION_KEY: {e}")
+
     await init_db()
     logger.info("Usage management: database initialized")
 
