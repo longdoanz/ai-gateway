@@ -507,6 +507,19 @@ AUTO_TRIM_PAYLOAD: bool = os.getenv("AUTO_TRIM_PAYLOAD", "false").lower() in ("t
 WEB_SEARCH_ENABLED: bool = os.getenv("WEB_SEARCH_ENABLED", "true").lower() in ("true", "1", "yes")
 
 # ==================================================================================================
+# Usage Management Database Settings
+# ==================================================================================================
+
+DATABASE_URL: str = os.getenv("DATABASE_URL", "")
+ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", "")
+JWT_SECRET: str = os.getenv("JWT_SECRET", "")
+JWT_ACCESS_EXPIRY: int = int(os.getenv("JWT_ACCESS_EXPIRY", "900"))
+JWT_REFRESH_EXPIRY: int = int(os.getenv("JWT_REFRESH_EXPIRY", "604800"))
+ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "")
+USAGE_SYNC_INTERVAL: int = int(os.getenv("USAGE_SYNC_INTERVAL", "600"))
+
+# ==================================================================================================
 # Kiro IDE Emulation Constants
 # ==================================================================================================
 
