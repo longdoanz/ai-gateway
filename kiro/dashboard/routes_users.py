@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiro.dashboard.deps import require_admin, get_current_user
@@ -11,8 +11,13 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 
 @router.get("", response_model=list[UserResponse])
-async def get_users(admin: User = Depends(require_admin), session: AsyncSession = Depends(get_session)):
-    return await list_users(session)
+async def get_users(
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    admin: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
+    return await list_users(session, limit=limit, offset=offset)
 
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)

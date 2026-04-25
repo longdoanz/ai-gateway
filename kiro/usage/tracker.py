@@ -8,6 +8,8 @@ from kiro.usage.usage_cache import usage_cache
 
 
 async def track_usage(key_id: int, credits_used: int | None = None) -> None:
+    """Increment usage counter for a key. If credits_used is None, defaults to +1 as approximation.
+    The sync worker periodically overwrites with real values from getUsageLimits API."""
     amount = credits_used if credits_used is not None and credits_used > 0 else 1
     month = datetime.now(timezone.utc).strftime("%Y-%m")
 

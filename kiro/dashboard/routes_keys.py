@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiro.dashboard.deps import get_current_user, require_admin
@@ -19,9 +19,14 @@ router = APIRouter(prefix="/keys", tags=["keys"])
 
 
 @router.get("", response_model=list[ApiKeyResponse])
-async def get_keys(caller: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+async def get_keys(
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    caller: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
     user_id = None if caller.role == "admin" else caller.id
-    return await list_api_keys(session, user_id=user_id)
+    return await list_api_keys(session, user_id=user_id, limit=limit, offset=offset)
 
 
 @router.post("", response_model=ApiKeyResponse, status_code=status.HTTP_201_CREATED)
@@ -39,6 +44,11 @@ async def toggle_key(key_id: int, body: ApiKeyToggle, caller: User = Depends(get
     if key is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Key not found")
     await update_api_key(session, key_id, is_active=body.is_active)
+    try:
+        from kiro.usage.usage_cache import usage_cache
+        usage_cache.set_key_active(key_id, body.is_active)
+    except Exception:
+        pass
     key.is_active = body.is_active
     return key
 
@@ -50,6 +60,11 @@ async def deactivate_key(key_id: int, caller: User = Depends(get_current_user), 
     if key is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Key not found")
     await update_api_key(session, key_id, is_active=False)
+    try:
+        from kiro.usage.usage_cache import usage_cache
+        usage_cache.set_key_active(key_id, False)
+    except Exception:
+        pass
 
 
 @router.get("/{key_id}/usage", response_model=list[KeyUsageResponse])

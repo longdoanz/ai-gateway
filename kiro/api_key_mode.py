@@ -636,7 +636,13 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
                 request_messages=messages_for_tokenizer,
                 request_tools=tools_for_tokenizer,
             )
-            await _track_usage_background(key_id, None)
+            credits = None
+            try:
+                from kiro.usage.tracker import extract_credits_from_response
+                credits = extract_credits_from_response(openai_response)
+            except Exception:
+                pass
+            await _track_usage_background(key_id, credits)
             await http_client.close()
             return JSONResponse(content=openai_response)
 
@@ -796,7 +802,13 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
                 request_tools=tools_for_tokenizer,
                 request_system=system_for_tokenizer,
             )
-            await _track_usage_background(key_id, None)
+            credits = None
+            try:
+                from kiro.usage.tracker import extract_credits_from_response
+                credits = extract_credits_from_response(anthropic_response)
+            except Exception:
+                pass
+            await _track_usage_background(key_id, credits)
             await http_client.close()
             return JSONResponse(content=anthropic_response)
 

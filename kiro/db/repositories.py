@@ -60,8 +60,8 @@ async def get_user_by_id(session: AsyncSession, user_id: int) -> User | None:
     return result.scalar_one_or_none()
 
 
-async def list_users(session: AsyncSession) -> list[User]:
-    result = await session.execute(select(User).order_by(User.id))
+async def list_users(session: AsyncSession, limit: int = 50, offset: int = 0) -> list[User]:
+    result = await session.execute(select(User).order_by(User.id).limit(limit).offset(offset))
     return list(result.scalars().all())
 
 
@@ -88,10 +88,11 @@ async def get_api_key_by_hash(session: AsyncSession, key_hash: str) -> ApiKey | 
     return result.scalar_one_or_none()
 
 
-async def list_api_keys(session: AsyncSession, user_id: int | None = None) -> list[ApiKey]:
+async def list_api_keys(session: AsyncSession, user_id: int | None = None, limit: int = 50, offset: int = 0) -> list[ApiKey]:
     stmt = select(ApiKey).order_by(ApiKey.id)
     if user_id is not None:
         stmt = stmt.where(ApiKey.user_id == user_id)
+    stmt = stmt.limit(limit).offset(offset)
     result = await session.execute(stmt)
     return list(result.scalars().all())
 
