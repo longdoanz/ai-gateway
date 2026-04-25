@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from loguru import logger
 
@@ -9,7 +9,7 @@ from kiro.usage.usage_cache import usage_cache
 
 async def track_usage(key_id: int, credits_used: int | None = None) -> None:
     amount = credits_used if credits_used is not None and credits_used > 0 else 1
-    month = datetime.utcnow().strftime("%Y-%m")
+    month = datetime.now(timezone.utc).strftime("%Y-%m")
 
     try:
         if async_session_factory is None:

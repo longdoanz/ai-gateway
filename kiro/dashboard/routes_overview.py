@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/overview", tags=["overview"])
 
 @router.get("", response_model=OverviewResponse)
 async def get_overview(caller: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
-    current_month = datetime.utcnow().strftime("%Y-%m")
+    current_month = datetime.now(timezone.utc).strftime("%Y-%m")
 
     # Total credits used & limit this month
     usage_result = await session.execute(

@@ -1,5 +1,5 @@
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 
 from cryptography.fernet import Fernet
 from passlib.context import CryptContext
@@ -124,9 +124,9 @@ async def update_api_key(session: AsyncSession, key_id: int, **kwargs) -> None:
 # --- KeyUsage ---
 
 async def increment_usage(session: AsyncSession, key_id: int, month: str, amount: int = 1) -> None:
-    stmt = pg_insert(KeyUsage).values(key_id=key_id, month=month, current_usage=amount, last_used_at=datetime.utcnow())
+    stmt = pg_insert(KeyUsage).values(key_id=key_id, month=month, current_usage=amount, last_used_at=datetime.now(timezone.utc))
     stmt = stmt.on_conflict_on_constraint("uq_key_usage_key_month").do_update(
-        set_={"current_usage": KeyUsage.current_usage + amount, "last_used_at": datetime.utcnow()}
+        set_={"current_usage": KeyUsage.current_usage + amount, "last_used_at": datetime.now(timezone.utc)}
     )
     await session.execute(stmt)
     await session.commit()
@@ -144,12 +144,19 @@ async def get_all_usage_for_month(session: AsyncSession, month: str) -> list[Key
     return list(result.scalars().all())
 
 
+async def get_usage_history(session: AsyncSession, key_id: int) -> list[KeyUsage]:
+    result = await session.execute(
+        select(KeyUsage).where(KeyUsage.key_id == key_id).order_by(KeyUsage.month.desc())
+    )
+    return list(result.scalars().all())
+
+
 async def upsert_usage_limits(session: AsyncSession, key_id: int, month: str, usage_limit: int, current_usage: int) -> None:
     stmt = pg_insert(KeyUsage).values(
-        key_id=key_id, month=month, usage_limit=usage_limit, current_usage=current_usage, last_synced_at=datetime.utcnow()
+        key_id=key_id, month=month, usage_limit=usage_limit, current_usage=current_usage, last_synced_at=datetime.now(timezone.utc)
     )
     stmt = stmt.on_conflict_on_constraint("uq_key_usage_key_month").do_update(
-        set_={"usage_limit": usage_limit, "current_usage": current_usage, "last_synced_at": datetime.utcnow()}
+        set_={"usage_limit": usage_limit, "current_usage": current_usage, "last_synced_at": datetime.now(timezone.utc)}
     )
     await session.execute(stmt)
     await session.commit()
@@ -165,7 +172,7 @@ async def upsert_kiro_user_mappings(session: AsyncSession, mappings: list[dict])
             kiro_user_id=m["kiro_user_id"], email=m.get("email"), username=m.get("username")
         )
         stmt = stmt.on_conflict_on_constraint("kiro_user_mappings_kiro_user_id_key").do_update(
-            set_={"email": m.get("email"), "username": m.get("username"), "imported_at": datetime.utcnow()}
+            set_={"email": m.get("email"), "username": m.get("username"), "imported_at": datetime.now(timezone.utc)}
         )
         result = await session.execute(stmt)
         if result.rowcount == 1:
@@ -186,7 +193,7 @@ async def get_config(session: AsyncSession, key: str) -> str | None:
 
 async def set_config(session: AsyncSession, key: str, value: str) -> None:
     stmt = pg_insert(SystemConfig).values(key=key, value=value)
-    stmt = stmt.on_conflict_on_constraint("system_config_pkey").do_update(set_={"value": value, "updated_at": datetime.utcnow()})
+    stmt = stmt.on_conflict_on_constraint("system_config_pkey").do_update(set_={"value": value, "updated_at": datetime.now(timezone.utc)})
     await session.execute(stmt)
     await session.commit()
 

@@ -20,9 +20,9 @@ class UsageCache:
     async def load_from_db(self, session) -> None:
         from kiro.db.models import ApiKey, KeyUsage
         from sqlalchemy import select
-        from datetime import datetime
+        from datetime import datetime, timezone
 
-        current_month = datetime.utcnow().strftime("%Y-%m")
+        current_month = datetime.now(timezone.utc).strftime("%Y-%m")
 
         keys_result = await session.execute(select(ApiKey))
         keys = {k.id: k for k in keys_result.scalars().all()}
@@ -42,7 +42,7 @@ class UsageCache:
                 )
         logger.info(f"UsageCache loaded: {len(self._cache)} keys")
 
-    async def get(self, key_id: int) -> UsageEntry | None:
+    def get(self, key_id: int) -> UsageEntry | None:
         return self._cache.get(key_id)
 
     async def increment(self, key_id: int, amount: int = 1) -> None:

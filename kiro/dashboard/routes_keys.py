@@ -58,7 +58,5 @@ async def get_key_usage(key_id: int, caller: User = Depends(get_current_user), s
     key = next((k for k in keys if k.id == key_id), None)
     if key is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Key not found")
-    from sqlalchemy import select
-    from kiro.db.models import KeyUsage
-    result = await session.execute(select(KeyUsage).where(KeyUsage.key_id == key_id).order_by(KeyUsage.month.desc()))
-    return list(result.scalars().all())
+    from kiro.db.repositories import get_usage_history
+    return await get_usage_history(session, key_id)

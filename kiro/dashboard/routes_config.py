@@ -38,4 +38,8 @@ async def update_config_route(body: SystemConfigUpdate, admin: User = Depends(re
         str_value = str(value).lower() if isinstance(value, bool) else str(value)
         await set_config(session, key, str_value)
     raw = await get_all_config(session)
+    # Invalidate fallback router cache
+    if "enable_usage_sharing" in updates:
+        from kiro.usage.fallback import fallback_router
+        fallback_router.update_sharing_config(str(updates["enable_usage_sharing"]).lower() == "true")
     return _to_response(raw)
