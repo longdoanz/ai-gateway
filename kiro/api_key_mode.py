@@ -53,6 +53,7 @@ from kiro.config import (
     get_kiro_q_host,
 )
 from kiro.utils import get_machine_fingerprint  # noqa: F401 - may be used by external code
+from kiro.usage.scheduler import is_db_configured
 
 
 # Module-level cache for /v1/models in API_KEY_MODE: api_key -> (models_list, fetched_at)
@@ -261,6 +262,43 @@ def build_api_key_headers(token: str, stream: bool = False) -> dict:
         "Connection": "close",
         "tokentype": "API_KEY",
     }
+
+
+async def _resolve_key_id(token: str) -> int | None:
+    if not is_db_configured():
+        return None
+    from kiro.db.engine import async_session_factory
+    from kiro.db.repositories import get_api_key_by_hash, hash_api_key
+    try:
+        async with async_session_factory() as session:
+            api_key = await get_api_key_by_hash(session, hash_api_key(token))
+            return api_key.id if api_key else None
+    except Exception:
+        return None
+
+
+async def _try_fallback_pre_check(token: str, key_id: int | None) -> tuple[str, int | None] | None:
+    if key_id is None or not is_db_configured():
+        return None
+    try:
+        from kiro.usage.fallback import fallback_router
+        result = await fallback_router.pre_check(key_id)
+        if result:
+            new_key_id, new_raw_key = result
+            return new_raw_key, new_key_id
+    except Exception as e:
+        logger.debug(f"Fallback pre-check failed: {e}")
+    return None
+
+
+async def _track_usage_background(key_id: int | None, credits: int | None) -> None:
+    if key_id is None or not is_db_configured():
+        return
+    try:
+        from kiro.usage.tracker import track_usage
+        await track_usage(key_id, credits)
+    except Exception as e:
+        logger.debug(f"Usage tracking failed: {e}")
 
 
 class ApiKeyModeClient:
@@ -504,6 +542,13 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
     from kiro.cache import ModelInfoCache
 
     token = get_api_key_from_request(request)
+    key_id = await _resolve_key_id(token)
+
+    # Fallback pre-check: swap key if current one is near quota
+    fallback_result = await _try_fallback_pre_check(token, key_id)
+    if fallback_result:
+        token, key_id = fallback_result[0], fallback_result[1]
+
     auth_adapter = ApiKeyAuthAdapter(token)
     model_cache: ModelInfoCache = request.app.state.model_cache
 
@@ -576,6 +621,7 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
                         pass
                     raise
                 finally:
+                    await _track_usage_background(key_id, None)
                     await http_client.close()
 
             return StreamingResponse(stream_wrapper(), media_type="text/event-stream")
@@ -590,6 +636,7 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
                 request_messages=messages_for_tokenizer,
                 request_tools=tools_for_tokenizer,
             )
+            await _track_usage_background(key_id, None)
             await http_client.close()
             return JSONResponse(content=openai_response)
 
@@ -643,6 +690,12 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
                 },
             },
         )
+
+    key_id = await _resolve_key_id(raw_token)
+
+    fallback_result = await _try_fallback_pre_check(raw_token, key_id)
+    if fallback_result:
+        raw_token, key_id = fallback_result[0], fallback_result[1]
 
     auth_adapter = ApiKeyAuthAdapter(raw_token)
     model_cache: ModelInfoCache = request.app.state.model_cache
@@ -728,6 +781,7 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
                         pass
                     raise
                 finally:
+                    await _track_usage_background(key_id, None)
                     await http_client.close()
 
             return StreamingResponse(stream_wrapper(), media_type="text/event-stream")
@@ -742,6 +796,7 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
                 request_tools=tools_for_tokenizer,
                 request_system=system_for_tokenizer,
             )
+            await _track_usage_background(key_id, None)
             await http_client.close()
             return JSONResponse(content=anthropic_response)
 
