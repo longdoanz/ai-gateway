@@ -2,7 +2,7 @@ import hashlib
 from datetime import datetime, timezone
 
 from cryptography.fernet import Fernet
-from passlib.context import CryptContext
+import bcrypt
 from sqlalchemy import select, update, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from kiro.config import ENCRYPTION_KEY
 from kiro.db.models import ApiKey, KeyUsage, KiroUserMapping, SystemConfig, User
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 _fernet = None
 
@@ -25,11 +24,11 @@ def _get_fernet() -> Fernet:
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    return bcrypt.checkpw(plain.encode(), hashed.encode())
 
 
 def hash_api_key(key: str) -> str:
@@ -86,6 +85,26 @@ async def update_user(session: AsyncSession, user_id: int, **kwargs) -> User | N
 async def get_api_key_by_hash(session: AsyncSession, key_hash: str) -> ApiKey | None:
     result = await session.execute(select(ApiKey).where(ApiKey.key_hash == key_hash))
     return result.scalar_one_or_none()
+
+
+async def get_or_create_api_key(session: AsyncSession, raw_key: str, default_user_id: int = 1) -> tuple[ApiKey, bool]:
+    """Returns (api_key, is_new) — is_new=True when the key was just created."""
+    key_h = hash_api_key(raw_key)
+    existing = await get_api_key_by_hash(session, key_h)
+    if existing:
+        return existing, False
+    prefix, suffix = mask_key(raw_key)
+    api_key = ApiKey(
+        user_id=default_user_id,
+        key_hash=key_h,
+        key_encrypted=encrypt_api_key(raw_key),
+        key_prefix=prefix,
+        key_suffix=suffix,
+    )
+    session.add(api_key)
+    await session.commit()
+    await session.refresh(api_key)
+    return api_key, True
 
 
 async def list_api_keys(session: AsyncSession, user_id: int | None = None, limit: int = 50, offset: int = 0) -> list[ApiKey]:

@@ -268,13 +268,61 @@ async def _resolve_key_id(token: str) -> int | None:
     if not is_db_configured():
         return None
     from kiro.db.engine import async_session_factory
-    from kiro.db.repositories import get_api_key_by_hash, hash_api_key
+    from kiro.db.repositories import get_or_create_api_key
     try:
         async with async_session_factory() as session:
-            api_key = await get_api_key_by_hash(session, hash_api_key(token))
-            return api_key.id if api_key else None
-    except Exception:
+            api_key, is_new = await get_or_create_api_key(session, token)
+        if is_new:
+            logger.info(f"New API key detected (id={api_key.id}), fetching usage limits")
+            asyncio.ensure_future(_sync_new_key(api_key.id, token))
+        return api_key.id
+    except Exception as e:
+        logger.debug(f"Failed to resolve/create key: {e}")
         return None
+
+
+async def _sync_new_key(key_id: int, raw_token: str) -> None:
+    """Immediately fetch usage limits and kiro_user_id for a newly persisted key."""
+    try:
+        data = await get_usage_limits(raw_token, resource_type="CREDIT")
+
+        breakdown_list = data.get("usageBreakdownList", [])
+        if not breakdown_list:
+            return
+
+        credit_entry = None
+        for entry in breakdown_list:
+            if entry.get("resourceType") == "CREDIT":
+                credit_entry = entry
+                break
+        if credit_entry is None:
+            credit_entry = breakdown_list[0]
+
+        usage_limit = int(credit_entry.get("usageLimit", 0))
+        current_usage_precise = credit_entry.get("currentUsageWithPrecision")
+        current_usage = int(current_usage_precise) if current_usage_precise is not None else int(credit_entry.get("currentUsage", 0))
+
+        from datetime import datetime, timezone
+        month = datetime.now(timezone.utc).strftime("%Y-%m")
+
+        from kiro.db.engine import async_session_factory
+        from kiro.db.repositories import upsert_usage_limits, update_api_key
+        from kiro.usage.usage_cache import usage_cache
+
+        async with async_session_factory() as session:
+            await upsert_usage_limits(session, key_id, month, usage_limit, current_usage)
+
+            user_info = data.get("userInfo", {})
+            kiro_user_id = user_info.get("userId")
+            if kiro_user_id:
+                await update_api_key(session, key_id, kiro_user_id=kiro_user_id)
+                logger.info(f"Mapped key {key_id} to kiro_user_id={kiro_user_id}")
+
+        await usage_cache.refresh_limits({key_id: (usage_limit, current_usage)})
+        logger.info(f"Synced new key {key_id}: usage={current_usage}/{usage_limit}")
+
+    except Exception as e:
+        logger.warning(f"Failed to sync new key {key_id}: {e}")
 
 
 async def _try_fallback_pre_check(token: str, key_id: int | None) -> tuple[str, int | None] | None:
