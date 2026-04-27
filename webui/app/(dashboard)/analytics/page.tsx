@@ -1,30 +1,142 @@
 "use client";
 
+import { useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useKeys } from "@/hooks/use-keys";
-import { useUsers } from "@/hooks/use-users";
-import { BarChartUsers } from "@/components/charts/bar-chart-users";
+import { useAnalytics, type AnalyticsRange } from "@/hooks/use-analytics";
+import { BarChartCredits } from "@/components/charts/bar-chart-credits";
+import { AreaChartUsage } from "@/components/charts/area-chart-usage";
+import { DonutChartShare } from "@/components/charts/donut-chart-share";
+import { formatCredits } from "@/lib/utils";
+
+const RANGES: AnalyticsRange[] = ["7d", "30d", "90d"];
 
 export default function AnalyticsPage() {
-  const { data: users, isLoading: usersLoading } = useUsers();
-  const { data: keys, isLoading: keysLoading } = useKeys();
-  const isLoading = usersLoading || keysLoading;
+  const [range, setRange] = useState<AnalyticsRange>("7d");
+  const { data, isLoading, isError } = useAnalytics(range);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-h1 font-bold text-on-surface tracking-tight">Usage Analytics</h1>
-        <p className="text-on-surface-variant mt-1 text-sm max-w-2xl">Credit consumption breakdown by user.</p>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-h1 font-bold text-on-surface tracking-tight">Usage Analytics</h1>
+          <p className="text-on-surface-variant mt-1 text-sm">Detailed breakdown of credit consumption.</p>
+        </div>
+        <div className="glass-panel flex items-center rounded-lg p-1">
+          {RANGES.map((r) => (
+            <button
+              key={r}
+              onClick={() => setRange(r)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                range === r
+                  ? "bg-white shadow-sm text-primary border border-outline-variant"
+                  : "text-on-surface-variant hover:text-primary"
+              }`}
+            >
+              {r.toUpperCase()}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {isLoading ? (
-        <Skeleton className="h-[400px] rounded-3xl" />
-      ) : (
-        <div className="glass-panel rounded-3xl p-6 h-[400px]">
-          <h3 className="text-lg font-semibold text-on-surface mb-4">User Credit Consumption</h3>
-          <div className="h-[320px]"><BarChartUsers users={users || []} keys={keys || []} /></div>
+      {/* Row 1: Bar + Area */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="glass-panel rounded-3xl p-6">
+          <h3 className="text-base font-semibold text-on-surface mb-4">User Credit Consumption</h3>
+          <div className="h-[280px]">
+            {isLoading ? (
+              <Skeleton className="h-full w-full rounded-xl" />
+            ) : isError ? (
+              <ErrorState />
+            ) : !data?.user_credits?.length ? (
+              <EmptyState />
+            ) : (
+              <BarChartCredits data={data.user_credits} />
+            )}
+          </div>
         </div>
-      )}
+
+        <div className="glass-panel rounded-3xl p-6">
+          <h3 className="text-base font-semibold text-on-surface mb-4">Daily Credit Consumption</h3>
+          <div className="h-[280px]">
+            {isLoading ? (
+              <Skeleton className="h-full w-full rounded-xl" />
+            ) : isError ? (
+              <ErrorState />
+            ) : !data?.daily_series?.length ? (
+              <EmptyState />
+            ) : (
+              <AreaChartUsage data={data.daily_series} />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Row 2: Top Users + Donut */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="glass-panel rounded-3xl p-0 overflow-hidden">
+          <div className="px-6 py-4 border-b border-outline-variant/30">
+            <h3 className="text-base font-semibold text-on-surface">Top Users</h3>
+          </div>
+          <div className="p-2">
+            {isLoading ? (
+              <div className="p-4 space-y-3">
+                {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}
+              </div>
+            ) : isError ? (
+              <div className="p-6"><ErrorState /></div>
+            ) : !data?.top_users?.length ? (
+              <EmptyState />
+            ) : (
+              data.top_users.map((u) => (
+                <div key={u.user_id} className="flex items-center justify-between p-3 rounded-xl hover:bg-surface-container transition-colors">
+                  <div className="flex items-center gap-3">
+                    <span className="w-6 h-6 rounded-full bg-primary-container flex items-center justify-center text-[10px] font-bold text-on-primary-container">
+                      {u.rank}
+                    </span>
+                    <span className="text-sm font-medium text-on-surface">{u.username}</span>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-semibold text-primary">{formatCredits(u.credits)}</div>
+                    <div className="text-[10px] text-on-surface-variant">{u.share_pct}%</div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="glass-panel rounded-3xl p-6">
+          <h3 className="text-base font-semibold text-on-surface mb-4">Credit Consume By Users</h3>
+          <div className="h-[280px]">
+            {isLoading ? (
+              <Skeleton className="h-full w-full rounded-xl" />
+            ) : isError ? (
+              <ErrorState />
+            ) : !data?.credit_share?.length ? (
+              <EmptyState />
+            ) : (
+              <DonutChartShare data={data.credit_share} />
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="flex items-center justify-center h-full text-on-surface-variant text-sm">
+      No data for this period.
+    </div>
+  );
+}
+
+function ErrorState() {
+  return (
+    <div className="flex items-center justify-center h-full text-error text-sm">
+      Failed to load. Please refresh.
     </div>
   );
 }

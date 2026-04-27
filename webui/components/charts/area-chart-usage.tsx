@@ -1,11 +1,11 @@
 "use client";
 
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { DailyUsage } from "@/lib/types";
+import type { DailySeries } from "@/lib/types";
 import { formatCredits } from "@/lib/utils";
 
 interface Props {
-  data: DailyUsage[];
+  data: DailySeries[];
 }
 
 export function AreaChartUsage({ data }: Props) {
