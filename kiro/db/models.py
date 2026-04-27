@@ -17,6 +17,8 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(50), nullable=False, default="user")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    google_id: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True, index=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     api_keys: Mapped[list["ApiKey"]] = relationship("ApiKey", back_populates="owner", lazy="selectin")
 
