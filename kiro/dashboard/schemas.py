@@ -51,6 +51,7 @@ class UserDetailResponse(UserResponse):
 
 class ApiKeyCreate(BaseModel):
     raw_key: str = Field(min_length=10)
+    user_id: int | None = None  # admin can assign to a specific user
 
 
 class ApiKeyResponse(BaseModel):
@@ -91,6 +92,7 @@ class DailyUsage(BaseModel):
 class OverviewResponse(BaseModel):
     total_credits_used: int
     total_credits_limit: int
+    total_users: int
     active_users: int
     active_keys: int
     daily_usage: list[DailyUsage]

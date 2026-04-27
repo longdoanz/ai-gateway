@@ -18,6 +18,7 @@ export interface RefreshRequest {
 export interface JwtPayload {
   sub: string;
   role: "admin" | "user";
+  username: string;
   exp: number;
   type: "access" | "refresh";
 }
@@ -52,6 +53,7 @@ export interface UserDetailResponse extends UserResponse {
 
 export interface ApiKeyCreate {
   raw_key: string;
+  user_id?: number;
 }
 
 export interface ApiKeyResponse {
@@ -88,6 +90,7 @@ export interface DailyUsage {
 export interface OverviewResponse {
   total_credits_used: number;
   total_credits_limit: number;
+  total_users: number;
   active_users: number;
   active_keys: number;
   daily_usage: DailyUsage[];

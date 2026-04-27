@@ -9,7 +9,9 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-inter), system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), monospace;
+  --font-mono-label: var(--font-jetbrains-mono), monospace;
   --font-heading: var(--font-sans);
+  --text-mono-label: 0.75rem;
 
   /* Shadcn color mappings */
   --color-sidebar-ring: var(--sidebar-ring);
@@ -53,6 +55,8 @@
   --color-glacier-background: #fcf8ff;
   --color-on-surface: #1b1b24;
   --color-on-surface-variant: #464555;
+  --color-on-primary: #ffffff;
+  --color-on-primary-container: #ffffff;
 
   --color-glacier-primary: #3525cd;
   --color-primary-container: #4f46e5;

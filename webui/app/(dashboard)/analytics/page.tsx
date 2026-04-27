@@ -16,21 +16,16 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-h1 font-bold text-on-surface tracking-tight">Usage Analytics</h1>
-          <p className="text-on-surface-variant mt-1 text-sm">Detailed breakdown of credit consumption.</p>
-        </div>
-        <div className="glass-panel flex items-center rounded-lg p-1">
+      <div className="flex justify-end">
+        <div className="glass-panel flex items-center rounded-xl p-1 gap-0.5">
           {RANGES.map((r) => (
             <button
               key={r}
               onClick={() => setRange(r)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              className={`cursor-pointer px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
                 range === r
-                  ? "bg-white shadow-sm text-primary border border-outline-variant"
-                  : "text-on-surface-variant hover:text-primary"
+                  ? "bg-primary-container text-white shadow-sm"
+                  : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container"
               }`}
             >
               {r.toUpperCase()}

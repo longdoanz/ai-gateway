@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useEffect } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,32 +25,56 @@ import type { ApiKeyResponse, UserResponse, ImportResult } from "@/lib/types";
 
 function AddKeyDialog() {
   const [rawKey, setRawKey] = useState("");
+  const [targetUserId, setTargetUserId] = useState<string>("");
   const [open, setOpen] = useState(false);
   const createKey = useCreateKey();
+  const { user: authUser } = useAuth();
+  const { data: users } = useUsers();
+  const isAdmin = authUser?.role === "admin";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    await createKey.mutateAsync({ raw_key: rawKey });
+    await createKey.mutateAsync({
+      raw_key: rawKey,
+      ...(isAdmin && targetUserId ? { user_id: parseInt(targetUserId) } : {}),
+    });
     setRawKey("");
+    setTargetUserId("");
     setOpen(false);
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button size="sm" className="gap-2 bg-primary-container text-on-primary rounded-lg shadow-[0_2px_8px_rgba(79,70,229,0.2)] hover:-translate-y-[1px] hover:bg-primary-container/95 transition-transform" />}>
-        <span className="material-symbols-outlined text-[18px]">add</span> Register Key
+      <DialogTrigger render={<Button size="sm" className="gap-1.5" />}>
+        <span className="material-symbols-outlined text-[16px]">add</span> Register Key
       </DialogTrigger>
       <DialogContent className="glass-panel-elevated">
         <DialogHeader>
           <DialogTitle>Register API Key</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {isAdmin && users && users.length > 0 && (
+            <div className="space-y-2">
+              <Label>Assign to User</Label>
+              <Select value={targetUserId} onValueChange={setTargetUserId}>
+                <SelectTrigger><SelectValue placeholder="Select a user..." /></SelectTrigger>
+                <SelectContent>
+                  {users.map((u) => (
+                    <SelectItem key={u.id} value={String(u.id)}>
+                      {u.username} <span className="text-on-surface-variant text-xs">({u.role})</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-on-surface-variant">As admin, you can assign this key to any user.</p>
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="raw_key">Kiro API Key</Label>
             <Input id="raw_key" value={rawKey} onChange={(e) => setRawKey(e.target.value)} placeholder="sk-proj-..." className="font-mono text-sm" required minLength={10} />
             <p className="text-xs text-on-surface-variant">The key will be encrypted. Only prefix and suffix are stored visibly.</p>
           </div>
-          <Button type="submit" disabled={createKey.isPending} className="w-full">
+          <Button type="submit" disabled={createKey.isPending || (isAdmin && !targetUserId)} className="w-full">
             {createKey.isPending ? "Registering..." : "Register Key"}
           </Button>
           {createKey.isError && (
@@ -370,7 +394,7 @@ function CreateUserDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button className="gap-2 shadow-[0_2px_8px_rgba(79,70,229,0.2)] hover:-translate-y-[1px] transition-transform rounded-lg" />}>
+      <DialogTrigger render={<Button className="gap-2" />}>
         <span className="material-symbols-outlined text-[16px]">add</span> Create Account
       </DialogTrigger>
       <DialogContent className="glass-panel-elevated">
@@ -420,7 +444,7 @@ function ResetPasswordDialog({ user }: { user: UserResponse }) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button variant="outline" size="sm" className="hover:-translate-y-[1px] transition-transform" />}>
+      <DialogTrigger render={<Button variant="outline" size="sm" />}>
         Reset Password
       </DialogTrigger>
       <DialogContent className="glass-panel-elevated">
@@ -479,7 +503,6 @@ function AccountRow({ user }: { user: UserResponse }) {
 function KiroUsersWrapper() {
   const { data: kiroUsers, isLoading, refetch } = useKiroUsers();
   const [isEditing, setIsEditing] = useState(false);
-  const [initialFile, setInitialFile] = useState<File | null>(null);
 
   if (isLoading) return <div className="space-y-3">{[1, 2, 3].map((i) => (<Skeleton key={i} className="h-16 rounded-xl" />))}</div>;
 
@@ -494,12 +517,11 @@ function KiroUsersWrapper() {
               <h3 className="font-semibold text-on-surface">Update Imported Users</h3>
               <p className="text-sm text-on-surface-variant">Upload a new CSV/JSON to append or update users.</p>
             </div>
-            <Button variant="outline" onClick={() => { setIsEditing(false); setInitialFile(null); }}>Cancel Edit</Button>
+            <Button variant="outline" onClick={() => setIsEditing(false)}>Cancel Edit</Button>
           </div>
         )}
-        <ImportUsersPanel 
-          onImportSuccess={() => { refetch(); setIsEditing(false); setInitialFile(null); }} 
-          initialFile={initialFile}
+        <ImportUsersPanel
+          onImportSuccess={() => { refetch(); setIsEditing(false); }}
           existingUsers={kiroUsers || []}
         />
       </div>
@@ -513,24 +535,9 @@ function KiroUsersWrapper() {
           <h3 className="text-lg font-semibold text-on-surface">Imported Kiro Users</h3>
           <p className="text-sm text-on-surface-variant">Manage your imported Amazon Q/Kiro users mapping.</p>
         </div>
-        <label className="cursor-pointer">
-          <input 
-            type="file" 
-            accept=".csv,.json" 
-            className="hidden" 
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) {
-                setInitialFile(f);
-                setIsEditing(true);
-                e.target.value = "";
-              }
-            }} 
-          />
-          <div className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary-container shadow-[0_2px_8px_rgba(79,70,229,0.2)] hover:-translate-y-[1px] text-on-primary h-10 px-4 py-2">
-            <span className="material-symbols-outlined text-[16px]">upload</span> Edit Import
-          </div>
-        </label>
+        <Button onClick={() => setIsEditing(true)} className="gap-2">
+          <span className="material-symbols-outlined text-[16px]">upload</span> Edit Import
+        </Button>
       </div>
 
       <div className="bg-white/80 backdrop-blur-[20px] border border-black/5 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] overflow-hidden">
@@ -579,42 +586,31 @@ export default function AccountsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-end">
-        <div>
-          <h1 className="text-h1 font-bold text-on-surface tracking-tight">Account Management</h1>
-          <p className="text-on-surface-variant mt-1 text-sm max-w-2xl">Manage users, access, API keys, and dashboard accounts.</p>
-        </div>
-      </div>
-
       <Tabs defaultValue="access" className="w-full">
         <TabsList variant="line" className="w-full justify-start h-full gap-6 rounded-none border-b border-outline-variant/30 p-0">
           <TabsTrigger
             value="access"
-            className="!h-auto !rounded-none !border-0 !bg-transparent !px-0 !py-0 mt-4 pb-4 pt-4 text-slate-500 hover:text-indigo-500 transition-colors duration-200 data-[active]:text-indigo-600 data-[active]:font-bold data-[active]:border-b-2 data-[active]:border-indigo-600"
+            className="cursor-pointer !h-auto !rounded-none !border-0 !bg-transparent !px-0 !py-0 pb-4 pt-4 text-on-surface-variant hover:text-primary-container transition-colors duration-200 data-[active]:text-primary-container data-[active]:font-semibold data-[active]:border-b-2 data-[active]:border-primary-container"
           >
-            User &amp; Tokens
+            Access &amp; Overrides
           </TabsTrigger>
           <TabsTrigger
             value="import"
-            className="!h-auto !rounded-none !border-0 !bg-transparent !px-0 !py-0 mt-4 pb-4 pt-4 text-slate-500 hover:text-indigo-500 transition-colors duration-200 data-[active]:text-indigo-600 data-[active]:font-bold data-[active]:border-b-2 data-[active]:border-indigo-600"
+            className="cursor-pointer !h-auto !rounded-none !border-0 !bg-transparent !px-0 !py-0 pb-4 pt-4 text-on-surface-variant hover:text-primary-container transition-colors duration-200 data-[active]:text-primary-container data-[active]:font-semibold data-[active]:border-b-2 data-[active]:border-primary-container"
           >
             Kiro Users
           </TabsTrigger>
           <TabsTrigger
             value="accounts"
-            className="!h-auto !rounded-none !border-0 !bg-transparent !px-0 !py-0 mt-4 pb-4 pt-4 text-slate-500 hover:text-indigo-500 transition-colors duration-200 data-[active]:text-indigo-600 data-[active]:font-bold data-[active]:border-b-2 data-[active]:border-indigo-600"
+            className="cursor-pointer !h-auto !rounded-none !border-0 !bg-transparent !px-0 !py-0 pb-4 pt-4 text-on-surface-variant hover:text-primary-container transition-colors duration-200 data-[active]:text-primary-container data-[active]:font-semibold data-[active]:border-b-2 data-[active]:border-primary-container"
           >
-            Account Management
+            Dashboard Accounts
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="access" className="mt-6 space-y-6">
           <div className="flex items-center justify-end gap-3">
-            <Button
-              variant="outline"
-              className="px-4 py-2 bg-surface-bright border border-outline-variant text-on-surface rounded-lg font-mono-label text-mono-label shadow-[0_2px_4px_rgba(0,0,0,0.02)] hover:-translate-y-[1px] transition-transform flex items-center gap-2"
-              type="button"
-            >
+            <Button variant="outline" size="sm" type="button">
               <span className="material-symbols-outlined text-[16px]">download</span>
               Export CSV
             </Button>

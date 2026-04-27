@@ -56,31 +56,12 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-between items-end">
-        <div>
-          <h1 className="text-h1 font-bold text-on-surface tracking-tight">
-            Gateway Configuration
-          </h1>
-          <p className="text-on-surface-variant mt-1 text-sm max-w-2xl">
-            Configure dynamic gateway parameters. Changes apply immediately
-            without server restart.
-          </p>
-        </div>
+      <div className="flex justify-end">
         <div className="flex gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => refetch()}
-            className="gap-2"
-          >
+          <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-2">
             <RefreshCw className="w-4 h-4" /> Reload
           </Button>
-          <Button
-            size="sm"
-            onClick={handleSave}
-            disabled={!dirty || updateConfig.isPending}
-            className="gap-2"
-          >
+          <Button size="sm" onClick={handleSave} disabled={!dirty || updateConfig.isPending} className="gap-2">
             <Save className="w-4 h-4" />
             {updateConfig.isPending ? "Saving..." : "Apply Changes"}
           </Button>

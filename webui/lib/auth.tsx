@@ -7,6 +7,7 @@ import apiClient, { clearTokens, getStoredRefreshToken, setTokens } from "@/lib/
 export interface AuthUser {
   id: number;
   role: "admin" | "user";
+  username: string;
 }
 
 interface AuthContextValue {
@@ -37,7 +38,7 @@ function userFromToken(token: string): AuthUser | null {
   const payload = decodeJwtPayload(token);
   if (!payload || payload.type !== "access") return null;
   if (payload.exp * 1000 < Date.now()) return null;
-  return { id: parseInt(payload.sub), role: payload.role };
+  return { id: parseInt(payload.sub), role: payload.role, username: payload.username || "" };
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {

@@ -39,7 +39,7 @@ async def login(body: LoginRequest, request: Request, session: AsyncSession = De
     if user is None or not user.is_active or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     return TokenResponse(
-        access_token=create_access_token(user.id, user.role),
+        access_token=create_access_token(user.id, user.role, user.username),
         refresh_token=create_refresh_token(user.id),
     )
 
@@ -53,6 +53,6 @@ async def refresh(body: RefreshRequest, session: AsyncSession = Depends(get_sess
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
     return TokenResponse(
-        access_token=create_access_token(user.id, user.role),
+        access_token=create_access_token(user.id, user.role, user.username),
         refresh_token=create_refresh_token(user.id),
     )

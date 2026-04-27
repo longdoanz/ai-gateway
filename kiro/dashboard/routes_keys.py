@@ -34,7 +34,14 @@ async def register_key(body: ApiKeyCreate, caller: User = Depends(get_current_us
     existing = await get_api_key_by_hash(session, hash_api_key(body.raw_key))
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This API key is already registered")
-    return await create_api_key(session, caller.id, body.raw_key)
+    target_user_id = caller.id
+    if caller.role == "admin" and body.user_id is not None:
+        from kiro.db.repositories import get_user_by_id
+        target = await get_user_by_id(session, body.user_id)
+        if target is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target user not found")
+        target_user_id = body.user_id
+    return await create_api_key(session, target_user_id, body.raw_key)
 
 
 @router.put("/{key_id}", response_model=ApiKeyResponse)

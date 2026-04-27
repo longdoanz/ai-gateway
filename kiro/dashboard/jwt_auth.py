@@ -7,9 +7,9 @@ from kiro.config import JWT_SECRET, JWT_ACCESS_EXPIRY, JWT_REFRESH_EXPIRY
 ALGORITHM = "HS256"
 
 
-def create_access_token(user_id: int, role: str) -> str:
+def create_access_token(user_id: int, role: str, username: str = "") -> str:
     expire = datetime.now(timezone.utc) + timedelta(seconds=JWT_ACCESS_EXPIRY)
-    payload = {"sub": str(user_id), "role": role, "exp": expire, "type": "access"}
+    payload = {"sub": str(user_id), "role": role, "username": username, "exp": expire, "type": "access"}
     return jwt.encode(payload, JWT_SECRET, algorithm=ALGORITHM)
 
 
