@@ -131,3 +131,39 @@ class ImportResult(BaseModel):
 class PaginationParams(BaseModel):
     limit: int = Field(default=50, ge=1, le=200)
     offset: int = Field(default=0, ge=0)
+
+
+# --- Analytics ---
+
+class DailySeries(BaseModel):
+    date: str
+    credits: int
+
+
+class UserCredit(BaseModel):
+    user_id: int
+    username: str
+    credits: int
+
+
+class TopUser(BaseModel):
+    rank: int
+    user_id: int
+    username: str
+    credits: int
+    share_pct: float
+
+
+class CreditShare(BaseModel):
+    user_id: int
+    username: str
+    credits: int
+    pct: float
+
+
+class AnalyticsResponse(BaseModel):
+    time_range: str
+    daily_series: list[DailySeries]
+    user_credits: list[UserCredit]
+    top_users: list[TopUser]
+    credit_share: list[CreditShare]
