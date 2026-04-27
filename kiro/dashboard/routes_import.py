@@ -2,13 +2,14 @@ import csv
 import io
 import json
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiro.dashboard.deps import require_admin
 from kiro.dashboard.schemas import ImportResult, KiroUserMappingResponse, PaginationParams
 from kiro.db.engine import get_session
-from kiro.db.models import User
+from kiro.db.models import KiroUserMapping, User
 from kiro.db.repositories import upsert_kiro_user_mappings, list_kiro_user_mappings
 
 router = APIRouter(prefix="/import", tags=["import"])
@@ -67,3 +68,20 @@ async def import_users(
 
     inserted, updated = await upsert_kiro_user_mappings(session, mappings)
     return ImportResult(imported=inserted, updated=updated, errors=errors)
+
+
+@router.patch("/kiro-users/{kiro_user_id}", response_model=KiroUserMappingResponse)
+async def toggle_kiro_user(
+    kiro_user_id: str,
+    is_active: bool = Body(..., embed=True),
+    admin: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.execute(select(KiroUserMapping).where(KiroUserMapping.kiro_user_id == kiro_user_id))
+    mapping = result.scalar_one_or_none()
+    if not mapping:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kiro user not found")
+    mapping.is_active = is_active
+    await session.commit()
+    await session.refresh(mapping)
+    return mapping

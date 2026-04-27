@@ -29,6 +29,7 @@ class KiroUserMapping(Base):
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     imported_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
 
 class ApiKey(Base):

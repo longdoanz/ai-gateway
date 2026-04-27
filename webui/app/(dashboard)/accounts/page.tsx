@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import { useKeys, useCreateKey, useToggleKey } from "@/hooks/use-keys";
 import { useUsers, useCreateUser, useUpdateUser } from "@/hooks/use-users";
-import { useImportUsers, useKiroUsers } from "@/hooks/use-import";
+import { useImportUsers, useKiroUsers, useToggleKiroUser } from "@/hooks/use-import";
 import { useAuth } from "@/hooks/use-auth";
 import { maskKey, formatCredits } from "@/lib/utils";
 import type { ApiKeyResponse, UserResponse, ImportResult } from "@/lib/types";
@@ -56,7 +56,7 @@ function AddKeyDialog() {
           {isAdmin && users && users.length > 0 && (
             <div className="space-y-2">
               <Label>Assign to User</Label>
-              <Select value={targetUserId} onValueChange={setTargetUserId}>
+              <Select value={targetUserId} onValueChange={(v) => setTargetUserId(v ?? "")}>
                 <SelectTrigger><SelectValue placeholder="Select a user..." /></SelectTrigger>
                 <SelectContent>
                   {users.map((u) => (
@@ -502,6 +502,7 @@ function AccountRow({ user }: { user: UserResponse }) {
 
 function KiroUsersWrapper() {
   const { data: kiroUsers, isLoading, refetch } = useKiroUsers();
+  const toggleKiroUser = useToggleKiroUser();
   const [isEditing, setIsEditing] = useState(false);
 
   if (isLoading) return <div className="space-y-3">{[1, 2, 3].map((i) => (<Skeleton key={i} className="h-16 rounded-xl" />))}</div>;
@@ -547,6 +548,7 @@ function KiroUsersWrapper() {
               <th className="py-3 px-6 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Kiro User ID</th>
               <th className="py-3 px-6 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Email</th>
               <th className="py-3 px-6 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Username</th>
+              <th className="py-3 px-6 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider text-right">Active</th>
             </tr>
           </thead>
           <tbody className="text-body-sm divide-y divide-outline-variant/20">
@@ -555,6 +557,13 @@ function KiroUsersWrapper() {
                 <td className="py-4 px-6 font-mono text-xs">{user.kiro_user_id}</td>
                 <td className="py-4 px-6">{user.email || "—"}</td>
                 <td className="py-4 px-6">{user.username || "—"}</td>
+                <td className="py-4 px-6 text-right">
+                  <Switch
+                    checked={user.is_active}
+                    onCheckedChange={(checked) => toggleKiroUser.mutate({ kiroUserId: user.kiro_user_id, isActive: checked })}
+                    disabled={toggleKiroUser.isPending}
+                  />
+                </td>
               </tr>
             ))}
           </tbody>
@@ -590,19 +599,19 @@ export default function AccountsPage() {
         <TabsList variant="line" className="w-full justify-start h-full gap-6 rounded-none border-b border-outline-variant/30 p-0">
           <TabsTrigger
             value="access"
-            className="cursor-pointer !h-auto !rounded-none !border-0 !bg-transparent !px-0 !py-0 pb-4 pt-4 text-on-surface-variant hover:text-primary-container transition-colors duration-200 data-[active]:text-primary-container data-[active]:font-semibold data-[active]:border-b-2 data-[active]:border-primary-container"
+            className="cursor-pointer !h-auto !rounded-none !border-0 !bg-transparent !px-1 !py-0 pb-4 pt-4 text-base text-on-surface-variant hover:text-primary-container transition-colors duration-200 data-[active]:text-primary-container data-[active]:font-semibold data-[active]:border-b-2 data-[active]:border-primary-container data-[active]:bg-white data-[active]:rounded-t-lg"
           >
             Access &amp; Overrides
           </TabsTrigger>
           <TabsTrigger
             value="import"
-            className="cursor-pointer !h-auto !rounded-none !border-0 !bg-transparent !px-0 !py-0 pb-4 pt-4 text-on-surface-variant hover:text-primary-container transition-colors duration-200 data-[active]:text-primary-container data-[active]:font-semibold data-[active]:border-b-2 data-[active]:border-primary-container"
+            className="cursor-pointer !h-auto !rounded-none !border-0 !bg-transparent !px-1 !py-0 pb-4 pt-4 text-base text-on-surface-variant hover:text-primary-container transition-colors duration-200 data-[active]:text-primary-container data-[active]:font-semibold data-[active]:border-b-2 data-[active]:border-primary-container data-[active]:bg-white data-[active]:rounded-t-lg"
           >
             Kiro Users
           </TabsTrigger>
           <TabsTrigger
             value="accounts"
-            className="cursor-pointer !h-auto !rounded-none !border-0 !bg-transparent !px-0 !py-0 pb-4 pt-4 text-on-surface-variant hover:text-primary-container transition-colors duration-200 data-[active]:text-primary-container data-[active]:font-semibold data-[active]:border-b-2 data-[active]:border-primary-container"
+            className="cursor-pointer !h-auto !rounded-none !border-0 !bg-transparent !px-1 !py-0 pb-4 pt-4 text-base text-on-surface-variant hover:text-primary-container transition-colors duration-200 data-[active]:text-primary-container data-[active]:font-semibold data-[active]:border-b-2 data-[active]:border-primary-container data-[active]:bg-white data-[active]:rounded-t-lg"
           >
             Dashboard Accounts
           </TabsTrigger>

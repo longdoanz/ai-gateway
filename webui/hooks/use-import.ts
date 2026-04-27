@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import apiClient from "@/lib/api-client";
 import type { ImportResult } from "@/lib/types";
 
@@ -7,6 +7,7 @@ export interface KiroUserResponse {
   email?: string;
   username?: string;
   imported_at?: string;
+  is_active: boolean;
 }
 
 export function useKiroUsers(limit = 50, offset = 0) {
@@ -18,6 +19,20 @@ export function useKiroUsers(limit = 50, offset = 0) {
       });
       return res.data;
     },
+  });
+}
+
+export function useToggleKiroUser() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ kiroUserId, isActive }: { kiroUserId: string; isActive: boolean }) => {
+      const res = await apiClient.patch<KiroUserResponse>(
+        `/import/kiro-users/${encodeURIComponent(kiroUserId)}`,
+        { is_active: isActive },
+      );
+      return res.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["kiro-users"] }),
   });
 }
 

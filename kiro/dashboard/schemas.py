@@ -119,6 +119,7 @@ class KiroUserMappingResponse(BaseModel):
     email: str | None = None
     username: str | None = None
     imported_at: datetime | None = None
+    is_active: bool = True
 
     model_config = {"from_attributes": True}
 
