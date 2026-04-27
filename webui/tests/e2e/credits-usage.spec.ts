@@ -18,10 +18,39 @@ test.describe("Credits and Usage Tracking", () => {
     expect(count).toBeGreaterThanOrEqual(3);
   });
 
-  test("analytics page should show credit consumption data", async ({ page }) => {
+  test("analytics page should show all 4 modules", async ({ page }) => {
     await page.goto("/analytics");
     const main = page.locator("main");
+
     await expect(main.getByText("User Credit Consumption")).toBeVisible({ timeout: 10000 });
+    await expect(main.getByText("Daily Credit Consumption")).toBeVisible();
+    await expect(main.getByText("Top Users")).toBeVisible();
+    await expect(main.getByText("Credit Consume By Users")).toBeVisible();
+  });
+
+  test("analytics timeframe toggle switches range", async ({ page }) => {
+    await page.goto("/analytics");
+    const main = page.locator("main");
+
+    await expect(main.getByText("User Credit Consumption")).toBeVisible({ timeout: 10000 });
+
+    // Default is 7D active
+    const btn7d = main.getByRole("button", { name: "7D" });
+    const btn30d = main.getByRole("button", { name: "30D" });
+    const btn90d = main.getByRole("button", { name: "90D" });
+
+    await expect(btn7d).toBeVisible();
+    await expect(btn30d).toBeVisible();
+    await expect(btn90d).toBeVisible();
+
+    // Click 30D — page should still show all 4 modules
+    await btn30d.click();
+    await expect(main.getByText("User Credit Consumption")).toBeVisible();
+    await expect(main.getByText("Daily Credit Consumption")).toBeVisible();
+
+    // Click 90D
+    await btn90d.click();
+    await expect(main.getByText("Top Users")).toBeVisible();
   });
 
   test("dashboard credit values should be rendered as numbers", async ({ page }) => {
