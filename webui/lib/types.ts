@@ -114,3 +114,39 @@ export interface ImportResult {
   updated: number;
   errors: string[];
 }
+
+// --- Analytics ---
+
+export interface DailySeries {
+  date: string;
+  credits: number;
+}
+
+export interface UserCredit {
+  user_id: number;
+  username: string;
+  credits: number;
+}
+
+export interface TopUser {
+  rank: number;
+  user_id: number;
+  username: string;
+  credits: number;
+  share_pct: number;
+}
+
+export interface CreditShare {
+  user_id: number;
+  username: string;
+  credits: number;
+  pct: number;
+}
+
+export interface AnalyticsResponse {
+  time_range: string;
+  daily_series: DailySeries[];
+  user_credits: UserCredit[];
+  top_users: TopUser[];
+  credit_share: CreditShare[];
+}
