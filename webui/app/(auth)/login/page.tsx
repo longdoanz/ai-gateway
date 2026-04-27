@@ -1,33 +1,14 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { GoogleLogin } from "@react-oauth/google";
+import { useState } from "react";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const { loginWithGoogle } = useAuth();
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-    try {
-      await login({ username, password });
-      router.push("/");
-    } catch (err: any) {
-      setError(err.response?.data?.detail || "Login failed");
-    } finally {
-      setLoading(false);
-    }
-  }
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
@@ -40,44 +21,30 @@ export default function LoginPage() {
             <h1 className="text-2xl font-bold text-on-surface tracking-tight">AI Gateway</h1>
             <p className="text-on-surface-variant text-sm mt-1">Sign in to your dashboard</p>
           </div>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="username">Username</Label>
-              <Input
-                id="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter username"
-                required
-                autoFocus
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password"
-                required
-              />
-            </div>
+          <div className="flex flex-col items-center gap-4">
+            <GoogleLogin
+              onSuccess={async (response) => {
+                try {
+                  setError("");
+                  await loginWithGoogle(response.credential!);
+                  router.push("/");
+                } catch {
+                  setError("Login failed. Please try again.");
+                }
+              }}
+              onError={() => setError("Google sign-in failed. Please try again.")}
+              width="320"
+              theme="outline"
+              size="large"
+              text="signin_with"
+            />
             {error && (
-              <div className="flex items-center gap-2 text-sm text-error bg-error/5 border border-error/20 rounded-xl px-3 py-2">
+              <div className="flex items-center gap-2 text-sm text-error bg-error/5 border border-error/20 rounded-xl px-3 py-2 w-full">
                 <span className="material-symbols-outlined text-[16px]">error</span>
                 {error}
               </div>
             )}
-            <Button type="submit" size="lg" className="w-full mt-2" disabled={loading}>
-              {loading ? (
-                <span className="flex items-center gap-2">
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Signing in...
-                </span>
-              ) : "Sign In"}
-            </Button>
-          </form>
+          </div>
         </div>
       </div>
     </div>

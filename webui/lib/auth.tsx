@@ -14,6 +14,7 @@ interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
   login: (credentials: LoginRequest) => Promise<void>;
+  loginWithGoogle: (credential: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -21,6 +22,7 @@ export const AuthContext = createContext<AuthContextValue>({
   user: null,
   isLoading: true,
   login: async () => {},
+  loginWithGoogle: async () => {},
   logout: () => {},
 });
 
@@ -69,14 +71,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(userFromToken(res.data.access_token));
   }, []);
 
+  const loginWithGoogle = useCallback(async (credential: string) => {
+    const res = await apiClient.post<TokenResponse>("/auth/google", { credential });
+    setTokens(res.data.access_token, res.data.refresh_token);
+    setUser(userFromToken(res.data.access_token));
+  }, []);
+
   const logout = useCallback(() => {
     clearTokens();
     setUser(null);
   }, []);
 
   const value = useMemo(
-    () => ({ user, isLoading, login, logout }),
-    [user, isLoading, login, logout]
+    () => ({ user, isLoading, login, loginWithGoogle, logout }),
+    [user, isLoading, login, loginWithGoogle, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

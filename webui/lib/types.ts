@@ -15,6 +15,10 @@ export interface RefreshRequest {
   refresh_token: string;
 }
 
+export interface GoogleLoginRequest {
+  credential: string;
+}
+
 export interface JwtPayload {
   sub: string;
   role: "admin" | "user";
