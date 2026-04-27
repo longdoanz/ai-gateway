@@ -72,6 +72,7 @@ class DailyUsage(Base):
     __tablename__ = "daily_usage"
     __table_args__ = (
         UniqueConstraint("key_id", "date", name="uq_daily_usage_key_date"),
+        Index("ix_daily_usage_date", "date"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
