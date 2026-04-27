@@ -14,8 +14,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Glacier AI - Credit Manager",
-  description: "AI Credit Management Dashboard",
+  title: "IZI AI Gateway",
+  description: "IZI AI Gateway - Credit Management Dashboard",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -88,7 +88,8 @@ export default function SettingsPage() {
       </div>
 
       {/* Model Override Section */}
-      <div className="glass-panel rounded-2xl p-8">
+      <div className="glass-panel rounded-3xl p-8 md:p-10 group relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
         <div className="flex items-start justify-between">
           <div>
             <h3 className="text-lg font-semibold text-on-surface">
@@ -125,7 +126,8 @@ export default function SettingsPage() {
       </div>
 
       {/* Usage Sharing / Fallback Section */}
-      <div className="glass-panel rounded-2xl p-8">
+      <div className="glass-panel rounded-3xl p-8 md:p-10 group relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
         <div className="flex items-start justify-between">
           <div>
             <h3 className="text-lg font-semibold text-on-surface">
@@ -146,13 +148,13 @@ export default function SettingsPage() {
 
       {/* Save confirmation */}
       {updateConfig.isSuccess && !dirty && (
-        <div className="glass-panel-elevated rounded-2xl p-4 text-center text-sm text-emerald-700 bg-emerald-50/50">
+        <div className="glass-panel-elevated rounded-3xl p-4 text-center text-sm text-emerald-700 bg-emerald-50/50">
           Configuration saved and applied successfully. Backend cache has been
           refreshed.
         </div>
       )}
       {updateConfig.isError && (
-        <div className="glass-panel-elevated rounded-2xl p-4 text-center text-sm text-error bg-error/5">
+        <div className="glass-panel-elevated rounded-3xl p-4 text-center text-sm text-error bg-error/5">
           {(updateConfig.error as any)?.response?.data?.detail ||
             "Failed to save configuration"}
         </div>

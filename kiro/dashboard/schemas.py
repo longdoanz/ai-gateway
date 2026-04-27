@@ -112,6 +112,14 @@ class SystemConfigUpdate(BaseModel):
 
 # --- Import ---
 
+class KiroUserMappingResponse(BaseModel):
+    kiro_user_id: str
+    email: str | None = None
+    username: str | None = None
+    imported_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
 class ImportResult(BaseModel):
     imported: int
     updated: int

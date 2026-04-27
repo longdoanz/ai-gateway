@@ -347,14 +347,17 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
     
     # Generate conversation ID for Kiro API (random UUID, not used for tracking)
     conversation_id = generate_conversation_id()
-    
+
+    from kiro.model_override import apply_model_override
+    await apply_model_override(request_data)
+
     # Build payload for Kiro
     # profileArn is only needed for Kiro Desktop auth
     # AWS SSO OIDC (Builder ID) users don't need profileArn and it causes 403 if sent
     profile_arn_for_payload = ""
     if auth_manager.auth_type == AuthType.KIRO_DESKTOP and auth_manager.profile_arn:
         profile_arn_for_payload = auth_manager.profile_arn
-    
+
     try:
         kiro_payload = build_kiro_payload(
             request_data,

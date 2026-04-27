@@ -44,7 +44,6 @@ from kiro.config import (
     BASE_RETRY_DELAY,
     FALLBACK_MODELS,
     FIRST_TOKEN_MAX_RETRIES,
-    FORCE_AUTO_MODEL,
     MAX_RETRIES,
     MODEL_CACHE_TTL,
     REGION,
@@ -52,6 +51,7 @@ from kiro.config import (
     get_kiro_api_host,
     get_kiro_q_host,
 )
+from kiro.model_override import apply_model_override
 from kiro.utils import get_machine_fingerprint  # noqa: F401 - may be used by external code
 from kiro.usage.scheduler import is_db_configured
 
@@ -306,7 +306,7 @@ async def _sync_new_key(key_id: int, raw_token: str) -> None:
         month = datetime.now(timezone.utc).strftime("%Y-%m")
 
         from kiro.db.engine import async_session_factory
-        from kiro.db.repositories import upsert_usage_limits, update_api_key
+        from kiro.db.repositories import upsert_kiro_user_mappings, upsert_usage_limits, update_api_key
         from kiro.usage.usage_cache import usage_cache
 
         async with async_session_factory() as session:
@@ -315,6 +315,7 @@ async def _sync_new_key(key_id: int, raw_token: str) -> None:
             user_info = data.get("userInfo", {})
             kiro_user_id = user_info.get("userId")
             if kiro_user_id:
+                await upsert_kiro_user_mappings(session, [{"kiro_user_id": kiro_user_id}])
                 await update_api_key(session, key_id, kiro_user_id=kiro_user_id)
                 logger.info(f"Mapped key {key_id} to kiro_user_id={kiro_user_id}")
 
@@ -602,8 +603,7 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
 
     conversation_id = generate_conversation_id()
 
-    if FORCE_AUTO_MODEL:
-        request_data.model = "auto"
+    await apply_model_override(request_data)
 
     try:
         kiro_payload = build_kiro_payload(request_data, conversation_id, "")
@@ -756,8 +756,7 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
 
     conversation_id = generate_conversation_id()
 
-    if FORCE_AUTO_MODEL:
-        request_data.model = "auto"
+    await apply_model_override(request_data)
 
     try:
         kiro_payload = anthropic_to_kiro(request_data, conversation_id, "")

@@ -6,16 +6,25 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiro.dashboard.deps import require_admin
-from kiro.dashboard.schemas import ImportResult
+from kiro.dashboard.schemas import ImportResult, KiroUserMappingResponse, PaginationParams
 from kiro.db.engine import get_session
 from kiro.db.models import User
-from kiro.db.repositories import upsert_kiro_user_mappings
+from kiro.db.repositories import upsert_kiro_user_mappings, list_kiro_user_mappings
 
 router = APIRouter(prefix="/import", tags=["import"])
 
 REQUIRED_FIELDS = {"kiro_user_id"}
 OPTIONAL_FIELDS = {"email", "username"}
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+
+
+@router.get("/kiro-users", response_model=list[KiroUserMappingResponse])
+async def get_kiro_users(
+    params: PaginationParams = Depends(),
+    admin: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
+    return await list_kiro_user_mappings(session, limit=params.limit, offset=params.offset)
 
 
 @router.post("/users", response_model=ImportResult)

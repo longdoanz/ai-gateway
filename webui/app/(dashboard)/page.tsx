@@ -18,7 +18,8 @@ function KpiCard({
   icon: React.ElementType;
 }) {
   return (
-    <div className="glass-panel rounded-2xl p-6 relative overflow-hidden group">
+    <div className="glass-panel rounded-3xl p-6 relative overflow-hidden group">
+      <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl opacity-0 group-hover:opacity-50 -mr-10 -mt-10 pointer-events-none transition-opacity duration-500" />
       <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
         <Icon className="w-16 h-16 text-primary" />
       </div>
@@ -36,7 +37,7 @@ function BudgetCard({ used, limit }: { used: number; limit: number }) {
   const remaining = limit - used;
 
   return (
-    <div className="glass-panel-elevated rounded-2xl p-6 relative overflow-hidden group border-primary/20">
+    <div className="glass-panel-elevated rounded-3xl p-6 relative overflow-hidden group border-primary/20">
       <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-50" />
       <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
         <Wallet className="w-16 h-16 text-primary" />
@@ -107,7 +108,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Consumption Trend Chart */}
-      <div className="glass-panel rounded-2xl p-6 flex flex-col h-[400px]">
+      <div className="glass-panel rounded-3xl p-6 flex flex-col h-[400px]">
         <div className="flex justify-between items-center mb-6">
           <div>
             <h3 className="text-lg font-semibold text-on-surface">Credit Consumption Trend</h3>

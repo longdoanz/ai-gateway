@@ -322,7 +322,10 @@ async def messages(
     
     # Generate conversation ID for Kiro API (random UUID, not used for tracking)
     conversation_id = generate_conversation_id()
-    
+
+    from kiro.model_override import apply_model_override
+    await apply_model_override(request_data)
+
     # Build payload for Kiro
     # profileArn is only needed for Kiro Desktop auth
     profile_arn_for_payload = ""

@@ -42,4 +42,7 @@ async def update_config_route(body: SystemConfigUpdate, admin: User = Depends(re
     if "enable_usage_sharing" in updates:
         from kiro.usage.fallback import fallback_router
         fallback_router.update_sharing_config(str(updates["enable_usage_sharing"]).lower() == "true")
+    if "enable_model_override" in updates or "enforced_global_model" in updates:
+        from kiro.model_override import invalidate_cache
+        invalidate_cache()
     return _to_response(raw)

@@ -7,8 +7,7 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    API_KEY_MODE=true \
-    FORCE_AUTO_MODEL=true
+    API_KEY_MODE=true
 
 RUN groupadd -r -g 1000 kiro && useradd -r -u 1000 -g kiro kiro
 
@@ -23,7 +22,7 @@ RUN mkdir -p debug_logs && chown -R kiro:kiro debug_logs
 
 USER kiro
 
-EXPOSE 8000
+EXPOSE 18000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import httpx; httpx.get('http://localhost:8000/health', timeout=5)"

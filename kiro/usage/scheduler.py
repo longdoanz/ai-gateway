@@ -13,14 +13,15 @@ _sync_task: asyncio.Task | None = None
 
 
 def is_db_configured() -> bool:
-    return bool(DATABASE_URL)
+    from kiro.config import API_KEY_MODE
+    return bool(DATABASE_URL) and API_KEY_MODE
 
 
 async def startup() -> None:
     global _sync_task
 
     if not is_db_configured():
-        logger.info("Usage management: DATABASE_URL not set, skipping init")
+        logger.info("Usage management: Not in API Key mode or DATABASE_URL not set, skipping init")
         return
 
     # Validate required secrets

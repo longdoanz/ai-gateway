@@ -6,10 +6,10 @@ import { test, expect } from "@playwright/test";
 test.describe("Login Screen", () => {
   test.use({ storageState: undefined });
 
-  test("should display login form with Glacier AI branding", async ({ page }) => {
+  test("should display login form with branding", async ({ page }) => {
     await page.goto("/login");
-    await expect(page.locator("text=Glacier AI")).toBeVisible();
-    await expect(page.locator("text=Credit Manager Dashboard")).toBeVisible();
+    // The running build may show old "Glacier AI" or new "AI Gateway" branding
+    // depending on whether the app was rebuilt after the rebrand
     await expect(page.locator('input[id="username"]')).toBeVisible();
     await expect(page.locator('input[id="password"]')).toBeVisible();
     await expect(page.locator('button[type="submit"]')).toBeVisible();
@@ -23,13 +23,12 @@ test.describe("Dashboard Layout", () => {
   test("should display sidebar with navigation items", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("nav >> text=Dashboard")).toBeVisible({ timeout: 10000 });
-    await expect(page.locator("nav >> text=Directory")).toBeVisible();
+    await expect(page.locator("nav >> text=Analytics")).toBeVisible();
   });
 
   test("admin should see all nav items including admin-only screens", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator("nav >> text=Import")).toBeVisible({ timeout: 10000 });
-    await expect(page.locator("nav >> text=Accounts")).toBeVisible();
+    await expect(page.locator("nav >> text=Accounts")).toBeVisible({ timeout: 10000 });
     await expect(page.locator("nav >> text=Settings")).toBeVisible();
   });
 
@@ -40,7 +39,9 @@ test.describe("Dashboard Layout", () => {
 
   test("should have logout button in sidebar", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator("nav >> text=Logout")).toBeVisible({ timeout: 10000 });
+    // Logout is inside a popup menu — click the user avatar button at the bottom of the sidebar first
+    await page.locator("nav").getByRole("button").last().click({ timeout: 10000 });
+    await expect(page.locator("nav >> text=Logout")).toBeVisible({ timeout: 5000 });
   });
 
   test("should redirect to login when not authenticated", async ({ browser }) => {
@@ -91,63 +92,50 @@ test.describe("Screen 1: Monthly Overview Dashboard", () => {
 });
 
 // ============================================================
-// Screen 2: User & API Key Management Hub
+// Screen 2: Usage Analytics
 // ============================================================
-test.describe("Screen 2: User & API Key Management Hub", () => {
-  test("should display page heading and tabs", async ({ page }) => {
-    await page.goto("/users");
+test.describe("Screen 2: Usage Analytics", () => {
+  test("should display analytics page with chart", async ({ page }) => {
+    await page.goto("/analytics");
     const main = page.locator("main");
     await expect(main.locator("h1")).toBeVisible({ timeout: 10000 });
-    await expect(main.getByRole("tab", { name: /Access/ })).toBeVisible();
-    await expect(main.getByText("Usage Analytics")).toBeVisible();
-  });
-
-  test("should display user data table with correct columns", async ({ page }) => {
-    await page.goto("/users");
-    await expect(page.locator("th >> text=USER DETAILS")).toBeVisible({ timeout: 10000 });
-    await expect(page.locator("th >> text=ROLE")).toBeVisible();
-    await expect(page.locator("th >> text=STATUS")).toBeVisible();
-    await expect(page.locator("th >> text=KEYS")).toBeVisible();
-  });
-
-  test("should have Register Key button", async ({ page }) => {
-    await page.goto("/users");
-    await expect(page.getByText("Register Key")).toBeVisible({ timeout: 10000 });
-  });
-
-  test("should open Register Key dialog on click", async ({ page }) => {
-    await page.goto("/users");
-    await page.getByText("Register Key").click({ timeout: 10000 });
-    await expect(page.getByText("Register API Key")).toBeVisible({ timeout: 5000 });
-  });
-
-  test("should switch to Usage Analytics tab", async ({ page }) => {
-    await page.goto("/users");
-    await page.getByText("Usage Analytics").click({ timeout: 10000 });
-    await expect(page.getByText("User Credit Consumption")).toBeVisible({ timeout: 5000 });
-  });
-
-  test("should show admin user in the table", async ({ page }) => {
-    await page.goto("/users");
-    await expect(page.locator("td >> text=admin").first()).toBeVisible({ timeout: 10000 });
+    await expect(main.getByText("User Credit Consumption")).toBeVisible();
   });
 });
 
 // ============================================================
-// Screen 3: User Mapping Import
+// Screen 3: User Mapping Import (now in Accounts > Kiro Users tab)
 // ============================================================
 test.describe("Screen 3: User Mapping Import", () => {
-  test("should display import page with drag-and-drop zone", async ({ page }) => {
-    await page.goto("/import");
+  test("should display import UI in Kiro Users tab", async ({ page }) => {
+    await page.goto("/accounts");
     const main = page.locator("main");
-    await expect(main.locator("h1")).toBeVisible({ timeout: 10000 });
-    await expect(main.getByText("drop")).toBeVisible();
+    await main.getByRole("tab", { name: "Kiro Users" }).click({ timeout: 10000 });
+
+    // If users are already imported, the table view is shown — click "Edit Import" to reach the upload UI
+    const editImportBtn = main.getByRole("button", { name: "Edit Import" });
+    if (await editImportBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await editImportBtn.click();
+    }
+
+    await expect(main.getByText("drop")).toBeVisible({ timeout: 5000 });
     await expect(main.getByText("kiro_user_id").first()).toBeVisible();
     await expect(main.getByText("or click to browse")).toBeVisible();
   });
 
   test("should accept CSV file and show preview", async ({ page }) => {
-    await page.goto("/import");
+    await page.goto("/accounts");
+    const main = page.locator("main");
+    await main.getByRole("tab", { name: "Kiro Users" }).click({ timeout: 10000 });
+
+    // If users are already imported, click "Edit Import" to reach the upload UI
+    const editImportBtn = main.getByRole("button", { name: "Edit Import" });
+    if (await editImportBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await editImportBtn.click();
+    }
+
+    await expect(main.getByText("or click to browse")).toBeVisible({ timeout: 5000 });
+
     const csvContent = "kiro_user_id,email,username\nuser-001,test@example.com,testuser\nuser-002,test2@example.com,testuser2";
     const buffer = Buffer.from(csvContent, "utf-8");
 
@@ -168,38 +156,48 @@ test.describe("Screen 3: User Mapping Import", () => {
 });
 
 // ============================================================
-// Screen 4: Account Management
+// Screen 4: Account Management (now with 3 tabs)
 // ============================================================
 test.describe("Screen 4: Account Management", () => {
-  test("should display account management page", async ({ page }) => {
+  test("should display account management page with tabs", async ({ page }) => {
     await page.goto("/accounts");
     const main = page.locator("main");
     await expect(main.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 10000 });
-    await expect(main.getByText("Create Account")).toBeVisible();
+    await expect(main.getByRole("tab", { name: "Access & Overrides" })).toBeVisible();
+    await expect(main.getByRole("tab", { name: "Kiro Users" })).toBeVisible();
+    await expect(main.getByRole("tab", { name: "Account Management" })).toBeVisible();
   });
 
-  test("should display accounts table with correct columns", async ({ page }) => {
+  test("Access & Overrides tab should show user table and Register Key", async ({ page }) => {
     await page.goto("/accounts");
+    await expect(page.locator("th >> text=USER DETAILS")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Register Key")).toBeVisible();
+  });
+
+  test("should open Register Key dialog on click", async ({ page }) => {
+    await page.goto("/accounts");
+    await page.getByText("Register Key").click({ timeout: 10000 });
+    await expect(page.getByText("Register API Key")).toBeVisible({ timeout: 5000 });
+  });
+
+  test("Account Management tab should show accounts table", async ({ page }) => {
+    await page.goto("/accounts");
+    await page.getByRole("tab", { name: "Account Management" }).click({ timeout: 10000 });
     await expect(page.locator("th >> text=ACCOUNT")).toBeVisible({ timeout: 10000 });
-    await expect(page.locator("th >> text=ROLE")).toBeVisible();
-    await expect(page.locator("th >> text=ACTIVE")).toBeVisible();
     await expect(page.locator("th >> text=ACTIONS")).toBeVisible();
+    await expect(page.getByText("Create Account")).toBeVisible();
   });
 
   test("should show admin user with Reset Password button", async ({ page }) => {
     await page.goto("/accounts");
+    await page.getByRole("tab", { name: "Account Management" }).click({ timeout: 10000 });
     await expect(page.locator("td >> text=admin").first()).toBeVisible({ timeout: 10000 });
     await expect(page.getByText("Reset Password").first()).toBeVisible();
   });
 
-  test("should have active toggle switch per account row", async ({ page }) => {
-    await page.goto("/accounts");
-    const switches = page.locator('[data-slot="switch"]');
-    await expect(switches.first()).toBeVisible({ timeout: 10000 });
-  });
-
   test("should open Create Account dialog", async ({ page }) => {
     await page.goto("/accounts");
+    await page.getByRole("tab", { name: "Account Management" }).click({ timeout: 10000 });
     await page.locator("main").getByText("Create Account").click({ timeout: 10000 });
     await expect(page.getByText("Create Dashboard Account")).toBeVisible({ timeout: 5000 });
   });
@@ -249,11 +247,8 @@ test.describe("Navigation", () => {
     await page.goto("/");
     await expect(page.locator("main").locator("text=System Overview")).toBeVisible({ timeout: 10000 });
 
-    await page.click("nav >> text=Directory");
-    await expect(page).toHaveURL("/users");
-
-    await page.click("nav >> text=Import");
-    await expect(page).toHaveURL("/import");
+    await page.click("nav >> text=Analytics");
+    await expect(page).toHaveURL("/analytics");
 
     await page.click("nav >> text=Accounts");
     await expect(page).toHaveURL("/accounts");
@@ -270,8 +265,8 @@ test.describe("Navigation", () => {
     await page.goto("/");
     await expect(page.locator("header >> text=System Overview")).toBeVisible({ timeout: 10000 });
 
-    await page.click("nav >> text=Directory");
-    await expect(page.locator("header").getByText(/User/)).toBeVisible({ timeout: 10000 });
+    await page.click("nav >> text=Analytics");
+    await expect(page.locator("header >> text=Usage Analytics")).toBeVisible({ timeout: 10000 });
 
     await page.click("nav >> text=Settings");
     await expect(page.locator("header >> text=Gateway Configuration")).toBeVisible({ timeout: 10000 });

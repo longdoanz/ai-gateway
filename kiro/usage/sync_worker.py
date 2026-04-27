@@ -5,7 +5,7 @@ from loguru import logger
 from kiro.config import REGION, USAGE_SYNC_INTERVAL
 from kiro.db.engine import async_session_factory
 from kiro.db.models import ApiKey
-from kiro.db.repositories import decrypt_api_key, get_all_config, upsert_usage_limits, update_api_key
+from kiro.db.repositories import decrypt_api_key, get_all_config, upsert_kiro_user_mappings, upsert_usage_limits, update_api_key
 from kiro.usage.usage_cache import usage_cache
 
 
@@ -56,6 +56,7 @@ async def sync_usage_limits() -> None:
                 user_info = data.get("userInfo", {})
                 kiro_user_id = user_info.get("userId")
                 if kiro_user_id and kiro_user_id != key.kiro_user_id:
+                    await upsert_kiro_user_mappings(session, [{"kiro_user_id": kiro_user_id}])
                     await update_api_key(session, key.id, kiro_user_id=kiro_user_id)
 
                 logger.debug(f"Synced key {key.id}: usage={current_usage}/{usage_limit}")

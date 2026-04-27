@@ -33,7 +33,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="glass-panel-elevated rounded-3xl p-10 w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-h1 font-bold text-primary tracking-tight">Glacier AI</h1>
+          <h1 className="text-h1 font-bold text-primary tracking-tight">AI Gateway</h1>
           <p className="text-on-surface-variant mt-2">Credit Manager Dashboard</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-5">

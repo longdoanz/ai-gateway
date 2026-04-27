@@ -103,9 +103,16 @@ PROXY_API_KEY: str = os.getenv("PROXY_API_KEY", "my-super-secret-password-123")
 # Server-side credentials (REFRESH_TOKEN, KIRO_CREDS_FILE, KIRO_CLI_DB_FILE) not required
 API_KEY_MODE: bool = os.getenv("API_KEY_MODE", "false").lower() in ("true", "1", "yes")
 
-# Force model to "auto" in API_KEY_MODE, ignoring whatever model the client requests.
-# Useful when you want all requests to use Kiro's automatic model selection.
-FORCE_AUTO_MODEL: bool = os.getenv("FORCE_AUTO_MODEL", "true").lower() in ("true", "1", "yes")
+# ==================================================================================================
+# Global Model Override
+# ==================================================================================================
+
+# Enable global model override via environment (File-based deployment without DB)
+ENABLE_MODEL_OVERRIDE: bool = os.getenv("ENABLE_MODEL_OVERRIDE", "false").lower() in ("true", "1", "yes")
+
+# The global model to enforce when ENABLE_MODEL_OVERRIDE is true
+# Set to "auto" to let Kiro decide, or explicitly set a supported model
+ENFORCED_GLOBAL_MODEL: str = os.getenv("ENFORCED_GLOBAL_MODEL", "auto")
 
 # ==================================================================================================
 # VPN/Proxy Settings for Kiro API Access
