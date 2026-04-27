@@ -5,13 +5,15 @@ from loguru import logger
 from kiro.db.engine import async_session_factory
 from kiro.db.repositories import increment_usage
 from kiro.usage.usage_cache import usage_cache
+from kiro.usage.daily_buffer import daily_buffer
 
 
 async def track_usage(key_id: int, credits_used: int | None = None) -> None:
     """Increment usage counter for a key. If credits_used is None, defaults to +1 as approximation.
     The sync worker periodically overwrites with real values from getUsageLimits API."""
     amount = credits_used if credits_used is not None and credits_used > 0 else 1
-    month = datetime.now(timezone.utc).strftime("%Y-%m")
+    now = datetime.now(timezone.utc)
+    month = now.strftime("%Y-%m")
 
     try:
         if async_session_factory is None:
@@ -19,6 +21,8 @@ async def track_usage(key_id: int, credits_used: int | None = None) -> None:
         async with async_session_factory() as session:
             await increment_usage(session, key_id, month, amount)
         await usage_cache.increment(key_id, amount)
+        today = now.strftime("%Y-%m-%d")
+        daily_buffer.record(key_id, today, amount)
         logger.debug(f"Tracked {amount} credits for key_id={key_id} month={month}")
     except Exception as e:
         logger.error(f"Failed to track usage for key_id={key_id}: {e}")

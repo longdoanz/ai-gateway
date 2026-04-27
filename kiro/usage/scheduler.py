@@ -7,6 +7,7 @@ from kiro.db.engine import async_session_factory, init_db, close_db
 from kiro.db.repositories import create_user, get_user_by_username
 from kiro.usage.usage_cache import usage_cache
 from kiro.usage.sync_worker import run_sync_loop
+from kiro.usage.daily_buffer import daily_buffer
 
 
 _sync_task: asyncio.Task | None = None
@@ -68,6 +69,9 @@ async def startup() -> None:
     _sync_task = asyncio.create_task(run_sync_loop())
     logger.info("Usage management: sync worker started")
 
+    daily_buffer.start()
+    logger.info("Usage management: daily buffer started")
+
 
 async def shutdown() -> None:
     global _sync_task
@@ -82,6 +86,9 @@ async def shutdown() -> None:
         except asyncio.CancelledError:
             pass
         logger.info("Usage management: sync worker stopped")
+
+    await daily_buffer.stop()
+    logger.info("Usage management: daily buffer stopped")
 
     await close_db()
     logger.info("Usage management: database closed")
