@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { TrendingUp, Users, Key, Wallet } from "lucide-react";
-import { useOverview } from "@/hooks/use-overview";
+import { useOverview, type Granularity } from "@/hooks/use-overview";
 import { formatCredits } from "@/lib/utils";
 import { AreaChartUsage } from "@/components/charts/area-chart-usage";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -66,7 +67,14 @@ function BudgetCard({ used, limit }: { used: number; limit: number }) {
 }
 
 export default function DashboardPage() {
-  const { data, isLoading } = useOverview();
+  const [granularity, setGranularity] = useState<Granularity>("daily");
+  const { data, isLoading } = useOverview(granularity);
+
+  const granularityOptions: { value: Granularity; label: string }[] = [
+    { value: "daily", label: "Daily" },
+    { value: "weekly", label: "Weekly" },
+    { value: "monthly", label: "Monthly" },
+  ];
 
   if (isLoading) {
     return (
@@ -85,24 +93,33 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h2 className="text-h1 font-bold text-on-surface tracking-tight">System Overview</h2>
-        <p className="text-on-surface-variant mt-1 text-sm">Real-time credit consumption metrics</p>
-      </div>
-
-      {/* KPI Cards */}
+      {/* KPI Cards — 5 cards: 3 on first row, 2 on second */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <KpiCard
+          title="Total Users"
+          value={String(data.total_users ?? 0)}
+          subtitle="Kiro users with active keys"
+          icon={Users}
+        />
+        <KpiCard
+          title="Active Users"
+          value={String(data.active_users ?? 0)}
+          subtitle="unique users this month"
+          icon={Users}
+        />
+        <KpiCard
+          title="Active API Keys"
+          value={data.active_keys.toString()}
+          subtitle="keys currently enabled"
+          icon={Key}
+        />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <KpiCard
           title="Total Monthly Credits Consumed"
           value={formatCredits(data.total_credits_used)}
           subtitle="current billing cycle"
           icon={TrendingUp}
-        />
-        <KpiCard
-          title="Active Users"
-          value={data.active_users.toString()}
-          subtitle="unique users this month"
-          icon={Users}
         />
         <BudgetCard used={data.total_credits_used} limit={data.total_credits_limit} />
       </div>
@@ -112,7 +129,26 @@ export default function DashboardPage() {
         <div className="flex justify-between items-center mb-6">
           <div>
             <h3 className="text-lg font-semibold text-on-surface">Credit Consumption Trend</h3>
-            <p className="text-xs text-on-surface-variant mt-1">Daily usage over last 30 days</p>
+            <p className="text-xs text-on-surface-variant mt-1">
+              {granularity === "daily" && "Daily usage this month"}
+              {granularity === "weekly" && "Weekly usage (last 90 days)"}
+              {granularity === "monthly" && "Monthly usage (last 6 months)"}
+            </p>
+          </div>
+          <div className="flex gap-1 bg-surface-container rounded-xl p-1">
+            {granularityOptions.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setGranularity(opt.value)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                  granularity === opt.value
+                    ? "bg-primary text-on-primary shadow-sm"
+                    : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
           </div>
         </div>
         <div className="flex-1">
@@ -120,15 +156,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Active Keys stat */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <KpiCard
-          title="Active API Keys"
-          value={data.active_keys.toString()}
-          subtitle="keys currently enabled"
-          icon={Key}
-        />
-      </div>
     </div>
   );
 }

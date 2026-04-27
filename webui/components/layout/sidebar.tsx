@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, BarChart3, UserCog, Settings, LogOut, ChevronUp } from "lucide-react";
@@ -18,6 +18,18 @@ export function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showMenu) return;
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showMenu]);
 
   const visibleItems = navItems.filter(
     (item) => !item.adminOnly || user?.role === "admin"
@@ -32,7 +44,7 @@ export function Sidebar() {
           </div>
           <div>
             <h1 className="text-xl font-black tracking-tight text-on-surface">AI Gateway</h1>
-            <p className="text-xs text-on-surface-variant font-medium">Credit Manager</p>
+            <p className="text-xs text-on-surface-variant font-medium">AI Usage Management</p>
           </div>
         </div>
       </div>
@@ -60,7 +72,7 @@ export function Sidebar() {
 
       <div className="p-4 mt-auto space-y-1 border-t border-slate-200/50 relative">
         {user && (
-          <div className="relative">
+          <div className="relative" ref={menuRef}>
             {showMenu && (
               <div className="absolute bottom-full mb-2 w-full bg-white rounded-xl shadow-lg border border-outline-variant/30 py-1 z-50">
                 <button
@@ -77,11 +89,11 @@ export function Sidebar() {
               className="flex items-center gap-3 w-full p-2 rounded-xl hover:bg-surface-container-low transition-colors text-left"
             >
               <div className="w-10 h-10 rounded-full bg-surface-variant flex items-center justify-center text-on-surface-variant font-semibold text-xs border border-outline-variant/30 ring-2 ring-surface-container">
-                {user.role === "admin" ? "AD" : "US"}
+                {(user.username || user.role).slice(0, 2).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-on-surface truncate capitalize">{user.role} User</p>
-                <p className="text-xs text-on-surface-variant truncate">ID: {user.id}</p>
+                <p className="text-sm font-medium text-on-surface truncate">{user.username || (user.role === "admin" ? "Admin" : "User")}</p>
+                <p className="text-xs text-on-surface-variant truncate capitalize">{user.role}</p>
               </div>
               <ChevronUp
                 className={cn("w-4 h-4 text-on-surface-variant transition-transform", showMenu && "rotate-180")}
