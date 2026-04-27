@@ -19,6 +19,10 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class GoogleLoginRequest(BaseModel):
+    credential: str
+
+
 # --- User ---
 
 class UserCreate(BaseModel):

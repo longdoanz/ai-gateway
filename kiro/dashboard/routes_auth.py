@@ -1,13 +1,18 @@
+import secrets
 import time
 from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+from google.auth.exceptions import GoogleAuthError
 
+from kiro.config import GOOGLE_CLIENT_ID, GOOGLE_ALLOWED_DOMAIN
 from kiro.dashboard.jwt_auth import create_access_token, create_refresh_token, decode_token
-from kiro.dashboard.schemas import LoginRequest, RefreshRequest, TokenResponse
+from kiro.dashboard.schemas import GoogleLoginRequest, LoginRequest, RefreshRequest, TokenResponse
 from kiro.db.engine import get_session
-from kiro.db.repositories import get_user_by_id, get_user_by_username, verify_password
+from kiro.db.repositories import create_user, get_user_by_google_id, get_user_by_id, get_user_by_username, verify_password
 
 _login_attempts: dict[str, list[float]] = defaultdict(list)
 MAX_LOGIN_ATTEMPTS = 5
@@ -52,6 +57,49 @@ async def refresh(body: RefreshRequest, session: AsyncSession = Depends(get_sess
     user = await get_user_by_id(session, int(payload["sub"]))
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+    return TokenResponse(
+        access_token=create_access_token(user.id, user.role, user.username),
+        refresh_token=create_refresh_token(user.id),
+    )
+
+
+@router.post("/google", response_model=TokenResponse)
+async def google_login(body: GoogleLoginRequest, session: AsyncSession = Depends(get_session)):
+    if not GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Google OAuth not configured")
+    try:
+        payload = id_token.verify_oauth2_token(
+            body.credential,
+            google_requests.Request(),
+            GOOGLE_CLIENT_ID,
+        )
+    except (GoogleAuthError, ValueError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Google token")
+
+    if GOOGLE_ALLOWED_DOMAIN:
+        hd = payload.get("hd", "")
+        if hd != GOOGLE_ALLOWED_DOMAIN:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access restricted to @{GOOGLE_ALLOWED_DOMAIN} accounts",
+            )
+
+    google_id = payload["sub"]
+    email = payload.get("email", "")
+
+    user = await get_user_by_google_id(session, google_id)
+    if user is None:
+        user = await create_user(
+            session,
+            username=email,
+            password=secrets.token_hex(32),
+            role="user",
+            google_id=google_id,
+            email=email,
+        )
+    elif not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account is disabled")
+
     return TokenResponse(
         access_token=create_access_token(user.id, user.role, user.username),
         refresh_token=create_refresh_token(user.id),

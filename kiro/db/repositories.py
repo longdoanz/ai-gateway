@@ -57,6 +57,11 @@ async def get_user_by_username(session: AsyncSession, username: str) -> User | N
     return result.scalar_one_or_none()
 
 
+async def get_user_by_google_id(session: AsyncSession, google_id: str) -> User | None:
+    result = await session.execute(select(User).where(User.google_id == google_id))
+    return result.scalar_one_or_none()
+
+
 async def get_user_by_id(session: AsyncSession, user_id: int) -> User | None:
     result = await session.execute(select(User).where(User.id == user_id))
     return result.scalar_one_or_none()
@@ -67,8 +72,21 @@ async def list_users(session: AsyncSession, limit: int = 50, offset: int = 0) ->
     return list(result.scalars().all())
 
 
-async def create_user(session: AsyncSession, username: str, password: str, role: str = "user") -> User:
-    user = User(username=username, password_hash=hash_password(password), role=role)
+async def create_user(
+    session: AsyncSession,
+    username: str,
+    password: str,
+    role: str = "user",
+    google_id: str | None = None,
+    email: str | None = None,
+) -> User:
+    user = User(
+        username=username,
+        password_hash=hash_password(password),
+        role=role,
+        google_id=google_id,
+        email=email,
+    )
     session.add(user)
     await session.commit()
     await session.refresh(user)
