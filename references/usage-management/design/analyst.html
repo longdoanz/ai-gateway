@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+
+<html class="" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Analytics - Glacier AI</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">tailwind.config = {theme: {extend: {colors: {primary: "#3525cd", tertiary: "#7e3000", "on-error": "#ffffff", "on-primary-fixed-variant": "#3323cc", "surface-dim": "#dcd8e5", "surface-bright": "#fcf8ff", "surface-tint": "#4d44e3", "surface-container": "#f0ecf9", "outline-variant": "#c7c4d8", "on-surface-variant": "#464555", "surface-container-low": "#f5f2ff", "on-tertiary": "#ffffff", outline: "#777587", "surface-container-high": "#eae6f4", "on-secondary-fixed-variant": "#3f465c", "on-error-container": "#93000a", "on-background": "#1b1b24", error: "#ba1a1a", "inverse-primary": "#c3c0ff", surface: "#fcf8ff", background: "#fcf8ff", "secondary-fixed-dim": "#bec6e0", "secondary-fixed": "#dae2fd", "surface-container-lowest": "#ffffff", "primary-fixed": "#e2dfff", "tertiary-container": "#a44100", "tertiary-fixed-dim": "#ffb695", "on-secondary": "#ffffff", "on-tertiary-fixed-variant": "#7b2f00", "on-primary": "#ffffff", "on-surface": "#1b1b24", "tertiary-fixed": "#ffdbcc", "inverse-surface": "#302f39", secondary: "#565e74", "secondary-container": "#dae2fd", "on-tertiary-fixed": "#351000", "primary-container": "#4f46e5", "on-secondary-container": "#5c647a", "on-primary-fixed": "#0f0069", "on-primary-container": "#dad7ff", "primary-fixed-dim": "#c3c0ff", "on-secondary-fixed": "#131b2e", "on-tertiary-container": "#ffd2be", "inverse-on-surface": "#f3effc", "error-container": "#ffdad6", "surface-variant": "#e4e1ee", "surface-container-highest": "#e4e1ee"}, fontFamily: {headline: ["Inter"], display: ["Inter"], body: ["Inter"], label: ["Inter"], "body-base": ["Inter"], "body-sm": ["Inter"], h2: ["Inter"], "mono-label": ["Inter"], "label-caps": ["Inter"], h1: ["Inter"]}, fontSize: {"body-base": ["14px", {lineHeight: "1.5", letterSpacing: "0", fontWeight: "400"}], "body-sm": ["13px", {lineHeight: "1.5", letterSpacing: "0", fontWeight: "400"}], display: ["48px", {lineHeight: "1.1", letterSpacing: "-0.02em", fontWeight: "600"}], h2: ["24px", {lineHeight: "1.3", letterSpacing: "-0.01em", fontWeight: "600"}], "mono-label": ["12px", {lineHeight: "1", letterSpacing: "-0.01em", fontWeight: "500"}], "label-caps": ["11px", {lineHeight: "1", letterSpacing: "0.05em", fontWeight: "600"}], h1: ["30px", {lineHeight: "1.2", letterSpacing: "-0.02em", fontWeight: "600"}]}, spacing: {"bento-gap": "16px", margin: "32px", gutter: "24px", unit: "4px", "container-padding": "24px"}, borderRadius: {DEFAULT: "0.25rem", lg: "0.5rem", xl: "0.75rem", full: "9999px"}}}};</script>
+<style>
+        body {
+            background-color: #f8fafc;
+            color: #0f172a;
+            font-family: 'Inter', sans-serif;
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(14, 165, 233, 0.08), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.08), transparent 25%);
+        }
+        
+        .glass-panel {
+            background-color: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+        }
+        
+        .glass-panel-elevated {
+            background-color: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
+        }
+        
+        .glass-input {
+            background-color: rgba(255, 255, 255, 0.7);
+            border: 1px solid rgba(203, 213, 225, 0.5);
+            color: #0f172a;
+        }
+        
+        .glass-input:focus {
+            border-color: rgba(14, 165, 233, 0.5);
+            box-shadow: 0 0 15px rgba(14, 165, 233, 0.15);
+            outline: none;
+        }
+        
+        .glass-button-primary {
+            background-color: rgba(14, 165, 233, 0.1);
+            border: 1px solid rgba(14, 165, 233, 0.2);
+            color: #0ea5e9;
+            transition: all 0.2s ease;
+        }
+        
+        .glass-button-primary:hover {
+            background-color: rgba(14, 165, 233, 0.15);
+            border-color: rgba(14, 165, 233, 0.3);
+            box-shadow: 0 0 20px rgba(14, 165, 233, 0.1);
+        }
+        
+        .glass-table-row {
+            border-bottom: 1px solid rgba(203, 213, 225, 0.3);
+            transition: background-color 0.2s ease;
+        }
+        
+        .glass-table-row:hover {
+            background-color: rgba(255, 255, 255, 0.5);
+        }
+
+        /* Chart mock styles */
+        .chart-bar {
+            background: linear-gradient(to top, rgba(14, 165, 233, 0.3), rgba(14, 165, 233, 0.8));
+            border-radius: 4px 4px 0 0;
+            transition: height 0.3s ease;
+        }
+        .chart-bar:hover {
+            box-shadow: 0 0 15px rgba(14, 165, 233, 0.4);
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body class="antialiased selection:bg-primary/20 selection:text-primary">
+<div class="flex h-screen overflow-hidden">
+<!-- SideNavBar Component -->
+<nav class="fixed left-0 top-0 h-full z-40 w-64 border-r border-white/50 bg-white/60 backdrop-blur-xl shadow-[0_0_30px_rgba(0,0,0,0.02)] font-inter antialiased flex flex-col hidden md:flex">
+<div class="p-6 pb-2">
+<div class="text-xl font-bold tracking-tight text-sky-600 flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-sky-100 border border-sky-200 flex items-center justify-center">
+<span class="material-symbols-outlined text-sky-600 text-xl" data-weight="fill" style="font-variation-settings: 'FILL' 1;">ac_unit</span>
+</div>
+                    Glacier AI
+                </div>
+<div class="text-xs text-slate-500 mt-1 pl-11">Credit Manager</div>
+</div>
+<div class="flex-1 px-3 py-6 space-y-2 overflow-y-auto">
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-sky-50 hover:text-sky-700 transition-colors active:scale-95 duration-200 rounded-xl" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-medium text-sm">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-sky-50 hover:text-sky-700 transition-colors active:scale-95 duration-200 rounded-xl" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="font-medium text-sm">Directory</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-sky-50 hover:text-sky-700 transition-colors active:scale-95 duration-200 rounded-xl" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="font-medium text-sm">Profile</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-sky-600 bg-sky-50 rounded-xl transition-colors active:scale-95 duration-200 shadow-sm" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-medium text-sm">Analytics</span>
+</a>
+</div>
+<div class="p-4 mt-auto border-t border-slate-200/50">
+<button class="w-full py-2.5 px-4 bg-sky-50 text-sky-600 hover:bg-sky-100 border border-sky-200/50 rounded-xl text-sm font-semibold transition-all active:scale-95 flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-sm">shopping_cart</span>
+                    Buy Credits
+                </button>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col md:ml-64 relative z-0 h-full overflow-hidden">
+<!-- TopNavBar Component -->
+<header class="sticky top-0 w-full z-30 flex justify-between items-center px-8 h-16 border-b border-white/50 bg-white/40 backdrop-blur-lg font-inter shadow-sm">
+<div class="flex items-center md:hidden">
+<span class="text-lg font-bold text-sky-600">Glacier AI</span>
+</div>
+<div class="hidden md:flex items-center">
+<h1 class="text-lg font-medium text-slate-800">Analytics Overview</h1>
+</div>
+<div class="flex items-center gap-6">
+<div class="relative hidden sm:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
+<input class="glass-input pl-9 pr-4 py-1.5 rounded-full text-sm w-64 focus:ring-0" placeholder="Search analytics..." type="text"/>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-slate-500 hover:text-sky-600 transition-opacity cursor-pointer transition-all relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-0 right-0 w-2 h-2 bg-sky-500 rounded-full"></span>
+</button>
+<button class="text-slate-500 hover:text-sky-600 transition-opacity cursor-pointer transition-all">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-sky-100 border border-sky-200 overflow-hidden cursor-pointer shadow-sm">
+<img alt="User avatar" class="w-full h-full object-cover" data-alt="close up portrait of young woman with cool lighting dark background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBUDd7yaiX_xLiN1NTbKG-RtjZh0X5Oi6bJPC4rIh96xZ7pA12QGVUFDNkRQiYUzPUKLlwn49YTPqTtZ7zUMItGsMmCiYqJnnbp_ScgoUfzSCoM15dqV3Ka3vqLQ0s0HFupPr2xnhR6bDz43v34wJiML48uxrtrwxQGx8O1saNpXZ5Y5fdqEFbE7gruvXWDZrdzbzX7sif-GrSDECP1oGO1kkYdpQ6IqXPZ6FH8uAaz_bkEk52giORbIYyh1mG8At4kxBePeoPG1qU"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Scrollable Content -->
+<div class="flex-1 overflow-y-auto p-6 md:p-8">
+<!-- Page Header & Filters -->
+<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+<div>
+<h2 class="text-2xl font-semibold text-slate-800 tracking-tight">Usage Analytics</h2>
+<p class="text-slate-500 text-sm mt-1">Detailed breakdown of credit consumption.</p>
+</div>
+<div class="flex items-center gap-3">
+<div class="glass-panel flex items-center rounded-lg p-1">
+<button class="px-3 py-1.5 text-xs font-medium rounded-md bg-white shadow-sm text-sky-600 border border-slate-100">7D</button>
+<button class="px-3 py-1.5 text-xs font-medium rounded-md text-slate-500 hover:text-sky-600">30D</button>
+<button class="px-3 py-1.5 text-xs font-medium rounded-md text-slate-500 hover:text-sky-600">90D</button>
+</div>
+<div class="relative">
+<button class="glass-panel flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-slate-700 hover:border-sky-200 transition-colors shadow-sm">
+<span class="material-symbols-outlined text-sm text-slate-400">calendar_today</span>
+                                Oct 1 - Oct 7, 2023
+                            </button>
+</div>
+</div>
+</div>
+<!-- KPI Cards -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+<div class="glass-panel rounded-xl p-6 relative overflow-hidden group">
+<div class="absolute -right-6 -top-6 w-24 h-24 bg-sky-100 rounded-full blur-xl group-hover:bg-sky-200 transition-all opacity-60"></div>
+<div class="text-slate-500 text-sm font-medium mb-2 flex items-center gap-2">
+<span class="material-symbols-outlined text-sm text-sky-500">bolt</span>
+                            Total Credits Used
+                        </div>
+<div class="text-3xl font-semibold text-slate-800">45,291</div>
+<div class="mt-2 text-xs text-emerald-500 flex items-center gap-1">
+<span class="material-symbols-outlined text-[10px]">arrow_upward</span>
+                            12.5% vs last period
+                        </div>
+</div>
+<div class="glass-panel rounded-xl p-6 relative overflow-hidden group">
+<div class="absolute -right-6 -top-6 w-24 h-24 bg-purple-100 rounded-full blur-xl group-hover:bg-purple-200 transition-all opacity-60"></div>
+<div class="text-slate-500 text-sm font-medium mb-2 flex items-center gap-2">
+<span class="material-symbols-outlined text-sm text-purple-500">groups</span>
+                            Active Users
+                        </div>
+<div class="text-3xl font-semibold text-slate-800">124</div>
+<div class="mt-2 text-xs text-sky-500 flex items-center gap-1">
+<span class="material-symbols-outlined text-[10px]">arrow_upward</span>
+                            4.2% vs last period
+                        </div>
+</div>
+<div class="glass-panel rounded-xl p-6 relative overflow-hidden group">
+<div class="absolute -right-6 -top-6 w-24 h-24 bg-sky-100 rounded-full blur-xl group-hover:bg-sky-200 transition-all opacity-60"></div>
+<div class="text-slate-500 text-sm font-medium mb-2 flex items-center gap-2">
+<span class="material-symbols-outlined text-sm text-sky-500">stacked_bar_chart</span>
+                            Avg. Daily Burn
+                        </div>
+<div class="text-3xl font-semibold text-slate-800">6,470</div>
+<div class="mt-2 text-xs text-slate-400 flex items-center gap-1">
+                            Stable trend
+                        </div>
+</div>
+</div>
+<!-- Main Chart Area -->
+<div class="glass-panel-elevated rounded-2xl p-6 mb-8 border border-white">
+<div class="flex justify-between items-center mb-8">
+<div>
+<h3 class="text-lg font-medium text-slate-800">Daily Credit Consumption</h3>
+<p class="text-xs text-slate-500 mt-1">Aggregated usage across all active users</p>
+</div>
+<button class="text-slate-400 hover:text-sky-500 transition-colors">
+<span class="material-symbols-outlined">more_horiz</span>
+</button>
+</div>
+<!-- Mock Chart -->
+<div class="h-64 flex items-end justify-between gap-2 md:gap-4 pt-4 border-b border-slate-200 pb-2 relative">
+<!-- Y-axis labels -->
+<div class="absolute left-0 top-0 h-full flex flex-col justify-between text-[10px] text-slate-400 pb-2">
+<span>10k</span>
+<span>7.5k</span>
+<span>5k</span>
+<span>2.5k</span>
+<span>0</span>
+</div>
+<!-- Chart Bars (placing them with margin to avoid y-axis labels) -->
+<div class="ml-8 w-full flex items-end justify-between gap-2 h-full">
+<div class="flex flex-col items-center gap-2 w-full">
+<div class="chart-bar w-full max-w-[40px] rounded-t-md" style="height: 45%;"></div>
+<span class="text-[10px] text-slate-400">Oct 1</span>
+</div>
+<div class="flex flex-col items-center gap-2 w-full">
+<div class="chart-bar w-full max-w-[40px] rounded-t-md" style="height: 60%;"></div>
+<span class="text-[10px] text-slate-400">Oct 2</span>
+</div>
+<div class="flex flex-col items-center gap-2 w-full">
+<div class="chart-bar w-full max-w-[40px] rounded-t-md" style="height: 55%;"></div>
+<span class="text-[10px] text-slate-400">Oct 3</span>
+</div>
+<div class="flex flex-col items-center gap-2 w-full">
+<div class="chart-bar w-full max-w-[40px] rounded-t-md" style="height: 80%;"></div>
+<span class="text-[10px] text-slate-400">Oct 4</span>
+</div>
+<div class="flex flex-col items-center gap-2 w-full">
+<div class="chart-bar w-full max-w-[40px] rounded-t-md" style="height: 70%;"></div>
+<span class="text-[10px] text-slate-400">Oct 5</span>
+</div>
+<div class="flex flex-col items-center gap-2 w-full">
+<div class="chart-bar w-full max-w-[40px] rounded-t-md" style="height: 40%;"></div>
+<span class="text-[10px] text-slate-400">Oct 6</span>
+</div>
+<div class="flex flex-col items-center gap-2 w-full relative group">
+<!-- Tooltip mock for active bar -->
+<div class="absolute -top-10 left-1/2 -translate-x-1/2 bg-white border border-slate-200 shadow-md text-xs px-2 py-1 rounded text-slate-700 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                                    8,420 Credits
+                                </div>
+<div class="chart-bar w-full max-w-[40px] rounded-t-md bg-sky-500" style="height: 85%; background: linear-gradient(to top, rgba(14, 165, 233, 0.6), rgba(14, 165, 233, 1)); box-shadow: 0 0 15px rgba(14, 165, 233, 0.3);"></div>
+<span class="text-[10px] text-sky-600 font-medium">Oct 7</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Detailed Table Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<!-- Top Users List -->
+<div class="glass-panel rounded-xl p-0 overflow-hidden lg:col-span-1 border border-white">
+<div class="p-5 border-b border-slate-200/50 flex justify-between items-center bg-white/50">
+<h3 class="text-sm font-medium text-slate-800">Top Users</h3>
+<button class="text-xs text-sky-600 hover:text-sky-700">View All</button>
+</div>
+<div class="p-2">
+<div class="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-sky-50 flex items-center justify-center text-xs font-medium text-sky-600 border border-sky-100">JD</div>
+<div>
+<div class="text-sm font-medium text-slate-800">John Doe</div>
+<div class="text-xs text-slate-500">Engineering</div>
+</div>
+</div>
+<div class="text-right">
+<div class="text-sm font-medium text-sky-600">12,450</div>
+<div class="text-[10px] text-slate-400">Credits</div>
+</div>
+</div>
+<div class="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-purple-50 flex items-center justify-center text-xs font-medium text-purple-600 border border-purple-100">AS</div>
+<div>
+<div class="text-sm font-medium text-slate-800">Alice Smith</div>
+<div class="text-xs text-slate-500">Marketing</div>
+</div>
+</div>
+<div class="text-right">
+<div class="text-sm font-medium text-sky-600">8,230</div>
+<div class="text-[10px] text-slate-400">Credits</div>
+</div>
+</div>
+<div class="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-sky-50 flex items-center justify-center text-xs font-medium text-sky-600 border border-sky-100">MR</div>
+<div>
+<div class="text-sm font-medium text-slate-800">Mike Ross</div>
+<div class="text-xs text-slate-500">Sales</div>
+</div>
+</div>
+<div class="text-right">
+<div class="text-sm font-medium text-sky-600">5,120</div>
+<div class="text-[10px] text-slate-400">Credits</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Usage Log Table -->
+<div class="glass-panel rounded-xl overflow-hidden lg:col-span-2 border border-white">
+<div class="p-5 border-b border-slate-200/50 flex justify-between items-center bg-white/50">
+<h3 class="text-sm font-medium text-slate-800">Daily Log</h3>
+<button class="flex items-center gap-1 text-xs text-slate-500 hover:text-sky-600 transition-colors">
+<span class="material-symbols-outlined text-sm">download</span>
+                                Export
+                            </button>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="text-xs text-slate-500 border-b border-slate-200/50 bg-slate-50/50">
+<th class="py-3 px-5 font-medium">Date</th>
+<th class="py-3 px-5 font-medium">Active Users</th>
+<th class="py-3 px-5 font-medium">Peak Hour</th>
+<th class="py-3 px-5 font-medium text-right">Credits Used</th>
+</tr>
+</thead>
+<tbody class="text-sm">
+<tr class="glass-table-row">
+<td class="py-3 px-5 text-slate-800">Oct 7, 2023</td>
+<td class="py-3 px-5 text-slate-600">94</td>
+<td class="py-3 px-5 text-slate-500">14:00 EST</td>
+<td class="py-3 px-5 text-right font-medium text-sky-600">8,420</td>
+</tr>
+<tr class="glass-table-row">
+<td class="py-3 px-5 text-slate-800">Oct 6, 2023</td>
+<td class="py-3 px-5 text-slate-600">82</td>
+<td class="py-3 px-5 text-slate-500">11:00 EST</td>
+<td class="py-3 px-5 text-right font-medium text-sky-600">4,150</td>
+</tr>
+<tr class="glass-table-row">
+<td class="py-3 px-5 text-slate-800">Oct 5, 2023</td>
+<td class="py-3 px-5 text-slate-600">105</td>
+<td class="py-3 px-5 text-slate-500">15:00 EST</td>
+<td class="py-3 px-5 text-right font-medium text-sky-600">7,210</td>
+</tr>
+<tr class="glass-table-row">
+<td class="py-3 px-5 text-slate-800">Oct 4, 2023</td>
+<td class="py-3 px-5 text-slate-600">112</td>
+<td class="py-3 px-5 text-slate-500">10:00 EST</td>
+<td class="py-3 px-5 text-right font-medium text-sky-600">8,900</td>
+</tr>
+<tr class="glass-table-row">
+<td class="py-3 px-5 text-slate-800">Oct 3, 2023</td>
+<td class="py-3 px-5 text-slate-600">88</td>
+<td class="py-3 px-5 text-slate-500">13:00 EST</td>
+<td class="py-3 px-5 text-right font-medium text-sky-600">5,430</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

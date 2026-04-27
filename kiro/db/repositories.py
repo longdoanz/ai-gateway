@@ -11,7 +11,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiro.config import ENCRYPTION_KEY
-from kiro.db.models import ApiKey, KeyUsage, KiroUserMapping, SystemConfig, User
+from kiro.db.models import ApiKey, DailyUsage, KeyUsage, KiroUserMapping, SystemConfig, User
 
 
 _fernet = None
@@ -166,6 +166,16 @@ async def get_usage_for_month(session: AsyncSession, key_id: int, month: str) ->
 async def get_all_usage_for_month(session: AsyncSession, month: str) -> list[KeyUsage]:
     result = await session.execute(select(KeyUsage).where(KeyUsage.month == month))
     return list(result.scalars().all())
+
+
+async def increment_daily_usage(session: AsyncSession, key_id: int, date: str, amount: int = 1) -> None:
+    stmt = pg_insert(DailyUsage).values(key_id=key_id, date=date, credits=amount)
+    stmt = stmt.on_conflict_do_update(
+        constraint="uq_daily_usage_key_date",
+        set_={"credits": DailyUsage.credits + amount},
+    )
+    await session.execute(stmt)
+    await session.commit()
 
 
 async def get_usage_history(session: AsyncSession, key_id: int) -> list[KeyUsage]:

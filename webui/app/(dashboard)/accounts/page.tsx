@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { ChevronRight, ChevronDown, Plus, Key, Users as UsersIcon, Key as KeyIcon, TrendingUp, Upload, FileText, AlertCircle, CheckCircle2 } from "lucide-react";
+import { useCallback, useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,8 +37,8 @@ function AddKeyDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button size="sm" className="gap-2" />}>
-        <Plus className="w-4 h-4" /> Register Key
+      <DialogTrigger render={<Button size="sm" className="gap-2 bg-primary-container text-on-primary rounded-lg shadow-[0_2px_8px_rgba(79,70,229,0.2)] hover:-translate-y-[1px] hover:bg-primary-container/95 transition-transform" />}>
+        <span className="material-symbols-outlined text-[18px]">add</span> Register Key
       </DialogTrigger>
       <DialogContent className="glass-panel-elevated">
         <DialogHeader>
@@ -55,7 +54,7 @@ function AddKeyDialog() {
             {createKey.isPending ? "Registering..." : "Register Key"}
           </Button>
           {createKey.isError && (
-            <p className="text-sm text-error">{(createKey.error as any)?.response?.data?.detail || "Failed to register key"}</p>
+            <p className="text-sm text-error">{(createKey.error as unknown as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to register key"}</p>
           )}
         </form>
       </DialogContent>
@@ -83,8 +82,8 @@ function UserRow({ user, keys, isExpanded, onToggle }: { user: UserResponse; key
     <>
       <tr className={`hover:bg-surface-container-lowest transition-colors cursor-pointer group ${isExpanded ? "bg-sky-50/30" : ""}`} onClick={onToggle}>
         <td className="py-4 px-6 text-center">
-          <button className="text-outline group-hover:text-primary hover:bg-surface-container rounded-full p-0.5 transition-colors">
-            {isExpanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+          <button className="text-outline group-hover:text-primary-container hover:bg-surface-container rounded-full p-0.5 transition-colors">
+            {isExpanded ? <span className="material-symbols-outlined text-lg">expand_more</span> : <span className="material-symbols-outlined text-lg">chevron_right</span>}
           </button>
         </td>
         <td className="py-4 px-6">
@@ -107,7 +106,7 @@ function UserRow({ user, keys, isExpanded, onToggle }: { user: UserResponse; key
           <td colSpan={5} className="p-0">
             <div className="px-12 py-6 pl-20 bg-gradient-to-b from-sky-50/20 to-transparent">
               <div className="flex justify-between items-center mb-4">
-                <h4 className="font-mono text-mono-label text-on-surface font-semibold flex items-center gap-2"><Key className="w-4 h-4 text-sky-600" /> API Keys ({userKeys.length})</h4>
+                <h4 className="font-mono text-mono-label text-on-surface font-semibold flex items-center gap-2"><span className="material-symbols-outlined text-sm text-sky-600">key</span> API Keys ({userKeys.length})</h4>
               </div>
               {userKeys.length === 0 ? (
                 <p className="text-sm text-on-surface-variant">No API keys registered.</p>
@@ -143,9 +142,10 @@ interface PreviewRow {
   email?: string;
   username?: string;
   error?: string;
+  action?: "new" | "update";
 }
 
-function parseCSV(text: string): PreviewRow[] {
+function parseCSV(text: string, existingUsers: { kiro_user_id: string }[] = []): PreviewRow[] {
   const lines = text.trim().split("\n");
   if (lines.length < 2) return [];
   const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
@@ -158,31 +158,40 @@ function parseCSV(text: string): PreviewRow[] {
     if (idIdx === -1 || !cols[idIdx]) {
       return { kiro_user_id: "", error: `Row ${i + 1}: missing kiro_user_id` };
     }
+    const kiro_user_id = cols[idIdx];
+    const exists = existingUsers.some((u) => u.kiro_user_id === kiro_user_id);
     return {
-      kiro_user_id: cols[idIdx],
+      kiro_user_id,
       email: emailIdx >= 0 ? cols[emailIdx] : undefined,
       username: usernameIdx >= 0 ? cols[usernameIdx] : undefined,
+      action: exists ? "update" : "new",
     };
   });
 }
 
-function parseJSON(text: string): PreviewRow[] {
+function parseJSON(text: string, existingUsers: { kiro_user_id: string }[] = []): PreviewRow[] {
   try {
     const data = JSON.parse(text);
     if (!Array.isArray(data)) return [{ kiro_user_id: "", error: "JSON must be an array" }];
-    return data.map((row: any, i: number) => {
+    return data.map((row: Record<string, string>, i: number) => {
       if (!row.kiro_user_id) {
         return { kiro_user_id: "", error: `Row ${i}: missing kiro_user_id` };
       }
-      return { kiro_user_id: row.kiro_user_id, email: row.email, username: row.username };
+      const exists = existingUsers.some((u) => u.kiro_user_id === row.kiro_user_id);
+      return { 
+        kiro_user_id: row.kiro_user_id, 
+        email: row.email, 
+        username: row.username,
+        action: exists ? "update" : "new",
+      };
     });
   } catch {
     return [{ kiro_user_id: "", error: "Invalid JSON" }];
   }
 }
 
-function ImportUsersPanel({ onImportSuccess }: { onImportSuccess?: () => void }) {
-  const [file, setFile] = useState<File | null>(null);
+function ImportUsersPanel({ onImportSuccess, initialFile, existingUsers = [] }: { onImportSuccess?: () => void; initialFile?: File | null; existingUsers?: { kiro_user_id: string }[] }) {
+  const [file, setFile] = useState<File | null>(initialFile || null);
   const [preview, setPreview] = useState<PreviewRow[]>([]);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -194,11 +203,19 @@ function ImportUsersPanel({ onImportSuccess }: { onImportSuccess?: () => void })
     const reader = new FileReader();
     reader.onload = (e) => {
       const text = e.target?.result as string;
-      const rows = f.name.endsWith(".json") ? parseJSON(text) : parseCSV(text);
+      const rows = f.name.endsWith(".json") ? parseJSON(text, existingUsers) : parseCSV(text, existingUsers);
       setPreview(rows);
     };
     reader.readAsText(f);
-  }, []);
+  }, [existingUsers]);
+
+
+  
+  useEffect(() => {
+    if (initialFile && !file) {
+      setTimeout(() => handleFile(initialFile), 0);
+    }
+  }, [initialFile, handleFile, file]);
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
@@ -223,6 +240,8 @@ function ImportUsersPanel({ onImportSuccess }: { onImportSuccess?: () => void })
 
   const validRows = preview.filter((r) => !r.error);
   const errorRows = preview.filter((r) => r.error);
+  const newCount = validRows.filter((r) => r.action === "new").length;
+  const updateCount = validRows.filter((r) => r.action === "update").length;
 
   return (
     <div className="space-y-6">
@@ -237,7 +256,7 @@ function ImportUsersPanel({ onImportSuccess }: { onImportSuccess?: () => void })
         onDrop={handleDrop}
         className={`glass-panel rounded-3xl p-12 text-center border-2 border-dashed transition-colors ${dragOver ? "border-primary bg-primary/5" : "border-outline-variant/50"}`}
       >
-        <Upload className="w-12 h-12 text-on-surface-variant mx-auto mb-4" />
+        <span className="material-symbols-outlined text-[48px] text-on-surface-variant mx-auto mb-4 block">upload</span>
         <p className="text-on-surface font-medium">Drag & drop your CSV or JSON file here</p>
         <p className="text-on-surface-variant text-sm mt-1">
           Required: <code className="font-mono text-xs bg-surface-container px-1 py-0.5 rounded">kiro_user_id</code>.
@@ -250,7 +269,7 @@ function ImportUsersPanel({ onImportSuccess }: { onImportSuccess?: () => void })
         </label>
         {file && (
           <div className="mt-4 flex items-center justify-center gap-2 text-sm text-on-surface">
-            <FileText className="w-4 h-4" /> {file.name} ({(file.size / 1024).toFixed(1)} KB)
+            <span className="material-symbols-outlined text-[16px]">description</span> {file.name} ({(file.size / 1024).toFixed(1)} KB)
           </div>
         )}
       </div>
@@ -261,6 +280,8 @@ function ImportUsersPanel({ onImportSuccess }: { onImportSuccess?: () => void })
             <div className="flex items-center gap-4">
               <Badge variant="secondary">{validRows.length} valid</Badge>
               {errorRows.length > 0 && <Badge variant="destructive">{errorRows.length} errors</Badge>}
+              {newCount > 0 && <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-none">{newCount} New</Badge>}
+              {updateCount > 0 && <Badge variant="outline" className="bg-blue-50 text-blue-700 border-none">{updateCount} Update</Badge>}
             </div>
             <Button onClick={handleImport} disabled={validRows.length === 0 || importUsers.isPending}>
               {importUsers.isPending ? "Importing..." : `Import ${validRows.length} rows`}
@@ -274,6 +295,7 @@ function ImportUsersPanel({ onImportSuccess }: { onImportSuccess?: () => void })
                   <th className="py-2 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Kiro User ID</th>
                   <th className="py-2 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Email</th>
                   <th className="py-2 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Username</th>
+                  <th className="py-2 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Action</th>
                   <th className="py-2 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Status</th>
                 </tr>
               </thead>
@@ -285,10 +307,17 @@ function ImportUsersPanel({ onImportSuccess }: { onImportSuccess?: () => void })
                     <td className="py-2 px-4 text-xs">{row.email || "—"}</td>
                     <td className="py-2 px-4 text-xs">{row.username || "—"}</td>
                     <td className="py-2 px-4">
+                      {row.action === "new" ? (
+                        <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">New</Badge>
+                      ) : row.action === "update" ? (
+                        <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-100">Update</Badge>
+                      ) : null}
+                    </td>
+                    <td className="py-2 px-4">
                       {row.error ? (
-                        <span className="text-error text-xs flex items-center gap-1"><AlertCircle className="w-3 h-3" /> {row.error}</span>
+                        <span className="text-error text-xs flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">error</span> {row.error}</span>
                       ) : (
-                        <span className="text-emerald-600 text-xs flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Valid</span>
+                        <span className="text-emerald-600 text-xs flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">check_circle</span> Valid</span>
                       )}
                     </td>
                   </tr>
@@ -305,7 +334,7 @@ function ImportUsersPanel({ onImportSuccess }: { onImportSuccess?: () => void })
       {result && (
         <div className="glass-panel-elevated rounded-3xl p-6">
           <h3 className="text-lg font-semibold text-on-surface flex items-center gap-2">
-            <CheckCircle2 className="w-5 h-5 text-emerald-600" /> Import Complete
+            <span className="material-symbols-outlined text-[20px] text-emerald-600">check_circle</span> Import Complete
           </h3>
           <div className="mt-3 grid grid-cols-3 gap-4 text-sm">
             <div><span className="text-on-surface-variant">Imported:</span> <span className="font-semibold text-on-surface">{result.imported}</span></div>
@@ -341,8 +370,8 @@ function CreateUserDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button className="gap-2 shadow-[0_2px_8px_rgba(79,70,229,0.2)] hover:-translate-y-[1px] transition-transform" />}>
-        <Plus className="w-4 h-4" /> Create Account
+      <DialogTrigger render={<Button className="gap-2 shadow-[0_2px_8px_rgba(79,70,229,0.2)] hover:-translate-y-[1px] transition-transform rounded-lg" />}>
+        <span className="material-symbols-outlined text-[16px]">add</span> Create Account
       </DialogTrigger>
       <DialogContent className="glass-panel-elevated">
         <DialogHeader><DialogTitle>Create Dashboard Account</DialogTitle></DialogHeader>
@@ -369,7 +398,7 @@ function CreateUserDialog() {
             {createUser.isPending ? "Creating..." : "Create Account"}
           </Button>
           {createUser.isError && (
-            <p className="text-sm text-error">{(createUser.error as any)?.response?.data?.detail || "Failed to create account"}</p>
+            <p className="text-sm text-error">{(createUser.error as unknown as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to create account"}</p>
           )}
         </form>
       </DialogContent>
@@ -450,6 +479,7 @@ function AccountRow({ user }: { user: UserResponse }) {
 function KiroUsersWrapper() {
   const { data: kiroUsers, isLoading, refetch } = useKiroUsers();
   const [isEditing, setIsEditing] = useState(false);
+  const [initialFile, setInitialFile] = useState<File | null>(null);
 
   if (isLoading) return <div className="space-y-3">{[1, 2, 3].map((i) => (<Skeleton key={i} className="h-16 rounded-xl" />))}</div>;
 
@@ -464,10 +494,14 @@ function KiroUsersWrapper() {
               <h3 className="font-semibold text-on-surface">Update Imported Users</h3>
               <p className="text-sm text-on-surface-variant">Upload a new CSV/JSON to append or update users.</p>
             </div>
-            <Button variant="outline" onClick={() => setIsEditing(false)}>Cancel Edit</Button>
+            <Button variant="outline" onClick={() => { setIsEditing(false); setInitialFile(null); }}>Cancel Edit</Button>
           </div>
         )}
-        <ImportUsersPanel onImportSuccess={() => { refetch(); setIsEditing(false); }} />
+        <ImportUsersPanel 
+          onImportSuccess={() => { refetch(); setIsEditing(false); setInitialFile(null); }} 
+          initialFile={initialFile}
+          existingUsers={kiroUsers || []}
+        />
       </div>
     );
   }
@@ -479,9 +513,24 @@ function KiroUsersWrapper() {
           <h3 className="text-lg font-semibold text-on-surface">Imported Kiro Users</h3>
           <p className="text-sm text-on-surface-variant">Manage your imported Amazon Q/Kiro users mapping.</p>
         </div>
-        <Button onClick={() => setIsEditing(true)} className="gap-2">
-          <Upload className="w-4 h-4" /> Edit Import
-        </Button>
+        <label className="cursor-pointer">
+          <input 
+            type="file" 
+            accept=".csv,.json" 
+            className="hidden" 
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) {
+                setInitialFile(f);
+                setIsEditing(true);
+                e.target.value = "";
+              }
+            }} 
+          />
+          <div className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary-container shadow-[0_2px_8px_rgba(79,70,229,0.2)] hover:-translate-y-[1px] text-on-primary h-10 px-4 py-2">
+            <span className="material-symbols-outlined text-[16px]">upload</span> Edit Import
+          </div>
+        </label>
       </div>
 
       <div className="bg-white/80 backdrop-blur-[20px] border border-black/5 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] overflow-hidden">
@@ -515,11 +564,18 @@ export default function AccountsPage() {
   const { data: users, isLoading: usersLoading } = useUsers();
   const { data: keys, isLoading: keysLoading } = useKeys();
   const [expandedUserId, setExpandedUserId] = useState<number | null>(null);
+  const [userQuery, setUserQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const isLoading = usersLoading || keysLoading;
 
   const totalUsers = users?.length ?? 0;
   const activeTokens = keys?.filter((k) => k.is_active).length ?? 0;
   const activeProjects = new Set(keys?.filter((k) => k.is_active).map((k) => k.user_id) ?? []).size;
+  const filteredUsers = (users || []).filter((u) => {
+    const matchesQuery = u.username.toLowerCase().includes(userQuery.toLowerCase().trim());
+    const matchesStatus = statusFilter === "all" || (statusFilter === "active" ? u.is_active : !u.is_active);
+    return matchesQuery && matchesStatus;
+  });
 
   return (
     <div className="space-y-6">
@@ -531,40 +587,63 @@ export default function AccountsPage() {
       </div>
 
       <Tabs defaultValue="access" className="w-full">
-        <TabsList>
-          <TabsTrigger value="access">Access & Overrides</TabsTrigger>
-          <TabsTrigger value="import">Kiro Users</TabsTrigger>
-          <TabsTrigger value="accounts">Account Management</TabsTrigger>
+        <TabsList variant="line" className="w-full justify-start h-full gap-6 rounded-none border-b border-outline-variant/30 p-0">
+          <TabsTrigger
+            value="access"
+            className="!h-auto !rounded-none !border-0 !bg-transparent !px-0 !py-0 mt-4 pb-4 pt-4 text-slate-500 hover:text-indigo-500 transition-colors duration-200 data-[active]:text-indigo-600 data-[active]:font-bold data-[active]:border-b-2 data-[active]:border-indigo-600"
+          >
+            User &amp; Tokens
+          </TabsTrigger>
+          <TabsTrigger
+            value="import"
+            className="!h-auto !rounded-none !border-0 !bg-transparent !px-0 !py-0 mt-4 pb-4 pt-4 text-slate-500 hover:text-indigo-500 transition-colors duration-200 data-[active]:text-indigo-600 data-[active]:font-bold data-[active]:border-b-2 data-[active]:border-indigo-600"
+          >
+            Kiro Users
+          </TabsTrigger>
+          <TabsTrigger
+            value="accounts"
+            className="!h-auto !rounded-none !border-0 !bg-transparent !px-0 !py-0 mt-4 pb-4 pt-4 text-slate-500 hover:text-indigo-500 transition-colors duration-200 data-[active]:text-indigo-600 data-[active]:font-bold data-[active]:border-b-2 data-[active]:border-indigo-600"
+          >
+            Account Management
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="access" className="mt-6 space-y-6">
-          <div className="flex justify-end">
+          <div className="flex items-center justify-end gap-3">
+            <Button
+              variant="outline"
+              className="px-4 py-2 bg-surface-bright border border-outline-variant text-on-surface rounded-lg font-mono-label text-mono-label shadow-[0_2px_4px_rgba(0,0,0,0.02)] hover:-translate-y-[1px] transition-transform flex items-center gap-2"
+              type="button"
+            >
+              <span className="material-symbols-outlined text-[16px]">download</span>
+              Export CSV
+            </Button>
             <AddKeyDialog />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-bento-gap">
-            <div className="bg-white/80 backdrop-blur-[20px] border border-black/5 rounded-xl p-5 shadow-[0_2px_4px_rgba(0,0,0,0.04)]">
+            <div className="bg-surface-lowest border border-black/5 rounded-xl p-5 shadow-[0_2px_4px_rgba(0,0,0,0.04)] backdrop-blur-[20px] bg-white/80">
               <div className="flex justify-between items-start mb-2">
                 <span className="text-label-caps font-label-caps text-on-surface-variant uppercase tracking-wider">Total Users</span>
-                <UsersIcon className="w-5 h-5 text-outline" />
+                <span className="material-symbols-outlined text-outline text-xl">group</span>
               </div>
-              <div className="text-4xl font-bold text-on-surface tracking-tight font-mono">{totalUsers}</div>
+              <div className="text-4xl font-display text-on-surface tracking-tight font-mono">{totalUsers}</div>
               <div className="text-xs text-on-surface-variant mt-1">registered accounts</div>
             </div>
-            <div className="bg-white/80 backdrop-blur-[20px] border border-black/5 rounded-xl p-5 shadow-[0_2px_4px_rgba(0,0,0,0.04)] relative overflow-hidden">
+            <div className="bg-surface-lowest border border-black/5 rounded-xl p-5 shadow-[0_2px_4px_rgba(0,0,0,0.04)] relative overflow-hidden backdrop-blur-[20px] bg-white/80">
               <div className="absolute top-0 right-0 w-32 h-32 bg-sky-100 rounded-full blur-3xl opacity-50 -mr-10 -mt-10 pointer-events-none" />
               <div className="flex justify-between items-start mb-2 relative z-10">
                 <span className="text-label-caps font-label-caps text-on-surface-variant uppercase tracking-wider">Active Tokens</span>
-                <KeyIcon className="w-5 h-5 text-sky-600" />
+                <span className="material-symbols-outlined text-sky-600 text-xl">key</span>
               </div>
-              <div className="text-4xl font-bold text-on-surface tracking-tight font-mono relative z-10">{activeTokens}</div>
+              <div className="text-4xl font-display text-on-surface tracking-tight font-mono relative z-10">{activeTokens}</div>
               <div className="text-xs text-on-surface-variant mt-1 relative z-10">Across {activeProjects} active users</div>
             </div>
-            <div className="bg-white/80 backdrop-blur-[20px] border border-black/5 rounded-xl p-5 shadow-[0_2px_4px_rgba(0,0,0,0.04)]">
+            <div className="bg-surface-lowest border border-black/5 rounded-xl p-5 shadow-[0_2px_4px_rgba(0,0,0,0.04)] backdrop-blur-[20px] bg-white/80">
               <div className="flex justify-between items-start mb-2">
                 <span className="text-label-caps font-label-caps text-on-surface-variant uppercase tracking-wider">Avg Keys / User</span>
-                <TrendingUp className="w-5 h-5 text-outline" />
+                <span className="material-symbols-outlined text-outline text-xl">data_usage</span>
               </div>
-              <div className="text-4xl font-bold text-on-surface tracking-tight font-mono">{totalUsers > 0 ? (activeTokens / totalUsers).toFixed(1) : "0"}</div>
+              <div className="text-4xl font-display text-on-surface tracking-tight font-mono">{totalUsers > 0 ? (activeTokens / totalUsers).toFixed(1) : "0"}</div>
               <div className="text-xs text-on-surface-variant mt-1">keys per user</div>
             </div>
           </div>
@@ -572,6 +651,33 @@ export default function AccountsPage() {
             <div className="space-y-3">{[1, 2, 3].map((i) => (<Skeleton key={i} className="h-16 rounded-xl" />))}</div>
           ) : (
             <div className="bg-white/80 backdrop-blur-[20px] border border-black/5 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] overflow-hidden">
+              <div className="p-4 border-b border-outline-variant/30 flex flex-col gap-3 md:flex-row md:justify-between md:items-center bg-surface-lowest/50">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 w-full md:w-auto">
+                  <div className="relative w-full sm:w-auto">
+                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm">search</span>
+                    <Input
+                      value={userQuery}
+                      onChange={(e) => setUserQuery(e.target.value)}
+                      placeholder="Filter users..."
+                      className="pl-9 pr-4 py-1.5 bg-surface-bright border border-outline-variant rounded-md text-sm focus:ring-2 focus:ring-primary-container/20 focus:border-primary-container transition-all w-full sm:w-64 shadow-sm"
+                    />
+                  </div>
+                  <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as "all" | "active" | "inactive")}>
+                    <SelectTrigger className="w-full sm:w-36 px-3 py-1.5 bg-surface-bright border border-outline-variant text-on-surface rounded-md font-mono-label text-mono-label flex items-center gap-2 hover:bg-surface-container transition-colors">
+                      <span className="material-symbols-outlined text-sm text-on-surface-variant">filter_list</span>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Status: All</SelectItem>
+                      <SelectItem value="active">Status: Active</SelectItem>
+                      <SelectItem value="inactive">Status: Inactive</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="text-xs text-on-surface-variant font-medium">
+                  Showing {filteredUsers.length} of {totalUsers} users
+                </div>
+              </div>
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-surface-container-low/50 border-b border-outline-variant/30">
@@ -583,12 +689,12 @@ export default function AccountsPage() {
                   </tr>
                 </thead>
                 <tbody className="text-body-sm divide-y divide-outline-variant/20">
-                  {(users || []).map((u) => (
+                  {filteredUsers.map((u) => (
                     <UserRow key={u.id} user={u} keys={keys || []} isExpanded={expandedUserId === u.id} onToggle={() => setExpandedUserId(expandedUserId === u.id ? null : u.id)} />
                   ))}
                 </tbody>
               </table>
-              {(!users || users.length === 0) && (<div className="p-8 text-center text-on-surface-variant">No users found.</div>)}
+              {filteredUsers.length === 0 && (<div className="p-8 text-center text-on-surface-variant">No users match current filter.</div>)}
             </div>
           )}
         </TabsContent>

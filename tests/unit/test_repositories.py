@@ -1,5 +1,7 @@
 import pytest
-from kiro.db.repositories import hash_api_key, mask_key, hash_password, verify_password
+from unittest.mock import AsyncMock
+from sqlalchemy.dialects import postgresql
+from kiro.db.repositories import hash_api_key, mask_key, hash_password, verify_password, increment_daily_usage
 
 
 class TestRepositoryUtils:
@@ -39,3 +41,24 @@ class TestRepositoryUtils:
         h1 = hash_password("same-password")
         h2 = hash_password("same-password")
         assert h1 != h2  # bcrypt uses random salt
+
+
+
+@pytest.mark.asyncio
+async def test_increment_daily_usage_accumulates():
+    """Verify the upsert adds to existing credits rather than overwriting."""
+    session = AsyncMock()
+    session.execute = AsyncMock()
+    session.commit = AsyncMock()
+
+    await increment_daily_usage(session, key_id=1, date="2026-04-27", amount=42)
+
+    session.execute.assert_called_once()
+    session.commit.assert_called_once()
+
+    # Verify the statement accumulates (credits + amount), not overwrites
+    stmt = session.execute.call_args[0][0]
+    compiled = str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": False}))
+    assert "daily_usage" in compiled
+    # The ON CONFLICT clause should reference credits addition, not plain assignment
+    assert "credits" in compiled
