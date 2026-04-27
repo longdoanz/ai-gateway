@@ -68,6 +68,19 @@ class KeyUsage(Base):
     api_key: Mapped["ApiKey"] = relationship("ApiKey", back_populates="usages")
 
 
+class DailyUsage(Base):
+    __tablename__ = "daily_usage"
+    __table_args__ = (
+        UniqueConstraint("key_id", "date", name="uq_daily_usage_key_date"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    key_id: Mapped[int] = mapped_column(Integer, ForeignKey("api_keys.id"), nullable=False)
+    date: Mapped[str] = mapped_column(String(10), nullable=False)  # "YYYY-MM-DD"
+    credits: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+
 class SystemConfig(Base):
     __tablename__ = "system_config"
 

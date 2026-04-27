@@ -1,0 +1,37 @@
+"""add_daily_usage
+
+Revision ID: 7cc7945a6626
+Revises: 2fd297472749
+Create Date: 2026-04-27 00:00:00.000000
+
+"""
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+
+
+# revision identifiers, used by Alembic.
+revision: str = '7cc7945a6626'
+down_revision: Union[str, Sequence[str], None] = '2fd297472749'
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    """Upgrade schema."""
+    op.create_table('daily_usage',
+    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('key_id', sa.Integer(), nullable=False),
+    sa.Column('date', sa.String(length=10), nullable=False),
+    sa.Column('credits', sa.Integer(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['key_id'], ['api_keys.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('key_id', 'date', name='uq_daily_usage_key_date')
+    )
+
+
+def downgrade() -> None:
+    """Downgrade schema."""
+    op.drop_table('daily_usage')
