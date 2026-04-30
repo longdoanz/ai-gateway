@@ -1,5 +1,6 @@
 import pytest
-from kiro.usage.tracker import extract_credits_from_response
+from unittest.mock import AsyncMock, patch
+from kiro.usage.tracker import extract_credits_from_response, track_usage
 
 
 class TestExtractCredits:
@@ -48,3 +49,42 @@ class TestExtractCredits:
             }]
         }
         assert extract_credits_from_response(data) == 1154
+
+
+class TestTrackUsage:
+    @pytest.mark.asyncio
+    async def test_skip_when_credits_zero(self):
+        with patch("kiro.usage.tracker.async_session_factory") as mock_factory:
+            await track_usage(key_id=1, credits_used=0)
+            mock_factory.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_skip_when_credits_zero_does_not_update_cache(self):
+        with patch("kiro.usage.tracker.usage_cache") as mock_cache:
+            with patch("kiro.usage.tracker.async_session_factory"):
+                await track_usage(key_id=1, credits_used=0)
+                mock_cache.increment.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_proceeds_when_credits_none(self):
+        mock_session = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+        with patch("kiro.usage.tracker.async_session_factory", return_value=mock_session):
+            with patch("kiro.usage.tracker.increment_usage", new_callable=AsyncMock) as mock_inc:
+                with patch("kiro.usage.tracker.usage_cache") as mock_cache:
+                    mock_cache.increment = AsyncMock()
+                    await track_usage(key_id=1, credits_used=None)
+                    assert mock_inc.call_args[0][3] == 1  # amount defaults to 1
+
+    @pytest.mark.asyncio
+    async def test_proceeds_when_credits_positive(self):
+        mock_session = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+        with patch("kiro.usage.tracker.async_session_factory", return_value=mock_session):
+            with patch("kiro.usage.tracker.increment_usage", new_callable=AsyncMock) as mock_inc:
+                with patch("kiro.usage.tracker.usage_cache") as mock_cache:
+                    mock_cache.increment = AsyncMock()
+                    await track_usage(key_id=2, credits_used=42)
+                    assert mock_inc.call_args[0][3] == 42

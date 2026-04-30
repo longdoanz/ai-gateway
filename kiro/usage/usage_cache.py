@@ -1,4 +1,5 @@
 import asyncio
+import time
 from dataclasses import dataclass
 
 from loguru import logger
@@ -10,12 +11,21 @@ class UsageEntry:
     current_usage: int
     usage_limit: int
     is_active: bool
+    next_reset_at: float | None = None
 
 
 class UsageCache:
     def __init__(self):
         self._cache: dict[int, UsageEntry] = {}
         self._lock = asyncio.Lock()
+
+    @staticmethod
+    def _maybe_reset(entry: "UsageEntry") -> None:
+        """Reset current_usage to 0 if the billing period has rolled over."""
+        if entry.next_reset_at is not None and time.time() >= entry.next_reset_at:
+            logger.info(f"UsageCache: resetting usage for key {entry.key_id} (next_reset_at passed)")
+            entry.current_usage = 0
+            entry.next_reset_at = None
 
     async def load_from_db(self, session) -> None:
         from kiro.db.models import ApiKey, KeyUsage
@@ -43,25 +53,32 @@ class UsageCache:
         logger.info(f"UsageCache loaded: {len(self._cache)} keys")
 
     def get(self, key_id: int) -> UsageEntry | None:
-        return self._cache.get(key_id)
+        entry = self._cache.get(key_id)
+        if entry:
+            self._maybe_reset(entry)
+        return entry
 
     async def increment(self, key_id: int, amount: int = 1) -> None:
         async with self._lock:
             entry = self._cache.get(key_id)
             if entry:
+                self._maybe_reset(entry)
                 entry.current_usage += amount
 
-    async def refresh_limits(self, updates: dict[int, tuple[int, int]]) -> None:
+    async def refresh_limits(self, updates: dict[int, tuple[int, int, float | None]]) -> None:
         async with self._lock:
-            for key_id, (usage_limit, current_usage) in updates.items():
+            for key_id, (usage_limit, current_usage, next_reset_at) in updates.items():
                 entry = self._cache.get(key_id)
                 if entry:
                     entry.usage_limit = usage_limit
                     entry.current_usage = current_usage
+                    if next_reset_at is not None:
+                        entry.next_reset_at = next_reset_at
 
     def get_available_keys(self, exclude_key_id: int | None = None) -> list[int]:
         available = []
         for key_id, entry in self._cache.items():
+            self._maybe_reset(entry)
             if not entry.is_active:
                 continue
             if key_id == exclude_key_id:

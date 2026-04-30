@@ -10,7 +10,10 @@ from kiro.usage.daily_buffer import daily_buffer
 
 async def track_usage(key_id: int, credits_used: int | None = None) -> None:
     """Increment usage counter for a key. If credits_used is None, defaults to +1 as approximation.
+    If credits_used is 0, skips DB write entirely.
     The sync worker periodically overwrites with real values from getUsageLimits API."""
+    if credits_used is not None and credits_used == 0:
+        return
     amount = credits_used if credits_used is not None and credits_used > 0 else 1
     now = datetime.now(timezone.utc)
     month = now.strftime("%Y-%m")

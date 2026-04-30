@@ -319,11 +319,31 @@ async def _sync_new_key(key_id: int, raw_token: str) -> None:
                 await update_api_key(session, key_id, kiro_user_id=kiro_user_id)
                 logger.info(f"Mapped key {key_id} to kiro_user_id={kiro_user_id}")
 
-        await usage_cache.refresh_limits({key_id: (usage_limit, current_usage)})
-        logger.info(f"Synced new key {key_id}: usage={current_usage}/{usage_limit}")
+        raw_reset = credit_entry.get("nextDateReset") or data.get("nextDateReset")
+        next_reset_at: float | None = float(raw_reset) if raw_reset is not None else None
+        await usage_cache.refresh_limits({key_id: (usage_limit, current_usage, next_reset_at)})
+        logger.info(f"Synced new key {key_id}: usage={current_usage}/{usage_limit} next_reset_at={next_reset_at}")
 
     except Exception as e:
-        logger.warning(f"Failed to sync new key {key_id}: {e}")
+        from fastapi import HTTPException as FastAPIHTTPException
+        if isinstance(e, FastAPIHTTPException) and e.status_code == 401:
+            asyncio.ensure_future(_deactivate_key(key_id))
+        else:
+            logger.warning(f"Failed to sync new key {key_id}: {e}")
+
+
+async def _deactivate_key(key_id: int) -> None:
+    """Mark a key as inactive in DB and cache after receiving 403 from Kiro."""
+    try:
+        from kiro.db.engine import async_session_factory
+        from kiro.db.repositories import update_api_key
+        from kiro.usage.usage_cache import usage_cache
+        async with async_session_factory() as session:
+            await update_api_key(session, key_id, is_active=False)
+        usage_cache.set_key_active(key_id, False)
+        logger.warning(f"Deactivated key {key_id} due to 403 from Kiro API")
+    except Exception as e:
+        logger.error(f"Failed to deactivate key {key_id}: {e}")
 
 
 async def _try_fallback_pre_check(token: str, key_id: int | None) -> tuple[str, int | None] | None:
@@ -345,7 +365,9 @@ async def _track_usage_background(key_id: int | None, credits: int | None) -> No
         return
     try:
         from kiro.usage.tracker import track_usage
+        from kiro.usage.sync_worker import record_activity
         await track_usage(key_id, credits)
+        record_activity(key_id)
     except Exception as e:
         logger.debug(f"Usage tracking failed: {e}")
 
@@ -366,8 +388,9 @@ class ApiKeyModeClient:
                        When provided it is used as-is and never closed by this class.
     """
 
-    def __init__(self, token: str, shared_client: Optional[httpx.AsyncClient] = None):
+    def __init__(self, token: str, shared_client: Optional[httpx.AsyncClient] = None, key_id: Optional[int] = None):
         self.token = token
+        self.key_id = key_id
         self._shared_client = shared_client
         self._owns_client = shared_client is None
         self.client: Optional[httpx.AsyncClient] = shared_client
@@ -444,6 +467,8 @@ class ApiKeyModeClient:
                 if response.status_code == 403:
                     # User-supplied token is invalid — do not retry
                     logger.warning("ApiKeyModeClient: received 403, user-supplied Kiro API key is invalid")
+                    if self.key_id is not None and is_db_configured():
+                        asyncio.ensure_future(_deactivate_key(self.key_id))
                     raise HTTPException(
                         status_code=401,
                         detail="Invalid Kiro API key (received 403 from Kiro API)"
@@ -614,9 +639,9 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
     logger.debug(f"[API_KEY_MODE] Kiro API URL: {url}")
 
     if request_data.stream:
-        http_client = ApiKeyModeClient(token, shared_client=None)
+        http_client = ApiKeyModeClient(token, shared_client=None, key_id=key_id)
     else:
-        http_client = ApiKeyModeClient(token, shared_client=request.app.state.http_client)
+        http_client = ApiKeyModeClient(token, shared_client=request.app.state.http_client, key_id=key_id)
 
     try:
         response = await http_client.request_with_retry("POST", url, kiro_payload, stream=True)
@@ -771,9 +796,9 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
     logger.debug(f"[API_KEY_MODE] Kiro API URL: {url}")
 
     if request_data.stream:
-        http_client = ApiKeyModeClient(raw_token, shared_client=None)
+        http_client = ApiKeyModeClient(raw_token, shared_client=None, key_id=key_id)
     else:
-        http_client = ApiKeyModeClient(raw_token, shared_client=request.app.state.http_client)
+        http_client = ApiKeyModeClient(raw_token, shared_client=request.app.state.http_client, key_id=key_id)
 
     messages_for_tokenizer = [msg.model_dump() for msg in request_data.messages]
     tools_for_tokenizer = [t.model_dump() for t in request_data.tools] if request_data.tools else None

@@ -1,0 +1,22 @@
+curl 'https://management.us-east-1.kiro.dev/' \
+  -H 'Accept: */*' \
+  -H 'Accept-Language: en-US,en;q=0.9' \
+  -H 'Connection: keep-alive' \
+  -H 'Origin: https://app.kiro.dev' \
+  -H 'Referer: https://app.kiro.dev/' \
+  -H 'Sec-Fetch-Dest: empty' \
+  -H 'Sec-Fetch-Mode: cors' \
+  -H 'Sec-Fetch-Site: same-site' \
+  -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36' \
+  -H 'amz-sdk-invocation-id: 1ec1dde4-a73c-48a5-a48c-b2e2b0089666' \
+  -H 'amz-sdk-request: attempt=1; max=1' \
+  -H 'authorization: Bearer ACCESS_TOKEN' \
+  -H 'content-type: application/x-amz-json-1.0' \
+  -H 'sec-ch-ua: "Google Chrome";v="147", "Not.A/Brand";v="8", "Chromium";v="147"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'x-amz-target: KiroControlPlaneBearerService.CreateApiKey' \
+  -H 'x-amz-user-agent: aws-sdk-js/1.0.0 ua/2.1 os/Windows lang/js md/browser#Chromium_147 api/kirocontrolplanebearer#1.0.0 m/N,E' \
+  -H 'x-kiro-userid: d-96670971a4.a9faa51c-e091-70f9-d13c-e66b5b2defc5' \
+  -H 'x-kiro-visitorid: 1764751503407-axqlrh62jkd' \
+  --data '{"profileArn":"arn:aws:codewhisperer:us-east-1:886235364456:profile/NP3RUG7YKRKG","label":"CC"}'

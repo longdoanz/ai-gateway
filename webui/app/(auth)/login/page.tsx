@@ -11,7 +11,7 @@ export default function LoginPage() {
   const [error, setError] = useState("");
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-[var(--color-glacier-background)]">
       <div className="w-full max-w-sm">
         <div className="glass-panel-elevated rounded-3xl p-10 shadow-[0_8px_40px_rgba(79,70,229,0.10)]">
           <div className="text-center mb-8">
