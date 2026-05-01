@@ -35,3 +35,5 @@ kiro-gateway.log
 .pytest_cache/
 .coverage
 htmlcov/
+# Added by code-review-graph
+.code-review-graph/

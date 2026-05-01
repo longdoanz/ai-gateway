@@ -1,4 +1,5 @@
 import hashlib
+import re
 from datetime import datetime, timezone
 
 def _utcnow() -> datetime:
@@ -11,7 +12,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiro.config import ENCRYPTION_KEY
-from kiro.db.models import ApiKey, DailyUsage, KeyUsage, KiroUserMapping, SystemConfig, User
+from kiro.db.models import ApiKey, DailyUsage, FallbackUsage, KeyUsage, KiroUserMapping, SystemConfig, User
 
 
 _fernet = None
@@ -162,6 +163,50 @@ async def update_api_key(session: AsyncSession, key_id: int, **kwargs) -> None:
     await session.commit()
 
 
+async def merge_duplicate_keys_for_user(session: AsyncSession, keep_key_id: int, kiro_user_id: str) -> tuple[int, list[int]]:
+    """Merge duplicate keys for a kiro_user_id into the oldest key.
+
+    Keeps the oldest key_id (preserving all usage history) and updates its
+    credentials with the newest key's. Deletes all other keys.
+
+    Returns (survivor_key_id, deleted_key_ids)."""
+    from sqlalchemy import delete
+
+    result = await session.execute(
+        select(ApiKey).where(ApiKey.kiro_user_id == kiro_user_id).order_by(ApiKey.id)
+    )
+    all_keys = list(result.scalars().all())
+    if len(all_keys) <= 1:
+        return keep_key_id, []
+
+    survivor = all_keys[0]
+    newest = all_keys[-1]
+    to_delete = [k for k in all_keys if k.id != survivor.id]
+
+    if survivor.id != newest.id:
+        await session.execute(
+            update(ApiKey).where(ApiKey.id == survivor.id).values(
+                key_hash=newest.key_hash,
+                key_encrypted=newest.key_encrypted,
+                key_prefix=newest.key_prefix,
+                key_suffix=newest.key_suffix,
+                is_active=True,
+            )
+        )
+
+    deleted_ids = [k.id for k in to_delete]
+    for old_id in deleted_ids:
+        await session.execute(delete(DailyUsage).where(DailyUsage.key_id == old_id))
+        await session.execute(delete(KeyUsage).where(KeyUsage.key_id == old_id))
+        await session.execute(delete(FallbackUsage).where(
+            (FallbackUsage.original_key_id == old_id) | (FallbackUsage.fallback_key_id == old_id)
+        ))
+        await session.execute(delete(ApiKey).where(ApiKey.id == old_id))
+
+    await session.commit()
+    return survivor.id, deleted_ids
+
+
 # --- KeyUsage ---
 
 async def increment_usage(session: AsyncSession, key_id: int, month: str, amount: int = 1) -> None:
@@ -196,6 +241,20 @@ async def increment_daily_usage(session: AsyncSession, key_id: int, date: str, a
     await session.commit()
 
 
+async def increment_fallback_usage(
+    session: AsyncSession, original_key_id: int, fallback_key_id: int, month: str, amount: int = 1
+) -> None:
+    stmt = pg_insert(FallbackUsage).values(
+        original_key_id=original_key_id, fallback_key_id=fallback_key_id, month=month, credits=amount
+    )
+    stmt = stmt.on_conflict_do_update(
+        constraint="uq_fallback_usage_orig_fb_month",
+        set_={"credits": FallbackUsage.credits + amount},
+    )
+    await session.execute(stmt)
+    await session.commit()
+
+
 async def get_usage_history(session: AsyncSession, key_id: int) -> list[KeyUsage]:
     result = await session.execute(
         select(KeyUsage).where(KeyUsage.key_id == key_id).order_by(KeyUsage.month.desc())
@@ -220,6 +279,33 @@ async def upsert_usage_limits(session: AsyncSession, key_id: int, month: str, us
 async def list_kiro_user_mappings(session: AsyncSession, limit: int = 50, offset: int = 0) -> list[KiroUserMapping]:
     result = await session.execute(select(KiroUserMapping).order_by(KiroUserMapping.kiro_user_id).limit(limit).offset(offset))
     return list(result.scalars().all())
+
+def normalize_kiro_user_id(value: str) -> str:
+    """Strip 'd-xxx.' prefix if present, e.g. 'd-abc123.john' -> 'john'."""
+    return re.sub(r"^d-[^.]*\.", "", value)
+
+
+async def build_kiro_email_lookup(session: AsyncSession) -> dict[str, str]:
+    """Build a lookup dict: normalized kiro_user_id -> email. Exact keys are also included."""
+    result = await session.execute(
+        select(KiroUserMapping.kiro_user_id, KiroUserMapping.email).where(KiroUserMapping.email.isnot(None))
+    )
+    lookup: dict[str, str] = {}
+    for kiro_uid, email in result.all():
+        lookup[kiro_uid] = email
+        normalized = normalize_kiro_user_id(kiro_uid)
+        if normalized != kiro_uid:
+            lookup[normalized] = email
+    return lookup
+
+
+def resolve_kiro_email(kiro_user_id: str, lookup: dict[str, str]) -> str | None:
+    """Resolve email for a kiro_user_id using exact match first, then normalized match."""
+    if kiro_user_id in lookup:
+        return lookup[kiro_user_id]
+    normalized = normalize_kiro_user_id(kiro_user_id)
+    return lookup.get(normalized)
+
 
 async def upsert_kiro_user_mappings(session: AsyncSession, mappings: list[dict]) -> tuple[int, int]:
     inserted = 0

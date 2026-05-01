@@ -372,6 +372,24 @@ async def _track_usage_background(key_id: int | None, credits: int | None) -> No
         logger.debug(f"Usage tracking failed: {e}")
 
 
+async def _track_fallback_usage_background(
+    original_key_id: int | None, actual_key_id: int | None, credits: int | None
+) -> None:
+    if original_key_id is None or actual_key_id is None or not is_db_configured():
+        return
+    if original_key_id == actual_key_id:
+        return
+    try:
+        from kiro.db.engine import async_session_factory
+        from kiro.db.repositories import increment_fallback_usage
+        month = time.strftime("%Y-%m")
+        amount = credits if credits is not None and credits > 0 else 1
+        async with async_session_factory() as session:
+            await increment_fallback_usage(session, original_key_id, actual_key_id, month, amount)
+    except Exception as e:
+        logger.debug(f"Fallback usage tracking failed: {e}")
+
+
 class ApiKeyModeClient:
     """
     Lightweight HTTP client for API_KEY_MODE.
@@ -617,6 +635,7 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
 
     token = get_api_key_from_request(request)
     key_id = await _resolve_key_id(token)
+    original_key_id = key_id
 
     # Fallback pre-check: swap key if current one is near quota
     fallback_result = await _try_fallback_pre_check(token, key_id)
@@ -695,6 +714,7 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
                     raise
                 finally:
                     await _track_usage_background(key_id, None)
+                    await _track_fallback_usage_background(original_key_id, key_id, None)
                     await http_client.close()
 
             return StreamingResponse(stream_wrapper(), media_type="text/event-stream")
@@ -716,6 +736,7 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
             except Exception:
                 pass
             await _track_usage_background(key_id, credits)
+            await _track_fallback_usage_background(original_key_id, key_id, credits)
             await http_client.close()
             return JSONResponse(content=openai_response)
 
@@ -771,6 +792,7 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
         )
 
     key_id = await _resolve_key_id(raw_token)
+    original_key_id = key_id
 
     fallback_result = await _try_fallback_pre_check(raw_token, key_id)
     if fallback_result:
@@ -860,6 +882,7 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
                     raise
                 finally:
                     await _track_usage_background(key_id, None)
+                    await _track_fallback_usage_background(original_key_id, key_id, None)
                     await http_client.close()
 
             return StreamingResponse(stream_wrapper(), media_type="text/event-stream")
@@ -881,6 +904,7 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
             except Exception:
                 pass
             await _track_usage_background(key_id, credits)
+            await _track_fallback_usage_background(original_key_id, key_id, credits)
             await http_client.close()
             return JSONResponse(content=anthropic_response)
 

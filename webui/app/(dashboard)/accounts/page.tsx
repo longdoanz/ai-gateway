@@ -86,11 +86,49 @@ function AddKeyDialog() {
   );
 }
 
+function normalizeKiroUserId(value: string): string {
+  return value.replace(/^d-[^.]*\./, "");
+}
+
+interface KiroUserGroup {
+  label: string;
+  kiroUserId: string | null;
+  keys: ApiKeyResponse[];
+}
+
+function groupKeysByKiroUser(keys: ApiKeyResponse[]): KiroUserGroup[] {
+  const groups = new Map<string, KiroUserGroup>();
+  const unassigned: ApiKeyResponse[] = [];
+
+  for (const key of keys) {
+    if (!key.kiro_user_id) {
+      unassigned.push(key);
+      continue;
+    }
+    const normalized = normalizeKiroUserId(key.kiro_user_id);
+    let group = groups.get(normalized);
+    if (!group) {
+      const label = key.kiro_email || key.kiro_user_id;
+      group = { label, kiroUserId: key.kiro_user_id, keys: [] };
+      groups.set(normalized, group);
+    }
+    if (key.kiro_email && !group.label.includes("@")) {
+      group.label = key.kiro_email;
+    }
+    group.keys.push(key);
+  }
+
+  const result = Array.from(groups.values()).sort((a, b) => a.label.localeCompare(b.label));
+  if (unassigned.length > 0) {
+    result.push({ label: "Unassigned", kiroUserId: null, keys: unassigned });
+  }
+  return result;
+}
+
 function KeyRow({ apiKey }: { apiKey: ApiKeyResponse }) {
   const toggleKey = useToggleKey();
   return (
     <tr className="border-b border-outline-variant/20">
-      <td className="py-3 px-4 text-on-surface font-medium text-xs">{apiKey.kiro_user_id || "—"}</td>
       <td className="py-3 px-4 font-mono text-on-surface-variant text-xs">{maskKey(apiKey.key_prefix, apiKey.key_suffix)}</td>
       <td className="py-3 px-4 text-on-surface-variant text-xs">{new Date(apiKey.created_at).toLocaleDateString()}</td>
       <td className="py-3 px-4 text-right">
@@ -100,8 +138,8 @@ function KeyRow({ apiKey }: { apiKey: ApiKeyResponse }) {
   );
 }
 
-function UserRow({ user, keys, isExpanded, onToggle }: { user: UserResponse; keys: ApiKeyResponse[]; isExpanded: boolean; onToggle: () => void }) {
-  const userKeys = keys.filter((k) => k.user_id === user.id);
+function KiroUserRow({ group, isExpanded, onToggle }: { group: KiroUserGroup; isExpanded: boolean; onToggle: () => void }) {
+  const activeKeys = group.keys.filter((k) => k.is_active).length;
   return (
     <>
       <tr className={`hover:bg-surface-container-lowest transition-colors cursor-pointer group ${isExpanded ? "bg-sky-50/30" : ""}`} onClick={onToggle}>
@@ -112,45 +150,46 @@ function UserRow({ user, keys, isExpanded, onToggle }: { user: UserResponse; key
         </td>
         <td className="py-4 px-6">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-surface-variant flex items-center justify-center text-on-surface-variant font-semibold text-xs border border-outline-variant/30">{user.username.slice(0, 2).toUpperCase()}</div>
-            <div><div className="font-medium text-on-surface">{user.username}</div></div>
+            <div className="w-8 h-8 rounded-full bg-surface-variant flex items-center justify-center text-on-surface-variant font-semibold text-xs border border-outline-variant/30">
+              {group.label.slice(0, 2).toUpperCase()}
+            </div>
+            <div>
+              <div className="font-medium text-on-surface">{group.label}</div>
+              {group.kiroUserId && group.label !== group.kiroUserId && (
+                <div className="text-on-surface-variant text-xs font-mono mt-0.5">{group.kiroUserId}</div>
+              )}
+            </div>
           </div>
         </td>
-        <td className="py-4 px-6"><Badge variant={user.role === "admin" ? "default" : "secondary"} className="text-[10px]">{user.role}</Badge></td>
         <td className="py-4 px-6">
-          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${user.is_active ? "bg-emerald-100/50 text-emerald-800 border-emerald-200/50" : "bg-surface-variant text-on-surface-variant border-outline-variant/50"}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${user.is_active ? "bg-emerald-500" : "bg-outline"}`} />
-            {user.is_active ? "Active" : "Inactive"}
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${activeKeys > 0 ? "bg-emerald-100/50 text-emerald-800 border-emerald-200/50" : "bg-surface-variant text-on-surface-variant border-outline-variant/50"}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${activeKeys > 0 ? "bg-emerald-500" : "bg-outline"}`} />
+            {activeKeys > 0 ? `${activeKeys} active` : "Inactive"}
           </span>
         </td>
-        <td className="py-4 px-6 text-right font-mono text-sm">{userKeys.length}</td>
+        <td className="py-4 px-6 text-right font-mono text-sm">{group.keys.length}</td>
       </tr>
       {isExpanded && (
         <tr className="bg-surface-container-lowest border-b-2 border-primary/10">
-          <td colSpan={5} className="p-0">
+          <td colSpan={4} className="p-0">
             <div className="px-12 py-6 pl-20 bg-gradient-to-b from-sky-50/20 to-transparent">
               <div className="flex justify-between items-center mb-4">
-                <h4 className="font-mono text-mono-label text-on-surface font-semibold flex items-center gap-2"><span className="material-symbols-outlined text-sm text-sky-600">key</span> API Keys ({userKeys.length})</h4>
+                <h4 className="font-mono text-mono-label text-on-surface font-semibold flex items-center gap-2"><span className="material-symbols-outlined text-sm text-sky-600">key</span> API Keys ({group.keys.length})</h4>
               </div>
-              {userKeys.length === 0 ? (
-                <p className="text-sm text-on-surface-variant">No API keys registered.</p>
-              ) : (
-                <div className="border border-outline-variant/40 rounded-lg overflow-hidden bg-white">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-surface-container-low/50">
-                      <tr>
-                        <th className="py-2 px-4 font-medium text-on-surface-variant">Kiro User ID</th>
-                        <th className="py-2 px-4 font-medium text-on-surface-variant font-mono">Token Secret</th>
-                        <th className="py-2 px-4 font-medium text-on-surface-variant">Created</th>
-                        <th className="py-2 px-4 font-medium text-on-surface-variant text-right">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-outline-variant/20">
-                      {userKeys.map((key) => (<KeyRow key={key.id} apiKey={key} />))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              <div className="border border-outline-variant/40 rounded-lg overflow-hidden bg-white">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-surface-container-low/50">
+                    <tr>
+                      <th className="py-2 px-4 font-medium text-on-surface-variant font-mono">Token Secret</th>
+                      <th className="py-2 px-4 font-medium text-on-surface-variant">Created</th>
+                      <th className="py-2 px-4 font-medium text-on-surface-variant text-right">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-outline-variant/20">
+                    {group.keys.map((key) => (<KeyRow key={key.id} apiKey={key} />))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </td>
         </tr>
@@ -579,17 +618,21 @@ export default function AccountsPage() {
   const { user: authUser } = useAuth();
   const { data: users, isLoading: usersLoading } = useUsers();
   const { data: keys, isLoading: keysLoading } = useKeys();
-  const [expandedUserId, setExpandedUserId] = useState<number | null>(null);
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const [userQuery, setUserQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const isLoading = usersLoading || keysLoading;
 
-  const totalUsers = users?.length ?? 0;
+  const kiroGroups = groupKeysByKiroUser(keys || []);
+  const totalKiroUsers = kiroGroups.filter((g) => g.kiroUserId !== null).length;
   const activeTokens = keys?.filter((k) => k.is_active).length ?? 0;
-  const activeProjects = new Set(keys?.filter((k) => k.is_active).map((k) => k.user_id) ?? []).size;
-  const filteredUsers = (users || []).filter((u) => {
-    const matchesQuery = u.username.toLowerCase().includes(userQuery.toLowerCase().trim());
-    const matchesStatus = statusFilter === "all" || (statusFilter === "active" ? u.is_active : !u.is_active);
+  const activeKiroUsers = kiroGroups.filter((g) => g.kiroUserId !== null && g.keys.some((k) => k.is_active)).length;
+
+  const filteredGroups = kiroGroups.filter((g) => {
+    const matchesQuery = g.label.toLowerCase().includes(userQuery.toLowerCase().trim()) ||
+      (g.kiroUserId?.toLowerCase().includes(userQuery.toLowerCase().trim()) ?? false);
+    const matchesStatus = statusFilter === "all" ||
+      (statusFilter === "active" ? g.keys.some((k) => k.is_active) : g.keys.every((k) => !k.is_active));
     return matchesQuery && matchesStatus;
   });
 
@@ -628,11 +671,11 @@ export default function AccountsPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-bento-gap">
             <div className="bg-surface-lowest border border-black/5 rounded-xl p-5 shadow-[0_2px_4px_rgba(0,0,0,0.04)] backdrop-blur-[20px] bg-white/80">
               <div className="flex justify-between items-start mb-2">
-                <span className="text-label-caps font-label-caps text-on-surface-variant uppercase tracking-wider">Total Users</span>
+                <span className="text-label-caps font-label-caps text-on-surface-variant uppercase tracking-wider">Kiro Users</span>
                 <span className="material-symbols-outlined text-outline text-xl">group</span>
               </div>
-              <div className="text-4xl font-display text-on-surface tracking-tight font-mono">{totalUsers}</div>
-              <div className="text-xs text-on-surface-variant mt-1">registered accounts</div>
+              <div className="text-4xl font-display text-on-surface tracking-tight font-mono">{totalKiroUsers}</div>
+              <div className="text-xs text-on-surface-variant mt-1">unique identities</div>
             </div>
             <div className="bg-surface-lowest border border-black/5 rounded-xl p-5 shadow-[0_2px_4px_rgba(0,0,0,0.04)] relative overflow-hidden backdrop-blur-[20px] bg-white/80">
               <div className="absolute top-0 right-0 w-32 h-32 bg-sky-100 rounded-full blur-3xl opacity-50 -mr-10 -mt-10 pointer-events-none" />
@@ -641,14 +684,14 @@ export default function AccountsPage() {
                 <span className="material-symbols-outlined text-sky-600 text-xl">key</span>
               </div>
               <div className="text-4xl font-display text-on-surface tracking-tight font-mono relative z-10">{activeTokens}</div>
-              <div className="text-xs text-on-surface-variant mt-1 relative z-10">Across {activeProjects} active users</div>
+              <div className="text-xs text-on-surface-variant mt-1 relative z-10">Across {activeKiroUsers} active users</div>
             </div>
             <div className="bg-surface-lowest border border-black/5 rounded-xl p-5 shadow-[0_2px_4px_rgba(0,0,0,0.04)] backdrop-blur-[20px] bg-white/80">
               <div className="flex justify-between items-start mb-2">
                 <span className="text-label-caps font-label-caps text-on-surface-variant uppercase tracking-wider">Avg Keys / User</span>
                 <span className="material-symbols-outlined text-outline text-xl">data_usage</span>
               </div>
-              <div className="text-4xl font-display text-on-surface tracking-tight font-mono">{totalUsers > 0 ? (activeTokens / totalUsers).toFixed(1) : "0"}</div>
+              <div className="text-4xl font-display text-on-surface tracking-tight font-mono">{totalKiroUsers > 0 ? (activeTokens / totalKiroUsers).toFixed(1) : "0"}</div>
               <div className="text-xs text-on-surface-variant mt-1">keys per user</div>
             </div>
           </div>
@@ -680,26 +723,28 @@ export default function AccountsPage() {
                   </Select>
                 </div>
                 <div className="text-xs text-on-surface-variant font-medium">
-                  Showing {filteredUsers.length} of {totalUsers} users
+                  Showing {filteredGroups.length} of {kiroGroups.length} users
                 </div>
               </div>
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-surface-container-low/50 border-b border-outline-variant/30">
                     <th className="py-3 px-6 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider w-12" />
-                    <th className="py-3 px-6 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">User Details</th>
-                    <th className="py-3 px-6 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Role</th>
+                    <th className="py-3 px-6 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Kiro User</th>
                     <th className="py-3 px-6 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Status</th>
                     <th className="py-3 px-6 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider text-right">Keys</th>
                   </tr>
                 </thead>
                 <tbody className="text-body-sm divide-y divide-outline-variant/20">
-                  {filteredUsers.map((u) => (
-                    <UserRow key={u.id} user={u} keys={keys || []} isExpanded={expandedUserId === u.id} onToggle={() => setExpandedUserId(expandedUserId === u.id ? null : u.id)} />
-                  ))}
+                  {filteredGroups.map((g) => {
+                    const groupKey = g.kiroUserId || "__unassigned__";
+                    return (
+                      <KiroUserRow key={groupKey} group={g} isExpanded={expandedGroup === groupKey} onToggle={() => setExpandedGroup(expandedGroup === groupKey ? null : groupKey)} />
+                    );
+                  })}
                 </tbody>
               </table>
-              {filteredUsers.length === 0 && (<div className="p-8 text-center text-on-surface-variant">No users match current filter.</div>)}
+              {filteredGroups.length === 0 && (<div className="p-8 text-center text-on-surface-variant">No users match current filter.</div>)}
             </div>
           )}
         </TabsContent>

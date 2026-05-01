@@ -6,7 +6,7 @@ from loguru import logger
 
 from kiro.db.engine import async_session_factory
 from kiro.db.models import ApiKey
-from kiro.db.repositories import decrypt_api_key, get_all_config, upsert_kiro_user_mappings, upsert_usage_limits, update_api_key
+from kiro.db.repositories import decrypt_api_key, merge_duplicate_keys_for_user, get_all_config, upsert_kiro_user_mappings, upsert_usage_limits, update_api_key
 from kiro.usage.usage_cache import usage_cache
 
 _SYNC_DELAY_MIN = 300   # 5 minutes
@@ -44,9 +44,13 @@ async def sync_usage_limits(key_ids: list[int]) -> None:
 
     logger.info(f"Sync worker: syncing usage limits for {len(keys)} keys")
     cache_updates: dict[int, tuple[int, int]] = {}
+    deactivated_this_cycle: set[int] = set()
 
     async with async_session_factory() as session:
         for key in keys:
+            if key.id in deactivated_this_cycle:
+                logger.debug(f"Sync worker: skipping key {key.id} (deactivated earlier this cycle)")
+                continue
             try:
                 raw_key = decrypt_api_key(key.key_encrypted)
                 data = await get_usage_limits(raw_key, resource_type="CREDIT")
@@ -82,6 +86,14 @@ async def sync_usage_limits(key_ids: list[int]) -> None:
                 if kiro_user_id and kiro_user_id != key.kiro_user_id:
                     await upsert_kiro_user_mappings(session, [{"kiro_user_id": kiro_user_id}])
                     await update_api_key(session, key.id, kiro_user_id=kiro_user_id)
+
+                if kiro_user_id:
+                    survivor_id, deleted = await merge_duplicate_keys_for_user(session, key.id, kiro_user_id)
+                    for old_id in deleted:
+                        usage_cache.remove_key(old_id)
+                        deactivated_this_cycle.add(old_id)
+                    if deleted:
+                        logger.info(f"Sync worker: merged keys for user {kiro_user_id}, survivor={survivor_id}, deleted={deleted}")
 
                 logger.debug(f"Synced key {key.id}: usage={current_usage}/{usage_limit} next_reset_at={next_reset_at}")
 

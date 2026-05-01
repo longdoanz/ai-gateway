@@ -2,20 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Overview
-
-AI Gateway is a Python FastAPI reverse proxy providing OpenAI-compatible and Anthropic-compatible APIs for Kiro (AWS CodeWhisperer). It translates requests between API formats and handles authentication, streaming, model resolution, and error handling.
-
-**Stack:** Python 3.10+ / FastAPI / uvicorn / PostgreSQL (optional, for dashboard)
+> For full project details, architecture, conventions, and patterns — see **AGENTS.md**.
 
 ## Essential Commands
 
 ### Backend (Python)
 
 ```bash
-# Run server (default: 0.0.0.0:8000)
+# Run server (default: 0.0.0.0:18000)
 python main.py
-python main.py --port 9000
 
 # Install dependencies
 pip install -r requirements.txt
@@ -55,24 +50,7 @@ docker-compose up -d
 docker-compose -f docker-compose.apikey.yml up -d
 ```
 
-## Architecture
-
-### Backend Structure (`kiro/`)
-
-Layered architecture with clear separation:
-
-1. **Routes** (`routes_openai.py`, `routes_anthropic.py`) — FastAPI endpoints, auth validation
-2. **Converters** (`converters_*.py`) — Format translation (OpenAI/Anthropic → Kiro)
-3. **Streaming** (`streaming_*.py`) — SSE stream processing (Kiro → OpenAI/Anthropic)
-4. **Core Services** — `auth.py` (token lifecycle), `http_client.py` (retry logic), `model_resolver.py` (4-layer resolution), `cache.py`
-5. **Parsers** — `parsers.py` (AWS event stream), `thinking_parser.py` (FSM for extended thinking)
-6. **Models** — `models_openai.py`, `models_anthropic.py` (Pydantic validation)
-
-**Dashboard** (`kiro/dashboard/`): JWT auth, user/key management, analytics — activates when `DATABASE_URL` is set.
-
-**Database** (`kiro/db/`): SQLAlchemy async (PostgreSQL via asyncpg), Alembic migrations.
-
-### Frontend Structure (`webui/`)
+## Frontend Structure (`webui/`)
 
 Next.js 16 App Router + React 19 + Tailwind CSS v4 + shadcn/ui.
 
@@ -90,41 +68,6 @@ webui/
 
 API proxy: `next.config.js` rewrites `/api/*` to backend (`API_URL` env var).
 
-## Key Patterns
-
-### Per-Request HTTP Clients for Streaming
-
-**Critical**: Always use per-request `httpx.AsyncClient` for streaming to prevent CLOSE_WAIT leaks.
-
-### Model Resolution Pipeline
-
-4-layer resolution in `model_resolver.py`:
-1. Normalize name (dashes→dots, strip dates)
-2. Check dynamic cache (from /ListAvailableModels)
-3. Check hidden models (manual config)
-4. Pass-through to Kiro (let Kiro decide)
-
-**Principle**: Gateway, not gatekeeper. Kiro API is the final arbiter.
-
-### Test Network Isolation
-
-**Critical**: All tests are completely isolated from the network. Global fixture `block_all_network_calls` in `tests/conftest.py` blocks all httpx requests. Any real network call will fail the test.
-
-### Authentication Auto-Detection
-
-Auth type detected from credentials:
-- Has `clientId`/`clientSecret` → AWS SSO OIDC
-- No client credentials → Kiro Desktop Auth
-
-## Code Conventions
-
-- **Naming**: `snake_case` functions/variables, `PascalCase` classes, `UPPER_SNAKE_CASE` constants
-- **Type hints**: Mandatory on all function parameters and return values
-- **Docstrings**: Google style with Args/Returns/Raises
-- **Logging**: Use `loguru` (not stdlib logging)
-- **Async**: All I/O operations are async/await
-- **Error handling**: Catch specific exceptions, never bare `except:`
-
 ## Configuration
 
 Loaded from `.env` file (see `.env.example`):
@@ -141,35 +84,7 @@ ENCRYPTION_KEY="32-byte-encryption-key"
 DEBUG_MODE="off"  # "off" | "errors" | "all"
 ```
 
-## API Endpoints
-
-**OpenAI-compatible:**
-- `GET /health` — Health check
-- `GET /v1/models` — List models
-- `POST /v1/chat/completions` — Chat (streaming/non-streaming)
-
-**Anthropic-compatible:**
-- `POST /v1/messages` — Messages (streaming/non-streaming)
-
-**Auth:** `Authorization: Bearer {PROXY_API_KEY}` or `x-api-key: {PROXY_API_KEY}`
-
-## Common Tasks
-
-### Adding a New Endpoint
-
-1. Define Pydantic models in `models_*.py`
-2. Add route in `routes_*.py`
-3. Add converter in `converters_*.py`
-4. Add streaming logic in `streaming_*.py`
-5. Write tests in `tests/unit/test_routes_*.py`
-
-### Debugging Issues
-
-1. Enable debug logging: `DEBUG_MODE="errors"` in `.env`
-2. Check `debug_logs/` directory
-3. Run tests: `pytest tests/unit/test_<module>.py -v`
-
-### Making Changes
+## Making Changes
 
 1. Read files before editing
 2. Follow existing patterns
@@ -180,8 +95,8 @@ DEBUG_MODE="off"  # "off" | "errors" | "all"
 
 ## Important Files
 
-- `AGENTS.md` — Comprehensive AI agent guide (851 lines) — **read for full details**
-- `.env.example` — Configuration template (265 lines)
+- `AGENTS.md` — Comprehensive AI agent guide — **read for full details**
+- `.env.example` — Configuration template
 - `tests/conftest.py` — Shared test fixtures
 - `kiro/config.py` — Centralized configuration
 - `kiro/auth.py` — Authentication manager

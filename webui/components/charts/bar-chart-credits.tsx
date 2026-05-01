@@ -22,7 +22,7 @@ export function BarChartCredits({ data }: Props) {
       <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#e4e1ee" vertical={false} />
         <XAxis
-          dataKey="username"
+          dataKey="display_name"
           tick={{ fontSize: 12, fill: "#464555" }}
           tickLine={false}
           axisLine={false}

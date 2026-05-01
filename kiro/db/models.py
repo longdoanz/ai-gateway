@@ -85,6 +85,21 @@ class DailyUsage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
 
+class FallbackUsage(Base):
+    __tablename__ = "fallback_usage"
+    __table_args__ = (
+        UniqueConstraint("original_key_id", "fallback_key_id", "month", name="uq_fallback_usage_orig_fb_month"),
+        Index("ix_fallback_usage_month", "month"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    original_key_id: Mapped[int] = mapped_column(Integer, ForeignKey("api_keys.id"), nullable=False)
+    fallback_key_id: Mapped[int] = mapped_column(Integer, ForeignKey("api_keys.id"), nullable=False)
+    month: Mapped[str] = mapped_column(String(7), nullable=False)
+    credits: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+
 class SystemConfig(Base):
     __tablename__ = "system_config"
 

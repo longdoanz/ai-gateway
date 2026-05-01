@@ -73,13 +73,23 @@ async def test_aggregate_analytics_zero_fills_missing_dates():
         MagicMock(date="2026-04-27", credits=100),
     ]
 
-    # user_rows query returns 1 user
-    user_result = MagicMock()
-    user_result.all.return_value = [
-        MagicMock(id=1, username="alice", credits=100),
+    # kiro_rows query returns 1 kiro user
+    kiro_result = MagicMock()
+    kiro_result.all.return_value = [
+        MagicMock(kiro_user_id="kiro-alice", credits=100),
     ]
 
-    session.execute = AsyncMock(side_effect=[daily_result, user_result])
+    # build_kiro_email_lookup query
+    email_result = MagicMock()
+    email_result.all.return_value = []
+
+    # mapping_rows query
+    mapping_result = MagicMock()
+    mapping_result.all.return_value = [
+        MagicMock(kiro_user_id="kiro-alice", username="alice", email="alice@test.com"),
+    ]
+
+    session.execute = AsyncMock(side_effect=[daily_result, kiro_result, email_result, mapping_result])
 
     from unittest.mock import patch
     from datetime import date
@@ -99,3 +109,4 @@ async def test_aggregate_analytics_zero_fills_missing_dates():
     # User percentage
     assert len(result.top_users) == 1
     assert result.top_users[0].share_pct == 100.0
+    assert result.top_users[0].display_name == "alice"

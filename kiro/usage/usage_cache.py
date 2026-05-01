@@ -95,5 +95,8 @@ class UsageCache:
         if entry:
             entry.is_active = is_active
 
+    def remove_key(self, key_id: int) -> None:
+        self._cache.pop(key_id, None)
+
 
 usage_cache = UsageCache()

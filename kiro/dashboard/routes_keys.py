@@ -6,12 +6,14 @@ from kiro.dashboard.schemas import ApiKeyCreate, ApiKeyResponse, ApiKeyToggle, K
 from kiro.db.engine import get_session
 from kiro.db.models import User
 from kiro.db.repositories import (
+    build_kiro_email_lookup,
     create_api_key,
     get_api_key_by_hash,
     get_all_usage_for_month,
     get_usage_for_month,
     hash_api_key,
     list_api_keys,
+    resolve_kiro_email,
     update_api_key,
 )
 
@@ -26,7 +28,15 @@ async def get_keys(
     session: AsyncSession = Depends(get_session),
 ):
     user_id = None if caller.role == "admin" else caller.id
-    return await list_api_keys(session, user_id=user_id, limit=limit, offset=offset)
+    keys = await list_api_keys(session, user_id=user_id, limit=limit, offset=offset)
+    lookup = await build_kiro_email_lookup(session)
+    results = []
+    for k in keys:
+        resp = ApiKeyResponse.model_validate(k)
+        if k.kiro_user_id:
+            resp.kiro_email = resolve_kiro_email(k.kiro_user_id, lookup)
+        results.append(resp)
+    return results
 
 
 @router.post("", response_model=ApiKeyResponse, status_code=status.HTTP_201_CREATED)

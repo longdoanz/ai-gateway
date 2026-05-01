@@ -28,7 +28,7 @@ export function DonutChartShare({ data }: Props) {
         <Pie
           data={data}
           dataKey="credits"
-          nameKey="username"
+          nameKey="display_name"
           cx="50%"
           cy="45%"
           innerRadius="50%"

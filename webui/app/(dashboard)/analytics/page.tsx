@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAnalytics, type AnalyticsRange } from "@/hooks/use-analytics";
+import { useKiroCreditUsage } from "@/hooks/use-kiro-credit-usage";
 import { BarChartCredits } from "@/components/charts/bar-chart-credits";
 import { AreaChartUsage } from "@/components/charts/area-chart-usage";
 import { DonutChartShare } from "@/components/charts/donut-chart-share";
+import { KiroCreditUsageTable } from "@/components/charts/kiro-credit-usage-table";
 import { formatCredits } from "@/lib/utils";
 
 const RANGES: AnalyticsRange[] = ["7d", "30d", "90d"];
@@ -13,6 +15,7 @@ const RANGES: AnalyticsRange[] = ["7d", "30d", "90d"];
 export default function AnalyticsPage() {
   const [range, setRange] = useState<AnalyticsRange>("7d");
   const { data, isLoading, isError } = useAnalytics(range);
+  const { data: creditData, isLoading: creditLoading, isError: creditError } = useKiroCreditUsage();
 
   return (
     <div className="space-y-6">
@@ -84,12 +87,12 @@ export default function AnalyticsPage() {
               <EmptyState />
             ) : (
               data.top_users.map((u) => (
-                <div key={u.user_id} className="flex items-center justify-between p-3 rounded-xl hover:bg-surface-container transition-colors">
+                <div key={u.kiro_user_id} className="flex items-center justify-between p-3 rounded-xl hover:bg-surface-container transition-colors">
                   <div className="flex items-center gap-3">
                     <span className="w-6 h-6 rounded-full bg-primary-container flex items-center justify-center text-[10px] font-bold text-on-primary-container">
                       {u.rank}
                     </span>
-                    <span className="text-sm font-medium text-on-surface">{u.username}</span>
+                    <span className="text-sm font-medium text-on-surface">{u.display_name}</span>
                   </div>
                   <div className="text-right">
                     <div className="text-sm font-semibold text-primary">{formatCredits(u.credits)}</div>
@@ -114,6 +117,29 @@ export default function AnalyticsPage() {
               <DonutChartShare data={data.credit_share} />
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Row 3: Kiro User Credit Usage */}
+      <div className="glass-panel rounded-3xl p-0 overflow-hidden">
+        <div className="px-6 py-4 border-b border-outline-variant/30 flex items-center justify-between">
+          <h3 className="text-base font-semibold text-on-surface">Kiro User Credit Usage</h3>
+          {creditData?.month && (
+            <span className="text-xs text-on-surface-variant">{creditData.month}</span>
+          )}
+        </div>
+        <div className="p-2">
+          {creditLoading ? (
+            <div className="p-4 space-y-3">
+              {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}
+            </div>
+          ) : creditError ? (
+            <div className="p-6"><ErrorState /></div>
+          ) : !creditData?.users?.length ? (
+            <div className="p-6"><EmptyState /></div>
+          ) : (
+            <KiroCreditUsageTable data={creditData.users} />
+          )}
         </div>
       </div>
     </div>

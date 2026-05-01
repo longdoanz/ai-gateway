@@ -62,6 +62,7 @@ class ApiKeyResponse(BaseModel):
     id: int
     user_id: int
     kiro_user_id: str | None = None
+    kiro_email: str | None = None
     key_prefix: str
     key_suffix: str
     is_active: bool
@@ -148,22 +149,22 @@ class DailySeries(BaseModel):
 
 
 class UserCredit(BaseModel):
-    user_id: int
-    username: str
+    kiro_user_id: str
+    display_name: str
     credits: int
 
 
 class TopUser(BaseModel):
     rank: int
-    user_id: int
-    username: str
+    kiro_user_id: str
+    display_name: str
     credits: int
     share_pct: float
 
 
 class CreditShare(BaseModel):
-    user_id: int
-    username: str
+    kiro_user_id: str
+    display_name: str
     credits: int
     pct: float
 
@@ -174,3 +175,21 @@ class AnalyticsResponse(BaseModel):
     user_credits: list[UserCredit]
     top_users: list[TopUser]
     credit_share: list[CreditShare]
+
+
+# --- Kiro User Credit Usage ---
+
+class KiroUserCreditUsage(BaseModel):
+    kiro_user_id: str
+    username: str | None = None
+    email: str | None = None
+    used_credit: int
+    quota: int
+    remaining: int
+    remaining_pct: float
+    shared_usage: int
+
+
+class KiroUserCreditUsageResponse(BaseModel):
+    month: str
+    users: list[KiroUserCreditUsage]

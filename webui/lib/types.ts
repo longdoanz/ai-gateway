@@ -64,6 +64,7 @@ export interface ApiKeyResponse {
   id: number;
   user_id: number;
   kiro_user_id: string | null;
+  kiro_email: string | null;
   key_prefix: string;
   key_suffix: string;
   is_active: boolean;
@@ -130,22 +131,22 @@ export interface DailySeries {
 }
 
 export interface UserCredit {
-  user_id: number;
-  username: string;
+  kiro_user_id: string;
+  display_name: string;
   credits: number;
 }
 
 export interface TopUser {
   rank: number;
-  user_id: number;
-  username: string;
+  kiro_user_id: string;
+  display_name: string;
   credits: number;
   share_pct: number;
 }
 
 export interface CreditShare {
-  user_id: number;
-  username: string;
+  kiro_user_id: string;
+  display_name: string;
   credits: number;
   pct: number;
 }
@@ -156,4 +157,22 @@ export interface AnalyticsResponse {
   user_credits: UserCredit[];
   top_users: TopUser[];
   credit_share: CreditShare[];
+}
+
+// --- Kiro User Credit Usage ---
+
+export interface KiroUserCreditUsage {
+  kiro_user_id: string;
+  username: string | null;
+  email: string | null;
+  used_credit: number;
+  quota: number;
+  remaining: number;
+  remaining_pct: number;
+  shared_usage: number;
+}
+
+export interface KiroUserCreditUsageResponse {
+  month: string;
+  users: KiroUserCreditUsage[];
 }
