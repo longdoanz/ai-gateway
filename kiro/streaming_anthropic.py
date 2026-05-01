@@ -197,6 +197,7 @@ async def stream_kiro_to_anthropic(
     # Track context usage for token calculation
     context_usage_percentage: Optional[float] = None
     upstream_cache_usage: Dict[str, int] = {}
+    kiro_credits_used: Optional[int] = None
     
     # Track truncated tool calls for recovery
     truncated_tools: List[Dict[str, Any]] = []
@@ -522,6 +523,12 @@ async def stream_kiro_to_anthropic(
                 context_usage_percentage = event.context_usage_percentage
             elif event.type == "usage" and event.usage:
                 upstream_cache_usage.update(_extract_cache_usage_fields(event.usage))
+                if isinstance(event.usage, (int, float)) and event.usage > 0:
+                    kiro_credits_used = int(event.usage)
+                elif isinstance(event.usage, dict):
+                    raw = event.usage.get("credits") or event.usage.get("creditsUsed") or event.usage.get("currentUsage")
+                    if raw is not None:
+                        kiro_credits_used = int(raw)
         
         # Track completion signals for truncation detection
         stream_completed_normally = context_usage_percentage is not None
@@ -647,6 +654,8 @@ async def stream_kiro_to_anthropic(
             "output_tokens": output_tokens
         }
         usage_payload.update(upstream_cache_usage)
+        if kiro_credits_used is not None:
+            usage_payload["credits_used"] = kiro_credits_used
 
         yield format_sse_event("message_delta", {
             "type": "message_delta",
@@ -850,6 +859,12 @@ async def collect_anthropic_response(
         "output_tokens": output_tokens
     }
     usage_payload.update(upstream_cache_usage)
+    if isinstance(result.usage, (int, float)) and result.usage > 0:
+        usage_payload["credits_used"] = int(result.usage)
+    elif isinstance(result.usage, dict):
+        raw = result.usage.get("credits") or result.usage.get("creditsUsed") or result.usage.get("currentUsage")
+        if raw is not None:
+            usage_payload["credits_used"] = int(raw)
 
     return {
         "id": message_id,

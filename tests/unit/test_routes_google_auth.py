@@ -25,6 +25,7 @@ async def test_google_login_creates_new_user():
          patch("kiro.dashboard.routes_auth.GOOGLE_ALLOWED_DOMAIN", ""), \
          patch("kiro.dashboard.routes_auth.id_token.verify_oauth2_token", return_value=VALID_PAYLOAD), \
          patch("kiro.dashboard.routes_auth.get_user_by_google_id", new_callable=AsyncMock, return_value=None), \
+         patch("kiro.dashboard.routes_auth.get_user_by_email", new_callable=AsyncMock, return_value=None), \
          patch("kiro.dashboard.routes_auth.create_user", new_callable=AsyncMock) as mock_create, \
          patch("kiro.dashboard.routes_auth.create_access_token", return_value="access-tok"), \
          patch("kiro.dashboard.routes_auth.create_refresh_token", return_value="refresh-tok"):

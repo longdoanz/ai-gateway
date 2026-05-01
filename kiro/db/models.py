@@ -19,8 +19,10 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
     google_id: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True, index=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    can_create_gateway_key: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     api_keys: Mapped[list["ApiKey"]] = relationship("ApiKey", back_populates="owner", lazy="selectin")
+    gateway_key: Mapped["GatewayKey | None"] = relationship("GatewayKey", back_populates="owner", uselist=False, lazy="selectin")
 
 
 class KiroUserMapping(Base):
@@ -98,6 +100,56 @@ class FallbackUsage(Base):
     month: Mapped[str] = mapped_column(String(7), nullable=False)
     credits: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+
+class GatewayKey(Base):
+    __tablename__ = "gateway_keys"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
+    key_hash: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    key_prefix: Mapped[str] = mapped_column(String(20), nullable=False)
+    key_suffix: Mapped[str] = mapped_column(String(10), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+    owner: Mapped["User"] = relationship("User", back_populates="gateway_key")
+    usages: Mapped[list["GatewayKeyUsage"]] = relationship("GatewayKeyUsage", back_populates="gateway_key", lazy="selectin", cascade="all, delete-orphan")
+    daily_usages: Mapped[list["GatewayKeyDailyUsage"]] = relationship("GatewayKeyDailyUsage", back_populates="gateway_key", lazy="selectin", cascade="all, delete-orphan")
+
+
+class GatewayKeyUsage(Base):
+    __tablename__ = "gateway_key_usage"
+    __table_args__ = (
+        UniqueConstraint("gateway_key_id", "month", "key_id", name="uq_gw_key_usage_gwkey_month_poolkey"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gateway_key_id: Mapped[int] = mapped_column(Integer, ForeignKey("gateway_keys.id"), nullable=False)
+    month: Mapped[str] = mapped_column(String(7), nullable=False)
+    current_usage: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    key_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("api_keys.id"), nullable=True)
+
+    gateway_key: Mapped["GatewayKey"] = relationship("GatewayKey", back_populates="usages")
+
+
+class GatewayKeyDailyUsage(Base):
+    __tablename__ = "gateway_key_daily_usage"
+    __table_args__ = (
+        UniqueConstraint("gateway_key_id", "date", "key_id", name="uq_gw_daily_usage_gwkey_date_poolkey"),
+        Index("ix_gw_daily_usage_date", "date"),
+        Index("ix_gw_daily_usage_key_id", "key_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gateway_key_id: Mapped[int] = mapped_column(Integer, ForeignKey("gateway_keys.id"), nullable=False)
+    date: Mapped[str] = mapped_column(String(10), nullable=False)
+    credits: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    key_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("api_keys.id"), nullable=True)
+
+    gateway_key: Mapped["GatewayKey"] = relationship("GatewayKey", back_populates="daily_usages")
 
 
 class SystemConfig(Base):

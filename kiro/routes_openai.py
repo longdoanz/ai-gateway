@@ -146,9 +146,12 @@ async def get_models(request: Request):
     logger.info("Request to /v1/models")
 
     if API_KEY_MODE:
-        from kiro.api_key_mode import get_models_cached, get_api_key_from_request
+        from kiro.api_key_mode import get_models_cached, get_api_key_from_request, _resolve_gateway_key
         from kiro.config import HIDDEN_MODELS, HIDDEN_FROM_LIST
         api_key = get_api_key_from_request(request)
+        gw_result = await _resolve_gateway_key(api_key)
+        if gw_result:
+            api_key = gw_result[0]
         raw_models = await get_models_cached(api_key, request.app.state)
         model_ids = [m.get("modelId") or m.get("id") for m in raw_models if m.get("modelId") or m.get("id")]
         for display_name in HIDDEN_MODELS:

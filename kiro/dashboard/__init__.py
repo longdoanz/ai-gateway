@@ -7,6 +7,7 @@ from kiro.dashboard.routes_overview import router as overview_router
 from kiro.dashboard.routes_config import router as config_router
 from kiro.dashboard.routes_import import router as import_router
 from kiro.dashboard.routes_analytics import router as analytics_router
+from kiro.dashboard.routes_gateway_keys import router as gateway_keys_router
 
 dashboard_router = APIRouter(prefix="/api", tags=["dashboard"])
 dashboard_router.include_router(auth_router)
@@ -16,3 +17,4 @@ dashboard_router.include_router(overview_router)
 dashboard_router.include_router(config_router)
 dashboard_router.include_router(import_router)
 dashboard_router.include_router(analytics_router)
+dashboard_router.include_router(gateway_keys_router)

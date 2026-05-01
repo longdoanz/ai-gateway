@@ -64,7 +64,7 @@ async def apply_model_override(request_data: Any) -> None:
 
     original = request_data.model
     if original != enforced_model:
-        logger.info(f"Model override: {original} -> {enforced_model}")
+        logger.debug(f"Model override: {original} -> {enforced_model}")
     request_data.model = enforced_model
 
 

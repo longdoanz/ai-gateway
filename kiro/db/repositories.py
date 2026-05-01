@@ -12,7 +12,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiro.config import ENCRYPTION_KEY
-from kiro.db.models import ApiKey, DailyUsage, FallbackUsage, KeyUsage, KiroUserMapping, SystemConfig, User
+from kiro.db.models import ApiKey, DailyUsage, FallbackUsage, GatewayKey, GatewayKeyDailyUsage, GatewayKeyUsage, KeyUsage, KiroUserMapping, SystemConfig, User
 
 
 _fernet = None
@@ -80,6 +80,7 @@ async def create_user(
     role: str = "user",
     google_id: str | None = None,
     email: str | None = None,
+    can_create_gateway_key: bool = False,
 ) -> User:
     user = User(
         username=username,
@@ -87,6 +88,7 @@ async def create_user(
         role=role,
         google_id=google_id,
         email=email,
+        can_create_gateway_key=can_create_gateway_key,
     )
     session.add(user)
     await session.commit()
@@ -325,6 +327,83 @@ async def upsert_kiro_user_mappings(session: AsyncSession, mappings: list[dict])
             updated += 1
     await session.commit()
     return inserted, updated
+
+
+# --- GatewayKey ---
+
+GATEWAY_KEY_PREFIX = "iziaigw_"
+
+
+def generate_gateway_key() -> str:
+    import secrets
+    return GATEWAY_KEY_PREFIX + secrets.token_urlsafe(32)
+
+
+async def get_gateway_key_by_hash(session: AsyncSession, key_hash: str) -> GatewayKey | None:
+    result = await session.execute(select(GatewayKey).where(GatewayKey.key_hash == key_hash))
+    return result.scalar_one_or_none()
+
+
+async def get_gateway_key_by_user_id(session: AsyncSession, user_id: int) -> GatewayKey | None:
+    result = await session.execute(select(GatewayKey).where(GatewayKey.user_id == user_id))
+    return result.scalar_one_or_none()
+
+
+async def create_gateway_key(session: AsyncSession, user_id: int) -> tuple[GatewayKey, str]:
+    """Create a new gateway key. Returns (GatewayKey, raw_key). raw_key shown only once."""
+    raw_key = generate_gateway_key()
+    prefix = raw_key[:10]
+    suffix = raw_key[-4:]
+    gk = GatewayKey(
+        user_id=user_id,
+        key_hash=hash_api_key(raw_key),
+        key_prefix=prefix,
+        key_suffix=suffix,
+    )
+    session.add(gk)
+    await session.commit()
+    await session.refresh(gk)
+    return gk, raw_key
+
+
+async def delete_gateway_key(session: AsyncSession, user_id: int) -> bool:
+    from sqlalchemy import delete
+    result = await session.execute(
+        select(GatewayKey).where(GatewayKey.user_id == user_id)
+    )
+    gk = result.scalar_one_or_none()
+    if gk is None:
+        return False
+    await session.delete(gk)
+    await session.commit()
+    return True
+
+
+async def increment_gateway_key_usage(session: AsyncSession, gateway_key_id: int, month: str, amount: int = 1, key_id: int | None = None) -> None:
+    stmt = pg_insert(GatewayKeyUsage).values(
+        gateway_key_id=gateway_key_id, month=month, current_usage=amount, last_used_at=_utcnow(), key_id=key_id
+    )
+    stmt = stmt.on_conflict_do_update(
+        constraint="uq_gw_key_usage_gwkey_month_poolkey",
+        set_={"current_usage": GatewayKeyUsage.current_usage + amount, "last_used_at": _utcnow()},
+    )
+    await session.execute(stmt)
+    await session.commit()
+
+
+async def increment_gateway_key_daily_usage(session: AsyncSession, gateway_key_id: int, date: str, amount: int = 1, key_id: int | None = None) -> None:
+    stmt = pg_insert(GatewayKeyDailyUsage).values(gateway_key_id=gateway_key_id, date=date, credits=amount, key_id=key_id)
+    stmt = stmt.on_conflict_do_update(
+        constraint="uq_gw_daily_usage_gwkey_date_poolkey",
+        set_={"credits": GatewayKeyDailyUsage.credits + amount},
+    )
+    await session.execute(stmt)
+    await session.commit()
+
+
+async def get_user_by_email(session: AsyncSession, email: str) -> User | None:
+    result = await session.execute(select(User).where(User.email == email))
+    return result.scalar_one_or_none()
 
 
 # --- SystemConfig ---

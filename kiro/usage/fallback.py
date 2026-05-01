@@ -2,9 +2,7 @@ import asyncio
 
 from loguru import logger
 
-from kiro.db.engine import async_session_factory
-from kiro.db.repositories import decrypt_api_key
-from kiro.usage.usage_cache import usage_cache
+from kiro.usage.usage_cache import usage_cache, sticky_binder
 
 
 class NoAvailableKeyError(Exception):
@@ -13,8 +11,6 @@ class NoAvailableKeyError(Exception):
 
 class FallbackRouter:
     def __init__(self):
-        self._counter = 0
-        self._lock = asyncio.Lock()
         self._sharing_enabled: bool = False
 
     def update_sharing_config(self, enabled: bool) -> None:
@@ -39,6 +35,8 @@ class FallbackRouter:
         if not self._sharing_enabled:
             return None
         logger.info(f"Key {current_key_id} got 429, triggering fallback")
+        # 429 means bound key is rate-limited, force re-bind
+        sticky_binder.invalidate(current_key_id)
         return await self._pick_fallback_key(current_key_id)
 
     async def _pick_fallback_key(self, exclude_key_id: int) -> tuple[int, str]:
@@ -46,23 +44,7 @@ class FallbackRouter:
         if not available:
             raise NoAvailableKeyError("No available keys with remaining quota")
 
-        async with self._lock:
-            idx = self._counter % len(available)
-            self._counter += 1
-
-        picked_key_id = available[idx]
-
-        if async_session_factory is None:
-            raise NoAvailableKeyError("Database not configured")
-        from kiro.db.models import ApiKey
-        from sqlalchemy import select
-        async with async_session_factory() as session:
-            result = await session.execute(select(ApiKey.key_encrypted).where(ApiKey.id == picked_key_id))
-            encrypted = result.scalar_one_or_none()
-        if encrypted is None:
-            raise NoAvailableKeyError(f"Key {picked_key_id} not found in DB")
-
-        raw_key = decrypt_api_key(encrypted)
+        picked_key_id, raw_key = await sticky_binder.pick_and_decrypt(exclude_key_id, available)
         logger.info(f"Fallback: switched from key {exclude_key_id} to key {picked_key_id}")
         return picked_key_id, raw_key
 

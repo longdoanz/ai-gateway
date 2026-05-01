@@ -4,10 +4,12 @@ import { useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAnalytics, type AnalyticsRange } from "@/hooks/use-analytics";
 import { useKiroCreditUsage } from "@/hooks/use-kiro-credit-usage";
+import { useGatewayKeyAnalytics } from "@/hooks/use-gateway-key-analytics";
 import { BarChartCredits } from "@/components/charts/bar-chart-credits";
 import { AreaChartUsage } from "@/components/charts/area-chart-usage";
 import { DonutChartShare } from "@/components/charts/donut-chart-share";
 import { KiroCreditUsageTable } from "@/components/charts/kiro-credit-usage-table";
+import { GatewayKeyUsageTable } from "@/components/charts/gateway-key-usage-table";
 import { formatCredits } from "@/lib/utils";
 
 const RANGES: AnalyticsRange[] = ["7d", "30d", "90d"];
@@ -16,6 +18,7 @@ export default function AnalyticsPage() {
   const [range, setRange] = useState<AnalyticsRange>("7d");
   const { data, isLoading, isError } = useAnalytics(range);
   const { data: creditData, isLoading: creditLoading, isError: creditError } = useKiroCreditUsage();
+  const { data: gwData, isLoading: gwLoading, isError: gwError } = useGatewayKeyAnalytics(range);
 
   return (
     <div className="space-y-6">
@@ -140,6 +143,48 @@ export default function AnalyticsPage() {
           ) : (
             <KiroCreditUsageTable data={creditData.users} />
           )}
+        </div>
+      </div>
+
+      {/* Row 4: Gateway Key Usage */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="glass-panel rounded-3xl p-6">
+          <h3 className="text-base font-semibold text-on-surface mb-4">Gateway Key Daily Usage</h3>
+          <div className="h-[280px]">
+            {gwLoading ? (
+              <Skeleton className="h-full w-full rounded-xl" />
+            ) : gwError ? (
+              <ErrorState />
+            ) : !gwData?.daily_series?.length ? (
+              <EmptyState />
+            ) : (
+              <AreaChartUsage data={gwData.daily_series} />
+            )}
+          </div>
+        </div>
+
+        <div className="glass-panel rounded-3xl p-0 overflow-hidden">
+          <div className="px-6 py-4 border-b border-outline-variant/30 flex items-center justify-between">
+            <h3 className="text-base font-semibold text-on-surface">Gateway Key Users</h3>
+            {gwData && (
+              <span className="text-xs text-on-surface-variant">
+                {gwData.active_gateway_users} active / {gwData.total_gateway_users} total
+              </span>
+            )}
+          </div>
+          <div className="p-2">
+            {gwLoading ? (
+              <div className="p-4 space-y-3">
+                {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}
+              </div>
+            ) : gwError ? (
+              <div className="p-6"><ErrorState /></div>
+            ) : !gwData?.user_usages?.length ? (
+              <div className="p-6"><EmptyState /></div>
+            ) : (
+              <GatewayKeyUsageTable data={gwData.user_usages} />
+            )}
+          </div>
         </div>
       </div>
     </div>

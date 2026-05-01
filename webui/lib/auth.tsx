@@ -8,6 +8,7 @@ export interface AuthUser {
   id: number;
   role: "admin" | "user";
   username: string;
+  can_create_gateway_key: boolean;
 }
 
 interface AuthContextValue {
@@ -40,7 +41,12 @@ function userFromToken(token: string): AuthUser | null {
   const payload = decodeJwtPayload(token);
   if (!payload || payload.type !== "access") return null;
   if (payload.exp * 1000 < Date.now()) return null;
-  return { id: parseInt(payload.sub), role: payload.role, username: payload.username || "" };
+  return {
+    id: parseInt(payload.sub),
+    role: payload.role,
+    username: payload.username || "",
+    can_create_gateway_key: payload.can_create_gateway_key ?? false,
+  };
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {

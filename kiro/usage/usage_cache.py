@@ -100,3 +100,62 @@ class UsageCache:
 
 
 usage_cache = UsageCache()
+
+
+_STICKY_BIND_TTL = 900  # 15 minutes
+
+
+class StickyKeyBinder:
+    """Picks a pool key with sticky binding to preserve upstream prompt cache.
+
+    Each binding_id (gateway_key.id or original_key_id) is bound to one pool
+    key for 15 minutes. Re-binds when TTL expires or the bound key is no
+    longer available.
+    """
+
+    def __init__(self):
+        self._bindings: dict[int, tuple[int, float]] = {}
+
+    def pick(self, binding_id: int, available: list[int]) -> int:
+        now = time.time()
+        binding = self._bindings.get(binding_id)
+        if binding:
+            bound_key_id, bound_until = binding
+            if now < bound_until and bound_key_id in available:
+                return bound_key_id
+
+        best = max(
+            available,
+            key=lambda kid: (
+                (usage_cache.get(kid).usage_limit - usage_cache.get(kid).current_usage)
+                if usage_cache.get(kid) else 0
+            ),
+        )
+        self._bindings[binding_id] = (best, now + _STICKY_BIND_TTL)
+        return best
+
+    def invalidate(self, binding_id: int) -> None:
+        self._bindings.pop(binding_id, None)
+
+    async def pick_and_decrypt(self, binding_id: int, available: list[int]) -> tuple[int, str]:
+        """Pick a sticky key and decrypt it. Returns (key_id, raw_key)."""
+        from kiro.db.engine import async_session_factory
+        from kiro.db.repositories import decrypt_api_key
+        from kiro.db.models import ApiKey
+        from sqlalchemy import select
+
+        picked_key_id = self.pick(binding_id, available)
+
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(ApiKey.key_encrypted).where(ApiKey.id == picked_key_id)
+            )
+            encrypted = result.scalar_one_or_none()
+        if encrypted is None:
+            self.invalidate(binding_id)
+            raise KeyError(f"Key {picked_key_id} not found in DB")
+
+        return picked_key_id, decrypt_api_key(encrypted)
+
+
+sticky_binder = StickyKeyBinder()

@@ -23,6 +23,7 @@ export interface JwtPayload {
   sub: string;
   role: "admin" | "user";
   username: string;
+  can_create_gateway_key: boolean;
   exp: number;
   type: "access" | "refresh";
 }
@@ -39,6 +40,7 @@ export interface UserUpdate {
   is_active?: boolean;
   password?: string;
   role?: "admin" | "user";
+  can_create_gateway_key?: boolean;
 }
 
 export interface UserResponse {
@@ -47,6 +49,7 @@ export interface UserResponse {
   role: string;
   is_active: boolean;
   created_at: string;
+  can_create_gateway_key: boolean;
 }
 
 export interface UserDetailResponse extends UserResponse {
@@ -99,6 +102,9 @@ export interface OverviewResponse {
   active_users: number;
   active_keys: number;
   daily_usage: DailyUsage[];
+  total_gateway_users: number;
+  active_gateway_users: number;
+  gateway_credits_used: number;
 }
 
 // --- Config ---
@@ -175,4 +181,42 @@ export interface KiroUserCreditUsage {
 export interface KiroUserCreditUsageResponse {
   month: string;
   users: KiroUserCreditUsage[];
+}
+
+// --- GatewayKey ---
+
+export interface GatewayKeyResponse {
+  id: number;
+  user_id: number;
+  key_prefix: string;
+  key_suffix: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface GatewayKeyCreated extends GatewayKeyResponse {
+  raw_key: string;
+}
+
+// --- Gateway Key Analytics ---
+
+export interface GatewayKeyDailySeries {
+  date: string;
+  credits: number;
+}
+
+export interface GatewayKeyUserUsage {
+  gateway_key_id: number;
+  user_id: number;
+  username: string;
+  credits: number;
+}
+
+export interface GatewayKeyAnalyticsResponse {
+  time_range: string;
+  total_credits: number;
+  total_gateway_users: number;
+  active_gateway_users: number;
+  daily_series: GatewayKeyDailySeries[];
+  user_usages: GatewayKeyUserUsage[];
 }

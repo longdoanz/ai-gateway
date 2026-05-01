@@ -9,9 +9,10 @@ from kiro.dashboard.deps import get_current_user
 from kiro.dashboard.schemas import (
     AnalyticsResponse, CreditShare, DailySeries, TopUser, UserCredit,
     KiroUserCreditUsage, KiroUserCreditUsageResponse,
+    GatewayKeyDailySeries, GatewayKeyUserUsage, GatewayKeyAnalyticsResponse,
 )
 from kiro.db.engine import get_session
-from kiro.db.models import ApiKey, DailyUsage, FallbackUsage, KeyUsage, KiroUserMapping, User
+from kiro.db.models import ApiKey, DailyUsage, FallbackUsage, GatewayKey, GatewayKeyDailyUsage, GatewayKeyUsage, KeyUsage, KiroUserMapping, User
 
 router = APIRouter(prefix="/overview", tags=["analytics"])
 
@@ -35,7 +36,14 @@ async def _aggregate_analytics(
         .order_by(DailyUsage.date)
     )).all()
 
-    daily_map = {row.date: row.credits for row in daily_rows}
+    gw_daily_rows = (await session.execute(
+        select(GatewayKeyDailyUsage.date, func.sum(GatewayKeyDailyUsage.credits).label("credits"))
+        .where(GatewayKeyDailyUsage.date >= start_str, GatewayKeyDailyUsage.date <= end_str)
+        .group_by(GatewayKeyDailyUsage.date)
+    )).all()
+    gw_daily_map = {row.date: row.credits for row in gw_daily_rows}
+
+    daily_map = {row.date: max(0, row.credits - gw_daily_map.get(row.date, 0)) for row in daily_rows}
     daily_series = [
         DailySeries(
             date=(start + timedelta(days=i)).isoformat(),
@@ -59,6 +67,18 @@ async def _aggregate_analytics(
         .order_by(func.sum(DailyUsage.credits).desc())
     )).all()
 
+    gw_user_rows = (await session.execute(
+        select(ApiKey.kiro_user_id, func.sum(GatewayKeyDailyUsage.credits).label("gw_credits"))
+        .join(GatewayKeyDailyUsage, GatewayKeyDailyUsage.key_id == ApiKey.id)
+        .where(
+            GatewayKeyDailyUsage.date >= start_str,
+            GatewayKeyDailyUsage.date <= end_str,
+            ApiKey.kiro_user_id.isnot(None),
+        )
+        .group_by(ApiKey.kiro_user_id)
+    )).all()
+    gw_user_map = {row.kiro_user_id: row.gw_credits for row in gw_user_rows}
+
     email_lookup = await build_kiro_email_lookup(session)
     mapping_rows = (await session.execute(
         select(KiroUserMapping.kiro_user_id, KiroUserMapping.username, KiroUserMapping.email)
@@ -74,30 +94,61 @@ async def _aggregate_analytics(
                 return v
         return email_lookup.get(kiro_uid) or email_lookup.get(normalized) or kiro_uid
 
-    total = sum(r.credits for r in kiro_rows) or 1
+    # Build merged credit map: kiro users (own usage) + gateway key users
+    merged: dict[str, dict] = {}
+    for r in kiro_rows:
+        own_credits = max(0, r.credits - gw_user_map.get(r.kiro_user_id, 0))
+        if own_credits > 0:
+            merged[r.kiro_user_id] = {
+                "display_name": _display_name(r.kiro_user_id),
+                "credits": own_credits,
+            }
+
+    # Add gateway key user credits (keyed by "gw:<username>")
+    gw_user_credit_rows = (await session.execute(
+        select(
+            User.username,
+            func.sum(GatewayKeyDailyUsage.credits).label("credits"),
+        )
+        .join(GatewayKey, GatewayKey.id == GatewayKeyDailyUsage.gateway_key_id)
+        .join(User, User.id == GatewayKey.user_id)
+        .where(GatewayKeyDailyUsage.date >= start_str, GatewayKeyDailyUsage.date <= end_str)
+        .group_by(User.username)
+        .order_by(func.sum(GatewayKeyDailyUsage.credits).desc())
+    )).all()
+
+    for r in gw_user_credit_rows:
+        key = f"gw:{r.username}"
+        merged[key] = {
+            "display_name": f"{r.username} [GW]",
+            "credits": r.credits,
+        }
+
+    sorted_merged = sorted(merged.items(), key=lambda x: x[1]["credits"], reverse=True)
+    total = sum(v["credits"] for _, v in sorted_merged) or 1
 
     user_credits = [
-        UserCredit(kiro_user_id=r.kiro_user_id, display_name=_display_name(r.kiro_user_id), credits=r.credits)
-        for r in kiro_rows
+        UserCredit(kiro_user_id=uid, display_name=v["display_name"], credits=v["credits"])
+        for uid, v in sorted_merged
     ]
     top_users = [
         TopUser(
             rank=i + 1,
-            kiro_user_id=r.kiro_user_id,
-            display_name=_display_name(r.kiro_user_id),
-            credits=r.credits,
-            share_pct=round(r.credits / total * 100, 1),
+            kiro_user_id=uid,
+            display_name=v["display_name"],
+            credits=v["credits"],
+            share_pct=round(v["credits"] / total * 100, 1),
         )
-        for i, r in enumerate(kiro_rows[:10])
+        for i, (uid, v) in enumerate(sorted_merged[:10])
     ]
     credit_share = [
         CreditShare(
-            kiro_user_id=r.kiro_user_id,
-            display_name=_display_name(r.kiro_user_id),
-            credits=r.credits,
-            pct=round(r.credits / total * 100, 1),
+            kiro_user_id=uid,
+            display_name=v["display_name"],
+            credits=v["credits"],
+            pct=round(v["credits"] / total * 100, 1),
         )
-        for r in kiro_rows
+        for uid, v in sorted_merged
     ]
 
     return AnalyticsResponse(
@@ -160,6 +211,18 @@ async def _aggregate_kiro_credit_usage(
     for row in fallback_rows:
         fallback_map[row.kiro_user_id] = row.shared_usage
 
+    # Gateway usage through this user's pool keys (monthly)
+    gw_pool_rows = (await session.execute(
+        select(
+            ApiKey.kiro_user_id,
+            func.coalesce(func.sum(GatewayKeyUsage.current_usage), 0).label("gw_pool_usage"),
+        )
+        .join(GatewayKeyUsage, GatewayKeyUsage.key_id == ApiKey.id)
+        .where(GatewayKeyUsage.month == month, ApiKey.kiro_user_id.isnot(None))
+        .group_by(ApiKey.kiro_user_id)
+    )).all()
+    gw_pool_map: dict[str, int] = {row.kiro_user_id: row.gw_pool_usage for row in gw_pool_rows}
+
     # Kiro user info lookup
     mapping_rows = (await session.execute(
         select(KiroUserMapping.kiro_user_id, KiroUserMapping.username, KiroUserMapping.email)
@@ -168,9 +231,11 @@ async def _aggregate_kiro_credit_usage(
 
     users = []
     for kiro_uid, data in usage_map.items():
-        used = data["used_credit"]
+        total_used = data["used_credit"]
         quota = data["quota"]
-        remaining = quota - used
+        shared = fallback_map.get(kiro_uid, 0) + gw_pool_map.get(kiro_uid, 0)
+        used = max(0, total_used - shared)
+        remaining = quota - total_used
         remaining_pct = round(remaining / quota * 100, 1) if quota > 0 else 0.0
         username, email = info_map.get(kiro_uid, (None, None))
         users.append(KiroUserCreditUsage(
@@ -181,7 +246,7 @@ async def _aggregate_kiro_credit_usage(
             quota=quota,
             remaining=remaining,
             remaining_pct=remaining_pct,
-            shared_usage=fallback_map.get(kiro_uid, 0),
+            shared_usage=shared,
         ))
 
     users.sort(key=lambda u: u.used_credit, reverse=True)
@@ -198,3 +263,68 @@ async def get_kiro_credit_usage(
     if not month:
         month = dt.now(timezone.utc).strftime("%Y-%m")
     return await _aggregate_kiro_credit_usage(session, month)
+
+
+@router.get("/analytics/gateway-key-usage", response_model=GatewayKeyAnalyticsResponse)
+async def get_gateway_key_analytics(
+    range_key: str = Query(default="7d", alias="range", pattern="^(7d|30d|90d)$"),
+    caller: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> GatewayKeyAnalyticsResponse:
+    days = _RANGE_DAYS[range_key]
+    today = dt.now(timezone.utc).date()
+    start = today - timedelta(days=days - 1)
+    start_str = start.isoformat()
+    end_str = today.isoformat()
+
+    daily_rows = (await session.execute(
+        select(GatewayKeyDailyUsage.date, func.sum(GatewayKeyDailyUsage.credits).label("credits"))
+        .where(GatewayKeyDailyUsage.date >= start_str, GatewayKeyDailyUsage.date <= end_str)
+        .group_by(GatewayKeyDailyUsage.date)
+        .order_by(GatewayKeyDailyUsage.date)
+    )).all()
+
+    daily_map = {row.date: row.credits for row in daily_rows}
+    daily_series = [
+        GatewayKeyDailySeries(
+            date=(start + timedelta(days=i)).isoformat(),
+            credits=daily_map.get((start + timedelta(days=i)).isoformat(), 0),
+        )
+        for i in range(days)
+    ]
+
+    total_credits = sum(ds.credits for ds in daily_series)
+
+    user_rows = (await session.execute(
+        select(
+            GatewayKey.id.label("gateway_key_id"),
+            GatewayKey.user_id,
+            User.username,
+            func.sum(GatewayKeyDailyUsage.credits).label("credits"),
+        )
+        .join(GatewayKeyDailyUsage, GatewayKeyDailyUsage.gateway_key_id == GatewayKey.id)
+        .join(User, User.id == GatewayKey.user_id)
+        .where(GatewayKeyDailyUsage.date >= start_str, GatewayKeyDailyUsage.date <= end_str)
+        .group_by(GatewayKey.id, GatewayKey.user_id, User.username)
+        .order_by(func.sum(GatewayKeyDailyUsage.credits).desc())
+    )).all()
+
+    user_usages = [
+        GatewayKeyUserUsage(
+            gateway_key_id=r.gateway_key_id, user_id=r.user_id,
+            username=r.username, credits=r.credits,
+        )
+        for r in user_rows
+    ]
+
+    total_gw_users = (await session.execute(
+        select(func.count()).select_from(GatewayKey)
+    )).scalar_one()
+
+    active_gw_users = len(user_usages)
+
+    return GatewayKeyAnalyticsResponse(
+        time_range=range_key, total_credits=total_credits,
+        total_gateway_users=total_gw_users, active_gateway_users=active_gw_users,
+        daily_series=daily_series, user_usages=user_usages,
+    )

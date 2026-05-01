@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from kiro.dashboard.deps import get_current_user
 from kiro.dashboard.schemas import DailyUsage, OverviewResponse
 from kiro.db.engine import get_session
-from kiro.db.models import ApiKey, DailyUsage as DailyUsageModel, KeyUsage, KiroUserMapping, User
+from kiro.db.models import ApiKey, DailyUsage as DailyUsageModel, GatewayKey, GatewayKeyDailyUsage, GatewayKeyUsage, KeyUsage, KiroUserMapping, User
 
 router = APIRouter(prefix="/overview", tags=["overview"])
 
@@ -52,29 +52,49 @@ async def get_overview(
 ):
     current_month = datetime.now(timezone.utc).strftime("%Y-%m")
 
-    # Total credits used & limit this month
+    # Total credits used & limit this month (MAX per user to avoid double-counting)
+    per_user_subq = (
+        select(
+            ApiKey.kiro_user_id,
+            func.max(KeyUsage.current_usage).label("current_usage"),
+            func.max(KeyUsage.usage_limit).label("usage_limit"),
+        )
+        .join(ApiKey, ApiKey.id == KeyUsage.key_id)
+        .where(KeyUsage.month == current_month, ApiKey.kiro_user_id.isnot(None))
+        .group_by(ApiKey.kiro_user_id)
+        .subquery()
+    )
     usage_result = await session.execute(
         select(
-            func.coalesce(func.sum(KeyUsage.current_usage), 0),
-            func.coalesce(func.sum(KeyUsage.usage_limit), 0),
-        ).where(KeyUsage.month == current_month)
+            func.coalesce(func.sum(per_user_subq.c.current_usage), 0),
+            func.coalesce(func.sum(per_user_subq.c.usage_limit), 0),
+        )
     )
     total_used, total_limit = usage_result.one()
 
     # Active users: distinct kiro users who consumed credits this month
-    active_users = (await session.execute(
+    active_kiro_users = (await session.execute(
         select(func.count(func.distinct(ApiKey.kiro_user_id)))
         .join(KeyUsage, KeyUsage.key_id == ApiKey.id)
         .where(KeyUsage.month == current_month, KeyUsage.current_usage > 0)
     )).scalar_one()
+    active_gw_users = (await session.execute(
+        select(func.count(func.distinct(GatewayKeyUsage.gateway_key_id)))
+        .where(GatewayKeyUsage.month == current_month, GatewayKeyUsage.current_usage > 0)
+    )).scalar_one()
+    active_users = active_kiro_users + active_gw_users
     active_keys = (await session.execute(select(func.count()).where(ApiKey.is_active == True))).scalar_one()
 
-    # Total Kiro users with at least one active API key
-    total_users = (await session.execute(
+    # Total Kiro users with at least one active API key + gateway key users
+    total_kiro_users = (await session.execute(
         select(func.count(func.distinct(KiroUserMapping.kiro_user_id)))
         .join(ApiKey, ApiKey.kiro_user_id == KiroUserMapping.kiro_user_id)
         .where(ApiKey.is_active == True)
     )).scalar_one()
+    total_gw_users = (await session.execute(
+        select(func.count()).select_from(GatewayKey).where(GatewayKey.is_active == True)
+    )).scalar_one()
+    total_users = total_kiro_users + total_gw_users
 
     # Date range: for weekly/monthly we go back further to have meaningful data
     today = datetime.now(timezone.utc).date()
@@ -95,7 +115,14 @@ async def get_overview(
         .order_by(DailyUsageModel.date)
     )).all()
 
-    daily_map = {row.date: row.credits for row in daily_rows}
+    gw_daily_rows = (await session.execute(
+        select(GatewayKeyDailyUsage.date, func.sum(GatewayKeyDailyUsage.credits).label("credits"))
+        .where(GatewayKeyDailyUsage.date >= start_str, GatewayKeyDailyUsage.date <= end_str)
+        .group_by(GatewayKeyDailyUsage.date)
+    )).all()
+    gw_daily_map = {row.date: row.credits for row in gw_daily_rows}
+
+    daily_map = {row.date: max(0, row.credits - gw_daily_map.get(row.date, 0)) for row in daily_rows}
 
     if granularity == Granularity.weekly:
         daily_usage = _aggregate_weekly(daily_map, start_date, today)
@@ -118,4 +145,15 @@ async def get_overview(
         active_users=active_users,
         active_keys=active_keys,
         daily_usage=daily_usage,
+        total_gateway_users=(await session.execute(
+            select(func.count()).select_from(GatewayKey).where(GatewayKey.is_active == True)
+        )).scalar_one(),
+        active_gateway_users=(await session.execute(
+            select(func.count(func.distinct(GatewayKeyUsage.gateway_key_id)))
+            .where(GatewayKeyUsage.month == current_month, GatewayKeyUsage.current_usage > 0)
+        )).scalar_one(),
+        gateway_credits_used=int((await session.execute(
+            select(func.coalesce(func.sum(GatewayKeyUsage.current_usage), 0))
+            .where(GatewayKeyUsage.month == current_month)
+        )).scalar_one()),
     )

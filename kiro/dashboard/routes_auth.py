@@ -12,7 +12,7 @@ from kiro.config import GOOGLE_CLIENT_ID, GOOGLE_ALLOWED_DOMAIN
 from kiro.dashboard.jwt_auth import create_access_token, create_refresh_token, decode_token
 from kiro.dashboard.schemas import GoogleLoginRequest, LoginRequest, RefreshRequest, TokenResponse
 from kiro.db.engine import get_session
-from kiro.db.repositories import create_user, get_user_by_google_id, get_user_by_id, get_user_by_username, verify_password
+from kiro.db.repositories import create_user, get_user_by_email, get_user_by_google_id, get_user_by_id, get_user_by_username, update_user, verify_password
 
 _login_attempts: dict[str, list[float]] = defaultdict(list)
 MAX_LOGIN_ATTEMPTS = 5
@@ -44,7 +44,7 @@ async def login(body: LoginRequest, request: Request, session: AsyncSession = De
     if user is None or not user.is_active or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     return TokenResponse(
-        access_token=create_access_token(user.id, user.role, user.username),
+        access_token=create_access_token(user.id, user.role, user.username, user.can_create_gateway_key),
         refresh_token=create_refresh_token(user.id),
     )
 
@@ -58,7 +58,7 @@ async def refresh(body: RefreshRequest, session: AsyncSession = Depends(get_sess
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
     return TokenResponse(
-        access_token=create_access_token(user.id, user.role, user.username),
+        access_token=create_access_token(user.id, user.role, user.username, user.can_create_gateway_key),
         refresh_token=create_refresh_token(user.id),
     )
 
@@ -89,18 +89,27 @@ async def google_login(body: GoogleLoginRequest, session: AsyncSession = Depends
 
     user = await get_user_by_google_id(session, google_id)
     if user is None:
-        user = await create_user(
-            session,
-            username=email,
-            password=secrets.token_hex(32),
-            role="user",
-            google_id=google_id,
-            email=email,
-        )
+        # Check if a pre-provisioned account exists for this email
+        user = await get_user_by_email(session, email)
+        if user is not None:
+            # Link the Google ID to the existing pre-provisioned account
+            if not user.is_active:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account is disabled")
+            await update_user(session, user.id, google_id=google_id, username=email if user.username == email else user.username)
+            user = await get_user_by_google_id(session, google_id)
+        else:
+            user = await create_user(
+                session,
+                username=email,
+                password=secrets.token_hex(32),
+                role="user",
+                google_id=google_id,
+                email=email,
+            )
     elif not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account is disabled")
 
     return TokenResponse(
-        access_token=create_access_token(user.id, user.role, user.username),
+        access_token=create_access_token(user.id, user.role, user.username, user.can_create_gateway_key),
         refresh_token=create_refresh_token(user.id),
     )

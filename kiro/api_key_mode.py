@@ -29,7 +29,6 @@ The client's Bearer token is forwarded directly to the Kiro API.
 """
 
 import asyncio
-import hashlib
 import json
 import time
 import uuid
@@ -192,19 +191,20 @@ def get_api_key_from_request(request: Request) -> str:
 def get_token_fingerprint(token: str) -> str:
     """
     Generates a unique fingerprint from a Kiro API token.
-    
+
     In API Key Mode, each user has their own token, so we derive
     a unique fingerprint per token. This makes each user look like
     a separate Kiro IDE installation to AWS, which is more natural
     than all users sharing the same server-level fingerprint.
-    
+
     Args:
         token: Kiro API key supplied by the client.
-    
+
     Returns:
         SHA256 hex digest of the token (64 chars).
     """
-    return hashlib.sha256(token.encode()).hexdigest()
+    from kiro.db.repositories import hash_api_key
+    return hash_api_key(token)
 
 
 def build_api_key_headers(token: str, stream: bool = False) -> dict:
@@ -262,6 +262,60 @@ def build_api_key_headers(token: str, stream: bool = False) -> dict:
         "Connection": "close",
         "tokentype": "API_KEY",
     }
+
+
+
+
+async def _resolve_gateway_key(token: str) -> tuple[str, int, int] | None:
+    """If token is a gateway key (iziaigw_ prefix), resolve it to a Kiro key.
+
+    Uses sticky binding via StickyKeyBinder to preserve upstream prompt cache.
+
+    Returns (kiro_raw_key, kiro_key_id, gateway_key_id) or None if not a gateway key.
+    """
+    if not token.startswith("iziaigw_"):
+        return None
+    if not is_db_configured():
+        return None
+    try:
+        from kiro.db.repositories import get_gateway_key_by_hash, hash_api_key
+        from kiro.usage.usage_cache import usage_cache, sticky_binder
+
+        key_hash = hash_api_key(token)
+        from kiro.db.engine import async_session_factory
+        async with async_session_factory() as session:
+            gk = await get_gateway_key_by_hash(session, key_hash)
+            if gk is None or not gk.is_active:
+                return None
+
+        available = usage_cache.get_available_keys()
+        if not available:
+            logger.warning("Gateway key used but no Kiro keys available in pool")
+            return None
+
+        best_key_id, raw_kiro_key = await sticky_binder.pick_and_decrypt(gk.id, available)
+        return raw_kiro_key, best_key_id, gk.id
+    except Exception as e:
+        logger.debug(f"Gateway key resolution failed: {e}")
+        return None
+
+
+async def _track_gateway_key_usage(gateway_key_id: int, credits: int | None, key_id: int | None = None) -> None:
+    if not is_db_configured():
+        return
+    try:
+        from kiro.db.engine import async_session_factory
+        from kiro.db.repositories import increment_gateway_key_usage
+        from kiro.usage.daily_buffer import gateway_key_daily_buffer
+        import time
+        month = time.strftime("%Y-%m")
+        amount = credits if credits is not None and credits > 0 else 1
+        async with async_session_factory() as session:
+            await increment_gateway_key_usage(session, gateway_key_id, month, amount, key_id=key_id)
+        today = time.strftime("%Y-%m-%d")
+        gateway_key_daily_buffer.record(gateway_key_id, today, amount, key_id=key_id)
+    except Exception as e:
+        logger.debug(f"Gateway key usage tracking failed: {e}")
 
 
 async def _resolve_key_id(token: str) -> int | None:
@@ -370,6 +424,77 @@ async def _track_usage_background(key_id: int | None, credits: int | None) -> No
         record_activity(key_id)
     except Exception as e:
         logger.debug(f"Usage tracking failed: {e}")
+
+
+def _extract_credits_from_chunk(chunk: str) -> int | None:
+    try:
+        for line in chunk.splitlines():
+            if line.startswith("data: ") and line != "data: [DONE]":
+                parsed = json.loads(line[6:])
+                val = parsed.get("usage", {}).get("credits_used")
+                if val is not None:
+                    return int(val)
+    except Exception:
+        pass
+    return None
+
+
+from dataclasses import dataclass
+
+@dataclass
+class _ResolvedToken:
+    token: str
+    key_id: int | None
+    original_key_id: int | None
+    gateway_key_id: int | None
+
+
+async def _resolve_token_and_keys(token: str, error_detail_for_gw_fail: Any) -> _ResolvedToken:
+    """Resolve gateway key, fallback, and key_id. Shared by both chat handlers."""
+    gateway_key_id: int | None = None
+
+    gw_result = await _resolve_gateway_key(token)
+    if gw_result is not None:
+        token, key_id, gateway_key_id = gw_result[0], gw_result[1], gw_result[2]
+        original_key_id = key_id
+    elif token.startswith("iziaigw_"):
+        raise HTTPException(status_code=503, detail=error_detail_for_gw_fail)
+    else:
+        key_id = await _resolve_key_id(token)
+        original_key_id = key_id
+
+    fallback_result = await _try_fallback_pre_check(token, key_id)
+    if fallback_result:
+        token, key_id = fallback_result[0], fallback_result[1]
+
+    return _ResolvedToken(token=token, key_id=key_id, original_key_id=original_key_id, gateway_key_id=gateway_key_id)
+
+
+async def _read_error_response(response, http_client: "ApiKeyModeClient") -> str:
+    """Read and enhance error text from a non-200 Kiro API response."""
+    try:
+        error_content = await response.aread()
+    except Exception:
+        error_content = b"Unknown error"
+    await http_client.close()
+    error_text = error_content.decode("utf-8", errors="replace")
+    try:
+        error_json = json.loads(error_text)
+        from kiro.kiro_errors import enhance_kiro_error
+        error_info = enhance_kiro_error(error_json)
+        error_text = error_info.user_message
+    except (json.JSONDecodeError, KeyError):
+        pass
+    return error_text
+
+
+async def _track_all_usage(
+    key_id: int | None, original_key_id: int | None, gateway_key_id: int | None, credits: int | None
+) -> None:
+    await _track_usage_background(key_id, credits)
+    await _track_fallback_usage_background(original_key_id, key_id, credits)
+    if gateway_key_id is not None:
+        await _track_gateway_key_usage(gateway_key_id, credits, key_id=key_id)
 
 
 async def _track_fallback_usage_background(
@@ -486,6 +611,12 @@ class ApiKeyModeClient:
                     # User-supplied token is invalid — do not retry
                     logger.warning("ApiKeyModeClient: received 403, user-supplied Kiro API key is invalid")
                     if self.key_id is not None and is_db_configured():
+                        # Update cache immediately so subsequent requests don't reuse this key
+                        try:
+                            from kiro.usage.usage_cache import usage_cache
+                            usage_cache.set_key_active(self.key_id, False)
+                        except Exception:
+                            pass
                         asyncio.ensure_future(_deactivate_key(self.key_id))
                     raise HTTPException(
                         status_code=401,
@@ -634,13 +765,11 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
     from kiro.cache import ModelInfoCache
 
     token = get_api_key_from_request(request)
-    key_id = await _resolve_key_id(token)
-    original_key_id = key_id
-
-    # Fallback pre-check: swap key if current one is near quota
-    fallback_result = await _try_fallback_pre_check(token, key_id)
-    if fallback_result:
-        token, key_id = fallback_result[0], fallback_result[1]
+    resolved = await _resolve_token_and_keys(
+        token,
+        error_detail_for_gw_fail={"error": {"message": "Gateway key is invalid, inactive, or no API keys are available in the pool. Please try again later.", "type": "service_unavailable", "code": 503}},
+    )
+    token, key_id, original_key_id, gateway_key_id = resolved.token, resolved.key_id, resolved.original_key_id, resolved.gateway_key_id
 
     auth_adapter = ApiKeyAuthAdapter(token)
     model_cache: ModelInfoCache = request.app.state.model_cache
@@ -666,19 +795,7 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
         response = await http_client.request_with_retry("POST", url, kiro_payload, stream=True)
 
         if response.status_code != 200:
-            try:
-                error_content = await response.aread()
-            except Exception:
-                error_content = b"Unknown error"
-            await http_client.close()
-            error_text = error_content.decode("utf-8", errors="replace")
-            try:
-                error_json = json.loads(error_text)
-                from kiro.kiro_errors import enhance_kiro_error
-                error_info = enhance_kiro_error(error_json)
-                error_text = error_info.user_message
-            except (json.JSONDecodeError, KeyError):
-                pass
+            error_text = await _read_error_response(response, http_client)
             return JSONResponse(
                 status_code=response.status_code,
                 content={"error": {"message": error_text, "type": "kiro_api_error", "code": response.status_code}},
@@ -689,6 +806,7 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
 
         if request_data.stream:
             async def stream_wrapper():
+                credits_from_stream: int | None = None
                 try:
                     async def make_retry_request():
                         return await http_client.request_with_retry("POST", url, kiro_payload, stream=True)
@@ -704,6 +822,8 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
                         request_tools=tools_for_tokenizer,
                     ):
                         yield chunk
+                        if credits_from_stream is None and '"credits_used"' in chunk:
+                            credits_from_stream = _extract_credits_from_chunk(chunk)
                 except GeneratorExit:
                     pass
                 except Exception as e:
@@ -713,8 +833,7 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
                         pass
                     raise
                 finally:
-                    await _track_usage_background(key_id, None)
-                    await _track_fallback_usage_background(original_key_id, key_id, None)
+                    await _track_all_usage(key_id, original_key_id, gateway_key_id, credits_from_stream)
                     await http_client.close()
 
             return StreamingResponse(stream_wrapper(), media_type="text/event-stream")
@@ -735,8 +854,7 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
                 credits = extract_credits_from_response(openai_response)
             except Exception:
                 pass
-            await _track_usage_background(key_id, credits)
-            await _track_fallback_usage_background(original_key_id, key_id, credits)
+            await _track_all_usage(key_id, original_key_id, gateway_key_id, credits)
             await http_client.close()
             return JSONResponse(content=openai_response)
 
@@ -791,12 +909,17 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
             },
         )
 
-    key_id = await _resolve_key_id(raw_token)
-    original_key_id = key_id
-
-    fallback_result = await _try_fallback_pre_check(raw_token, key_id)
-    if fallback_result:
-        raw_token, key_id = fallback_result[0], fallback_result[1]
+    resolved = await _resolve_token_and_keys(
+        raw_token,
+        error_detail_for_gw_fail={
+            "type": "error",
+            "error": {
+                "type": "service_unavailable",
+                "message": "Gateway key is invalid, inactive, or no API keys are available in the pool. Please try again later.",
+            },
+        },
+    )
+    raw_token, key_id, original_key_id, gateway_key_id = resolved.token, resolved.key_id, resolved.original_key_id, resolved.gateway_key_id
 
     auth_adapter = ApiKeyAuthAdapter(raw_token)
     model_cache: ModelInfoCache = request.app.state.model_cache
@@ -833,19 +956,7 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
         response = await http_client.request_with_retry("POST", url, kiro_payload, stream=True)
 
         if response.status_code != 200:
-            try:
-                error_content = await response.aread()
-            except Exception:
-                error_content = b"Unknown error"
-            await http_client.close()
-            error_text = error_content.decode("utf-8", errors="replace")
-            try:
-                error_json = json.loads(error_text)
-                from kiro.kiro_errors import enhance_kiro_error
-                error_info = enhance_kiro_error(error_json)
-                error_text = error_info.user_message
-            except (json.JSONDecodeError, KeyError):
-                pass
+            error_text = await _read_error_response(response, http_client)
             return JSONResponse(
                 status_code=response.status_code,
                 content={"type": "error", "error": {"type": "api_error", "message": error_text}},
@@ -853,6 +964,7 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
 
         if request_data.stream:
             async def stream_wrapper():
+                credits_from_stream: int | None = None
                 try:
                     async def make_retry_request():
                         return await http_client.request_with_retry("POST", url, kiro_payload, stream=True)
@@ -868,6 +980,8 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
                         request_system=system_for_tokenizer,
                     ):
                         yield chunk
+                        if credits_from_stream is None and '"credits_used"' in chunk:
+                            credits_from_stream = _extract_credits_from_chunk(chunk)
                 except GeneratorExit:
                     pass
                 except Exception as e:
@@ -881,8 +995,7 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
                         pass
                     raise
                 finally:
-                    await _track_usage_background(key_id, None)
-                    await _track_fallback_usage_background(original_key_id, key_id, None)
+                    await _track_all_usage(key_id, original_key_id, gateway_key_id, credits_from_stream)
                     await http_client.close()
 
             return StreamingResponse(stream_wrapper(), media_type="text/event-stream")
@@ -899,12 +1012,10 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
             )
             credits = None
             try:
-                from kiro.usage.tracker import extract_credits_from_response
-                credits = extract_credits_from_response(anthropic_response)
+                credits = anthropic_response.get("usage", {}).get("credits_used")
             except Exception:
                 pass
-            await _track_usage_background(key_id, credits)
-            await _track_fallback_usage_background(original_key_id, key_id, credits)
+            await _track_all_usage(key_id, original_key_id, gateway_key_id, credits)
             await http_client.close()
             return JSONResponse(content=anthropic_response)
 

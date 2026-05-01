@@ -35,6 +35,7 @@ class UserUpdate(BaseModel):
     is_active: bool | None = None
     password: str | None = Field(default=None, min_length=6)
     role: str | None = Field(default=None, pattern="^(admin|user)$")
+    can_create_gateway_key: bool | None = None
 
 
 class UserResponse(BaseModel):
@@ -43,8 +44,13 @@ class UserResponse(BaseModel):
     role: str
     is_active: bool
     created_at: datetime
+    can_create_gateway_key: bool = False
 
     model_config = {"from_attributes": True}
+
+
+class ProvisionUserByEmail(BaseModel):
+    email: str = Field(min_length=3, max_length=255)
 
 
 class UserDetailResponse(UserResponse):
@@ -101,6 +107,9 @@ class OverviewResponse(BaseModel):
     active_users: int
     active_keys: int
     daily_usage: list[DailyUsage]
+    total_gateway_users: int = 0
+    active_gateway_users: int = 0
+    gateway_credits_used: int = 0
 
 
 # --- Config ---
@@ -193,3 +202,43 @@ class KiroUserCreditUsage(BaseModel):
 class KiroUserCreditUsageResponse(BaseModel):
     month: str
     users: list[KiroUserCreditUsage]
+
+
+# --- GatewayKey ---
+
+class GatewayKeyResponse(BaseModel):
+    id: int
+    user_id: int
+    key_prefix: str
+    key_suffix: str
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class GatewayKeyCreated(GatewayKeyResponse):
+    raw_key: str  # shown only once at creation
+
+
+# --- Gateway Key Analytics ---
+
+class GatewayKeyDailySeries(BaseModel):
+    date: str
+    credits: int
+
+
+class GatewayKeyUserUsage(BaseModel):
+    gateway_key_id: int
+    user_id: int
+    username: str
+    credits: int
+
+
+class GatewayKeyAnalyticsResponse(BaseModel):
+    time_range: str
+    total_credits: int
+    total_gateway_users: int
+    active_gateway_users: int
+    daily_series: list[GatewayKeyDailySeries]
+    user_usages: list[GatewayKeyUserUsage]

@@ -15,7 +15,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useKeys, useCreateKey, useToggleKey } from "@/hooks/use-keys";
-import { useUsers, useCreateUser, useUpdateUser } from "@/hooks/use-users";
+import { useUsers, useCreateUser, useUpdateUser, useProvisionUserByEmail } from "@/hooks/use-users";
 import { useImportUsers, useKiroUsers, useToggleKiroUser } from "@/hooks/use-import";
 import { useAuth } from "@/hooks/use-auth";
 import { maskKey, formatCredits } from "@/lib/utils";
@@ -515,6 +515,54 @@ function ChangeRoleSelect({ user }: { user: UserResponse }) {
   );
 }
 
+function AllowByEmailDialog() {
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const provision = useProvisionUserByEmail();
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    await provision.mutateAsync(email);
+    setEmail("");
+    setOpen(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger render={<Button variant="outline" className="gap-2" />}>
+        <span className="material-symbols-outlined text-[16px]">mail</span> Allow by Email
+      </DialogTrigger>
+      <DialogContent className="glass-panel-elevated">
+        <DialogHeader><DialogTitle>Allow Gateway Key by Email</DialogTitle></DialogHeader>
+        <p className="text-sm text-on-surface-variant">
+          The user will be able to create a gateway key after logging in via Google OAuth with this email.
+        </p>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="provision-email">Email</Label>
+            <Input
+              id="provision-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="user@example.com"
+              required
+            />
+          </div>
+          <Button type="submit" disabled={provision.isPending} className="w-full">
+            {provision.isPending ? "Saving..." : "Allow Access"}
+          </Button>
+          {provision.isError && (
+            <p className="text-sm text-error">
+              {(provision.error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed"}
+            </p>
+          )}
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function AccountRow({ user }: { user: UserResponse }) {
   const updateUser = useUpdateUser();
   return (
@@ -533,6 +581,16 @@ function AccountRow({ user }: { user: UserResponse }) {
       <td className="py-4 px-6"><ChangeRoleSelect user={user} /></td>
       <td className="py-4 px-6">
         <Switch checked={user.is_active} onCheckedChange={(checked) => updateUser.mutate({ userId: user.id, data: { is_active: checked } })} disabled={updateUser.isPending} />
+      </td>
+      <td className="py-4 px-6">
+        <div className="flex items-center gap-1.5">
+          <Switch
+            checked={user.can_create_gateway_key}
+            onCheckedChange={(checked) => updateUser.mutate({ userId: user.id, data: { can_create_gateway_key: checked } })}
+            disabled={updateUser.isPending}
+          />
+          <span className="text-xs text-on-surface-variant">GW Key</span>
+        </div>
       </td>
       <td className="py-4 px-6 text-right"><ResetPasswordDialog user={user} /></td>
     </tr>
@@ -754,7 +812,8 @@ export default function AccountsPage() {
         </TabsContent>
 
         <TabsContent value="accounts" className="mt-6 space-y-6">
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-3">
+            <AllowByEmailDialog />
             <CreateUserDialog />
           </div>
           {usersLoading ? (
@@ -767,6 +826,7 @@ export default function AccountsPage() {
                     <th className="py-3 px-6 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Account</th>
                     <th className="py-3 px-6 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Role</th>
                     <th className="py-3 px-6 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Active</th>
+                    <th className="py-3 px-6 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Gateway Key</th>
                     <th className="py-3 px-6 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider text-right">Actions</th>
                   </tr>
                 </thead>

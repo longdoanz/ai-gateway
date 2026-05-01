@@ -73,11 +73,19 @@ async def test_aggregate_analytics_zero_fills_missing_dates():
         MagicMock(date="2026-04-27", credits=100),
     ]
 
+    # gw_daily_rows query (gateway daily usage to subtract)
+    gw_daily_result = MagicMock()
+    gw_daily_result.all.return_value = []
+
     # kiro_rows query returns 1 kiro user
     kiro_result = MagicMock()
     kiro_result.all.return_value = [
         MagicMock(kiro_user_id="kiro-alice", credits=100),
     ]
+
+    # gw_user_rows query (gateway per-user usage to subtract)
+    gw_user_result = MagicMock()
+    gw_user_result.all.return_value = []
 
     # build_kiro_email_lookup query
     email_result = MagicMock()
@@ -89,7 +97,11 @@ async def test_aggregate_analytics_zero_fills_missing_dates():
         MagicMock(kiro_user_id="kiro-alice", username="alice", email="alice@test.com"),
     ]
 
-    session.execute = AsyncMock(side_effect=[daily_result, kiro_result, email_result, mapping_result])
+    # gw_user_credit_rows query (gateway key user credits for merged view)
+    gw_user_credit_result = MagicMock()
+    gw_user_credit_result.all.return_value = []
+
+    session.execute = AsyncMock(side_effect=[daily_result, gw_daily_result, kiro_result, gw_user_result, email_result, mapping_result, gw_user_credit_result])
 
     from unittest.mock import patch
     from datetime import date

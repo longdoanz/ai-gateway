@@ -280,3 +280,161 @@ class TestApiKeyAuthAdapter:
         a2 = ApiKeyAuthAdapter("tok", region="eu-west-1")
         assert a1.api_host != a2.api_host
         assert a1.q_host != a2.q_host
+
+
+# ===========================================================================
+# _resolve_gateway_key
+# ===========================================================================
+
+class TestResolveGatewayKey:
+    @pytest.mark.asyncio
+    async def test_non_gateway_prefix_returns_none(self):
+        from kiro.api_key_mode import _resolve_gateway_key
+        result = await _resolve_gateway_key("sk-proj-someregularkey")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_old_aigw_prefix_returns_none(self):
+        from kiro.api_key_mode import _resolve_gateway_key
+        result = await _resolve_gateway_key("aigw_someoldkey")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_iziaigw_prefix_without_db_returns_none(self):
+        from kiro.api_key_mode import _resolve_gateway_key
+        with patch("kiro.api_key_mode.is_db_configured", return_value=False):
+            result = await _resolve_gateway_key("iziaigw_somekey")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_iziaigw_prefix_with_inactive_key_returns_none(self):
+        from kiro.api_key_mode import _resolve_gateway_key
+        mock_gk = MagicMock()
+        mock_gk.is_active = False
+
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock()
+
+        with patch("kiro.api_key_mode.is_db_configured", return_value=True), \
+             patch("kiro.db.engine.async_session_factory", return_value=mock_session), \
+             patch("kiro.db.repositories.get_gateway_key_by_hash", new_callable=AsyncMock, return_value=mock_gk), \
+             patch("kiro.usage.usage_cache.usage_cache"):
+            result = await _resolve_gateway_key("iziaigw_testkey123")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_iziaigw_prefix_with_no_available_kiro_keys_returns_none(self):
+        from kiro.api_key_mode import _resolve_gateway_key
+        mock_gk = MagicMock()
+        mock_gk.is_active = True
+        mock_gk.id = 7
+
+        mock_session = AsyncMock()
+        mock_cache = MagicMock()
+        mock_cache.get_available_keys.return_value = []
+
+        with patch("kiro.api_key_mode.is_db_configured", return_value=True), \
+             patch("kiro.db.engine.async_session_factory", return_value=mock_session), \
+             patch("kiro.db.repositories.get_gateway_key_by_hash", new_callable=AsyncMock, return_value=mock_gk), \
+             patch("kiro.usage.usage_cache.usage_cache", mock_cache):
+            result = await _resolve_gateway_key("iziaigw_testkey123")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_iziaigw_resolves_to_best_kiro_key(self):
+        from kiro.api_key_mode import _resolve_gateway_key
+        mock_gk = MagicMock()
+        mock_gk.is_active = True
+        mock_gk.id = 7
+
+        mock_entry_low = MagicMock()
+        mock_entry_low.usage_limit = 1000
+        mock_entry_low.current_usage = 900  # 100 remaining
+
+        mock_entry_high = MagicMock()
+        mock_entry_high.usage_limit = 1000
+        mock_entry_high.current_usage = 100  # 900 remaining — best
+
+        mock_cache = MagicMock()
+        mock_cache.get_available_keys.return_value = [1, 2]
+        mock_cache.get.side_effect = lambda kid: mock_entry_low if kid == 1 else mock_entry_high
+
+        mock_execute_result = MagicMock()
+        mock_execute_result.scalar_one_or_none.return_value = "encrypted_key"
+
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(return_value=mock_execute_result)
+
+        with patch("kiro.api_key_mode.is_db_configured", return_value=True), \
+             patch("kiro.db.engine.async_session_factory", return_value=mock_session), \
+             patch("kiro.db.repositories.get_gateway_key_by_hash", new_callable=AsyncMock, return_value=mock_gk), \
+             patch("kiro.db.repositories.decrypt_api_key", return_value="raw_kiro_key_abc"), \
+             patch("kiro.usage.usage_cache.usage_cache", mock_cache):
+            result = await _resolve_gateway_key("iziaigw_testkey123")
+
+        assert result is not None
+        raw_key, kiro_key_id, gateway_key_id = result
+        assert raw_key == "raw_kiro_key_abc"
+        assert kiro_key_id == 2  # key 2 has most remaining quota
+        assert gateway_key_id == 7
+
+
+# ===========================================================================
+# _resolve_key_id
+# ===========================================================================
+
+class TestResolveKeyId:
+    @pytest.mark.asyncio
+    async def test_returns_none_when_db_not_configured(self):
+        from kiro.api_key_mode import _resolve_key_id
+        with patch("kiro.api_key_mode.is_db_configured", return_value=False):
+            result = await _resolve_key_id("sk-proj-somekey")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_key_id_on_success(self):
+        from kiro.api_key_mode import _resolve_key_id
+        mock_api_key = MagicMock()
+        mock_api_key.id = 42
+
+        mock_session = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("kiro.api_key_mode.is_db_configured", return_value=True), \
+             patch("kiro.db.engine.async_session_factory", return_value=mock_session), \
+             patch("kiro.db.repositories.get_or_create_api_key", new_callable=AsyncMock, return_value=(mock_api_key, False)):
+            result = await _resolve_key_id("sk-proj-somekey")
+        assert result == 42
+
+    @pytest.mark.asyncio
+    async def test_syncs_new_key_on_first_seen(self):
+        from kiro.api_key_mode import _resolve_key_id
+        mock_api_key = MagicMock()
+        mock_api_key.id = 99
+
+        mock_session = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("kiro.api_key_mode.is_db_configured", return_value=True), \
+             patch("kiro.db.engine.async_session_factory", return_value=mock_session), \
+             patch("kiro.db.repositories.get_or_create_api_key", new_callable=AsyncMock, return_value=(mock_api_key, True)), \
+             patch("kiro.api_key_mode.asyncio.ensure_future") as mock_future, \
+             patch("kiro.api_key_mode._sync_new_key", new_callable=AsyncMock):
+            result = await _resolve_key_id("sk-proj-newkey")
+        assert result == 99
+        mock_future.assert_called_once()
+
+    @pytest.mark.asyncio
+    @pytest.mark.filterwarnings("ignore::RuntimeWarning")
+    async def test_returns_none_on_exception(self):
+        from kiro.api_key_mode import _resolve_key_id
+
+        mock_session = AsyncMock()
+
+        with patch("kiro.api_key_mode.is_db_configured", return_value=True), \
+             patch("kiro.db.engine.async_session_factory", return_value=mock_session), \
+             patch("kiro.db.repositories.get_or_create_api_key", new_callable=AsyncMock, side_effect=Exception("DB error")):
+            result = await _resolve_key_id("sk-proj-somekey")
+        assert result is None

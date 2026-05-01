@@ -46,8 +46,9 @@ class TestFallbackRouter:
         mock_session.execute = AsyncMock(return_value=mock_result)
 
         with patch("kiro.usage.fallback.usage_cache", self.cache), \
-             patch("kiro.usage.fallback.async_session_factory", mock_factory), \
-             patch("kiro.usage.fallback.decrypt_api_key", return_value="raw_key_2"):
+             patch("kiro.usage.usage_cache.usage_cache", self.cache), \
+             patch("kiro.db.engine.async_session_factory", mock_factory), \
+             patch("kiro.db.repositories.decrypt_api_key", return_value="raw_key_2"):
             result = await self.router.pre_check(1)  # 0.5% remaining
             assert result is not None
             new_key_id, raw_key = result

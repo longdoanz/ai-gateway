@@ -304,8 +304,8 @@ FALLBACK_MODELS: List[Dict[str, str]] = [
 # Model Cache Settings
 # ==================================================================================================
 
-# Model cache TTL in seconds (1 hour)
-MODEL_CACHE_TTL: int = 3600
+# Model cache TTL in seconds (12 hours)
+MODEL_CACHE_TTL: int = 43200
 
 # Default maximum number of input tokens
 DEFAULT_MAX_INPUT_TOKENS: int = 200000

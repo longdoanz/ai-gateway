@@ -1,6 +1,7 @@
 import asyncio
 import random
 import time
+from datetime import datetime, timezone
 
 from loguru import logger
 
@@ -102,7 +103,6 @@ async def sync_usage_limits(key_ids: list[int]) -> None:
                 if isinstance(e, FastAPIHTTPException) and e.status_code == 401:
                     logger.warning(f"Sync worker: key {key.id} returned 401/403 — deactivating")
                     await update_api_key(session, key.id, is_active=False)
-                    from kiro.usage.usage_cache import usage_cache
                     usage_cache.set_key_active(key.id, False)
                 else:
                     logger.warning(f"Sync worker: failed to sync key {key.id}: {e}")
@@ -111,6 +111,44 @@ async def sync_usage_limits(key_ids: list[int]) -> None:
     if cache_updates:
         await usage_cache.refresh_limits(cache_updates)
         logger.info(f"Sync worker: refreshed cache for {len(cache_updates)} keys")
+
+
+async def sync_all_active_keys() -> None:
+    """Fetch all active key IDs from DB and sync usage limits for each."""
+    if async_session_factory is None:
+        return
+    from sqlalchemy import select
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(ApiKey.id).where(ApiKey.is_active == True)
+        )
+        key_ids = [row[0] for row in result.all()]
+    if not key_ids:
+        logger.info("Monthly sync: no active keys found")
+        return
+    logger.info(f"Monthly sync: syncing {len(key_ids)} active keys")
+    await sync_usage_limits(key_ids)
+
+
+async def run_monthly_sync_loop() -> None:
+    """Fire sync_all_active_keys at 00:30 UTC on the 1st of each month (= 07:30 UTC+7)."""
+    while True:
+        now = datetime.now(timezone.utc)
+        if now.month == 12:
+            next_run = datetime(now.year + 1, 1, 1, 0, 30, 0, tzinfo=timezone.utc)
+        else:
+            next_run = datetime(now.year, now.month + 1, 1, 0, 30, 0, tzinfo=timezone.utc)
+        sleep_secs = (next_run - now).total_seconds()
+        logger.info(f"Monthly sync: next run at {next_run.isoformat()} (in {sleep_secs:.0f}s)")
+        try:
+            await asyncio.sleep(sleep_secs)
+        except asyncio.CancelledError:
+            logger.info("Monthly sync: cancelled")
+            break
+        try:
+            await sync_all_active_keys()
+        except Exception as e:
+            logger.error(f"Monthly sync: unexpected error: {e}")
 
 
 async def run_sync_loop() -> None:

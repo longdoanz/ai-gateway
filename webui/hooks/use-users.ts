@@ -44,3 +44,15 @@ export function useUpdateUser() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
   });
 }
+
+export function useProvisionUserByEmail() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (email: string) => {
+      const res = await apiClient.post<UserResponse>("/users/provision-by-email", { email });
+      return res.data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
+  });
+}
+

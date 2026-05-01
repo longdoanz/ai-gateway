@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { TrendingUp, Users, Key, Wallet } from "lucide-react";
+import { TrendingUp, Users, Key, Wallet, KeyRound } from "lucide-react";
 import { useOverview, type Granularity } from "@/hooks/use-overview";
 import { formatCredits } from "@/lib/utils";
 import { AreaChartUsage } from "@/components/charts/area-chart-usage";
@@ -79,8 +79,8 @@ export default function DashboardPage() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[1, 2, 3].map((i) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[1, 2, 3, 4].map((i) => (
             <Skeleton key={i} className="h-40 rounded-2xl" />
           ))}
         </div>
@@ -93,8 +93,8 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      {/* KPI Cards — 5 cards: 3 on first row, 2 on second */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* KPI Cards — 4 on first row, 2 on second */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <KpiCard
           title="Total Users"
           value={String(data.total_users ?? 0)}
@@ -112,6 +112,12 @@ export default function DashboardPage() {
           value={data.active_keys.toString()}
           subtitle="keys currently enabled"
           icon={Key}
+        />
+        <KpiCard
+          title="Gateway Key Users"
+          value={String(data.total_gateway_users ?? 0)}
+          subtitle={`${data.active_gateway_users ?? 0} active this month`}
+          icon={KeyRound}
         />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -151,7 +157,7 @@ export default function DashboardPage() {
             ))}
           </div>
         </div>
-        <div className="flex-1">
+        <div className="h-[280px]">
           <AreaChartUsage data={data.daily_usage} />
         </div>
       </div>

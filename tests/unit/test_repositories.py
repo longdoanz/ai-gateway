@@ -1,7 +1,10 @@
 import pytest
 from unittest.mock import AsyncMock
 from sqlalchemy.dialects import postgresql
-from kiro.db.repositories import hash_api_key, mask_key, hash_password, verify_password, increment_daily_usage
+from kiro.db.repositories import (
+    hash_api_key, mask_key, hash_password, verify_password, increment_daily_usage,
+    generate_gateway_key, GATEWAY_KEY_PREFIX,
+)
 
 
 class TestRepositoryUtils:
@@ -41,6 +44,23 @@ class TestRepositoryUtils:
         h1 = hash_password("same-password")
         h2 = hash_password("same-password")
         assert h1 != h2  # bcrypt uses random salt
+
+
+class TestGatewayKeyGeneration:
+    def test_prefix_is_iziaigw(self):
+        assert GATEWAY_KEY_PREFIX == "iziaigw_"
+
+    def test_generated_key_starts_with_prefix(self):
+        key = generate_gateway_key()
+        assert key.startswith("iziaigw_")
+
+    def test_generated_keys_are_unique(self):
+        keys = {generate_gateway_key() for _ in range(20)}
+        assert len(keys) == 20
+
+    def test_generated_key_length_is_sufficient(self):
+        key = generate_gateway_key()
+        assert len(key) > len(GATEWAY_KEY_PREFIX) + 20
 
 
 
