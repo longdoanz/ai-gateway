@@ -833,7 +833,7 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
                         pass
                     raise
                 finally:
-                    await _track_all_usage(key_id, original_key_id, gateway_key_id, credits_from_stream)
+                    await asyncio.shield(_track_all_usage(key_id, original_key_id, gateway_key_id, credits_from_stream))
                     await http_client.close()
 
             return StreamingResponse(stream_wrapper(), media_type="text/event-stream")
@@ -995,7 +995,7 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
                         pass
                     raise
                 finally:
-                    await _track_all_usage(key_id, original_key_id, gateway_key_id, credits_from_stream)
+                    await asyncio.shield(_track_all_usage(key_id, original_key_id, gateway_key_id, credits_from_stream))
                     await http_client.close()
 
             return StreamingResponse(stream_wrapper(), media_type="text/event-stream")
