@@ -140,11 +140,11 @@ class ModelInfoCache:
         if model and model.get("tokenLimits"):
             return model["tokenLimits"].get("maxInputTokens") or DEFAULT_MAX_INPUT_TOKENS
         return DEFAULT_MAX_INPUT_TOKENS
-    
+
     def is_empty(self) -> bool:
         """
         Checks if the cache is empty.
-        
+
         Returns:
             True if cache is empty
         """

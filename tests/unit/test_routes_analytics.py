@@ -22,9 +22,9 @@ async def test_analytics_returns_all_fields():
         mock_agg.return_value = AnalyticsResponse(
             time_range="7d",
             daily_series=[],
-            user_credits=[],
+            user_tokens=[],
             top_users=[],
-            credit_share=[],
+            token_share=[],
         )
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get("/overview/analytics?range=7d")
@@ -32,9 +32,9 @@ async def test_analytics_returns_all_fields():
         data = resp.json()
         assert data["time_range"] == "7d"
         assert "daily_series" in data
-        assert "user_credits" in data
+        assert "user_tokens" in data
         assert "top_users" in data
-        assert "credit_share" in data
+        assert "token_share" in data
 
 
 @pytest.mark.asyncio
@@ -49,7 +49,7 @@ async def test_analytics_default_range_is_7d():
     with patch("kiro.dashboard.routes_analytics._aggregate_analytics", new_callable=AsyncMock) as mock_agg:
         from kiro.dashboard.schemas import AnalyticsResponse
         mock_agg.return_value = AnalyticsResponse(
-            time_range="7d", daily_series=[], user_credits=[], top_users=[], credit_share=[]
+            time_range="7d", daily_series=[], user_tokens=[], top_users=[], token_share=[]
         )
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get("/overview/analytics")
@@ -62,7 +62,6 @@ async def test_analytics_default_range_is_7d():
 @pytest.mark.asyncio
 async def test_aggregate_analytics_zero_fills_missing_dates():
     """Verify zero-fill produces correct number of entries and fills gaps."""
-    from unittest.mock import MagicMock
     from kiro.dashboard.routes_analytics import _aggregate_analytics
 
     session = AsyncMock()
@@ -70,7 +69,7 @@ async def test_aggregate_analytics_zero_fills_missing_dates():
     # daily_rows query returns only 1 of 7 days
     daily_result = MagicMock()
     daily_result.all.return_value = [
-        MagicMock(date="2026-04-27", credits=100),
+        MagicMock(date="2026-04-27", input_tokens=80, output_tokens=20),
     ]
 
     # gw_daily_rows query (gateway daily usage to subtract)
@@ -80,7 +79,7 @@ async def test_aggregate_analytics_zero_fills_missing_dates():
     # kiro_rows query returns 1 kiro user
     kiro_result = MagicMock()
     kiro_result.all.return_value = [
-        MagicMock(kiro_user_id="kiro-alice", credits=100),
+        MagicMock(kiro_user_id="kiro-alice", input_tokens=80, output_tokens=20),
     ]
 
     # gw_user_rows query (gateway per-user usage to subtract)
@@ -97,13 +96,12 @@ async def test_aggregate_analytics_zero_fills_missing_dates():
         MagicMock(kiro_user_id="kiro-alice", username="alice", email="alice@test.com"),
     ]
 
-    # gw_user_credit_rows query (gateway key user credits for merged view)
-    gw_user_credit_result = MagicMock()
-    gw_user_credit_result.all.return_value = []
+    # gw_user_token_rows query (gateway key user tokens for merged view)
+    gw_user_token_result = MagicMock()
+    gw_user_token_result.all.return_value = []
 
-    session.execute = AsyncMock(side_effect=[daily_result, gw_daily_result, kiro_result, gw_user_result, email_result, mapping_result, gw_user_credit_result])
+    session.execute = AsyncMock(side_effect=[daily_result, gw_daily_result, kiro_result, gw_user_result, email_result, mapping_result, gw_user_token_result])
 
-    from unittest.mock import patch
     from datetime import date
     with patch("kiro.dashboard.routes_analytics.dt") as mock_dt:
         mock_dt.now.return_value.date.return_value = date(2026, 4, 27)
@@ -113,12 +111,52 @@ async def test_aggregate_analytics_zero_fills_missing_dates():
     # Only 2026-04-27 has data, rest are zero
     last_day = result.daily_series[-1]
     assert last_day.date == "2026-04-27"
-    assert last_day.credits == 100
+    assert last_day.input_tokens == 80
+    assert last_day.output_tokens == 20
     # All other days are zero
     for entry in result.daily_series[:-1]:
-        assert entry.credits == 0
+        assert entry.input_tokens == 0
+        assert entry.output_tokens == 0
 
     # User percentage
     assert len(result.top_users) == 1
     assert result.top_users[0].share_pct == 100.0
     assert result.top_users[0].display_name == "alice"
+
+
+@pytest.mark.asyncio
+async def test_aggregate_kiro_credit_usage_uses_normalized_d_prefix_when_name_missing():
+    from kiro.dashboard.routes_analytics import _aggregate_kiro_credit_usage
+
+    session = AsyncMock()
+
+    usage_result = MagicMock()
+    usage_result.all.return_value = [
+        MagicMock(kiro_user_id="d-90660b1967.04e88498-e0d1-7084-2da6-8600557782e4", used_credit=12, quota=100),
+    ]
+
+    fallback_result = MagicMock()
+    fallback_result.all.return_value = []
+
+    gw_pool_result = MagicMock()
+    gw_pool_result.all.return_value = []
+
+    mapping_result = MagicMock()
+    mapping_result.all.return_value = [
+        MagicMock(
+            kiro_user_id="d-90660b1967.04e88498-e0d1-7084-2da6-8600557782e4",
+            username=None,
+            email=None,
+        ),
+    ]
+
+    session.execute = AsyncMock(side_effect=[usage_result, fallback_result, gw_pool_result, mapping_result])
+
+    result = await _aggregate_kiro_credit_usage(session, "2026-05")
+
+    assert len(result.users) == 1
+    user = result.users[0]
+    assert user.kiro_user_id == "d-90660b1967.04e88498-e0d1-7084-2da6-8600557782e4"
+    assert user.display_name == "04e88498-e0d1-7084-2da6-8600557782e4"
+    assert user.username is None
+    assert user.email is None

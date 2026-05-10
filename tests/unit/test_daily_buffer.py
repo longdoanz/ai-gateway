@@ -7,17 +7,26 @@ from kiro.usage.daily_buffer import DailyBuffer
 @pytest.mark.asyncio
 async def test_record_accumulates():
     buf = DailyBuffer()
-    buf.record(1, "2026-04-27", 10)
-    buf.record(1, "2026-04-27", 5)
-    buf.record(2, "2026-04-27", 20)
-    assert buf._buffer[(1, "2026-04-27")] == 15
-    assert buf._buffer[(2, "2026-04-27")] == 20
+    buf.record(1, "2026-04-27", 80, 20, model="auto")
+    buf.record(1, "2026-04-27", 40, 10, model="auto")
+    buf.record(2, "2026-04-27", 100, 50, model="auto")
+    assert buf._buffer[(1, "2026-04-27", "auto")] == (120, 30)
+    assert buf._buffer[(2, "2026-04-27", "auto")] == (100, 50)
+
+
+@pytest.mark.asyncio
+async def test_record_separates_by_model():
+    buf = DailyBuffer()
+    buf.record(1, "2026-04-27", 80, 20, model="auto")
+    buf.record(1, "2026-04-27", 40, 10, model="claude-sonnet-4.6")
+    assert buf._buffer[(1, "2026-04-27", "auto")] == (80, 20)
+    assert buf._buffer[(1, "2026-04-27", "claude-sonnet-4.6")] == (40, 10)
 
 
 @pytest.mark.asyncio
 async def test_flush_clears_buffer():
     buf = DailyBuffer()
-    buf.record(1, "2026-04-27", 10)
+    buf.record(1, "2026-04-27", 80, 20, model="auto")
 
     with patch("kiro.usage.daily_buffer.async_session_factory") as mock_factory:
         mock_session = AsyncMock()
@@ -40,7 +49,7 @@ async def test_flush_empty_buffer_is_noop():
 @pytest.mark.asyncio
 async def test_graceful_shutdown_drains():
     buf = DailyBuffer()
-    buf.record(1, "2026-04-27", 99)
+    buf.record(1, "2026-04-27", 80, 19, model="auto")
     flushed = []
 
     async def fake_flush():
@@ -50,14 +59,14 @@ async def test_graceful_shutdown_drains():
     buf.flush = fake_flush
     await buf.stop()
     assert len(flushed) == 1
-    assert flushed[0] == {(1, "2026-04-27"): 99}
+    assert flushed[0] == {(1, "2026-04-27", "auto"): (80, 19)}
 
 
 @pytest.mark.asyncio
 async def test_flush_restores_buffer_on_error():
     """Verify buffer is restored when DB write fails."""
     buf = DailyBuffer()
-    buf.record(1, "2026-04-27", 50)
+    buf.record(1, "2026-04-27", 100, 50, model="auto")
 
     with patch("kiro.usage.daily_buffer.async_session_factory") as mock_factory:
         mock_session = AsyncMock()
@@ -68,4 +77,4 @@ async def test_flush_restores_buffer_on_error():
             await buf.flush()
 
     # Buffer should be restored after failure
-    assert buf._buffer[(1, "2026-04-27")] == 50
+    assert buf._buffer[(1, "2026-04-27", "auto")] == (100, 50)

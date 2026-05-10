@@ -8,7 +8,7 @@ from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from google.auth.exceptions import GoogleAuthError
 
-from kiro.config import GOOGLE_CLIENT_ID, GOOGLE_ALLOWED_DOMAIN
+from kiro.config import GOOGLE_CLIENT_ID, GOOGLE_ALLOWED_DOMAIN, GOOGLE_ALLOWED_EMAILS
 from kiro.dashboard.jwt_auth import create_access_token, create_refresh_token, decode_token
 from kiro.dashboard.schemas import GoogleLoginRequest, LoginRequest, RefreshRequest, TokenResponse
 from kiro.db.engine import get_session
@@ -76,17 +76,27 @@ async def google_login(body: GoogleLoginRequest, session: AsyncSession = Depends
     except (GoogleAuthError, ValueError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Google token")
 
-    if GOOGLE_ALLOWED_DOMAIN:
-        hd = payload.get("hd", "")
-        if hd != GOOGLE_ALLOWED_DOMAIN:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access restricted to @{GOOGLE_ALLOWED_DOMAIN} accounts",
-            )
 
     google_id = payload["sub"]
     email = payload.get("email", "")
 
+    # Check if user is allowed: either by email whitelist or domain
+    allowed_emails = set(filter(None, GOOGLE_ALLOWED_EMAILS.split(",")))
+    allowed_emails = {e.strip().lower() for e in allowed_emails}
+    
+    email_in_whitelist = email.lower() in allowed_emails if allowed_emails else False
+    domain_allowed = True
+    
+    if GOOGLE_ALLOWED_DOMAIN:
+        hd = payload.get("hd", "")
+        domain_allowed = hd == GOOGLE_ALLOWED_DOMAIN
+    
+    if not (email_in_whitelist or domain_allowed):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: email or domain not in allowed list",
+        )
+    
     user = await get_user_by_google_id(session, google_id)
     if user is None:
         # Check if a pre-provisioned account exists for this email

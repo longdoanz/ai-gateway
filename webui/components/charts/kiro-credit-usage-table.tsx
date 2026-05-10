@@ -9,8 +9,14 @@ function remainingColor(pct: number): string {
   return "text-red-400";
 }
 
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return n.toLocaleString();
+}
+
 function displayName(user: KiroUserCreditUsage): string {
-  return user.username || user.email || user.kiro_user_id;
+  return user.display_name || user.username || user.email || user.kiro_user_id;
 }
 
 export function KiroCreditUsageTable({ data }: { data: KiroUserCreditUsage[] }) {
@@ -24,7 +30,8 @@ export function KiroCreditUsageTable({ data }: { data: KiroUserCreditUsage[] }) 
             <th className="text-right px-4 py-3 font-medium">Quota</th>
             <th className="text-right px-4 py-3 font-medium">Remaining</th>
             <th className="text-right px-4 py-3 font-medium">Remaining %</th>
-            <th className="text-right px-4 py-3 font-medium">Shared Usage</th>
+            <th className="text-right px-4 py-3 font-medium">Shared In</th>
+            <th className="text-right px-4 py-3 font-medium">Shared Out</th>
           </tr>
         </thead>
         <tbody>
@@ -49,7 +56,10 @@ export function KiroCreditUsageTable({ data }: { data: KiroUserCreditUsage[] }) 
                 {user.remaining_pct.toFixed(1)}%
               </td>
               <td className="text-right px-4 py-3 text-on-surface-variant">
-                {user.shared_usage > 0 ? formatCredits(user.shared_usage) : "—"}
+                {user.shared_input_tokens > 0 ? formatTokens(user.shared_input_tokens) : "—"}
+              </td>
+              <td className="text-right px-4 py-3 text-on-surface-variant">
+                {user.shared_output_tokens > 0 ? formatTokens(user.shared_output_tokens) : "—"}
               </td>
             </tr>
           ))}

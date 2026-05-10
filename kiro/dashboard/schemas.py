@@ -97,10 +97,13 @@ class KeyUsageResponse(BaseModel):
 
 class DailyUsage(BaseModel):
     date: str
-    credits: int
+    input_tokens: int
+    output_tokens: int
 
 
 class OverviewResponse(BaseModel):
+    total_input_tokens: int
+    total_output_tokens: int
     total_credits_used: int
     total_credits_limit: int
     total_users: int
@@ -109,7 +112,8 @@ class OverviewResponse(BaseModel):
     daily_usage: list[DailyUsage]
     total_gateway_users: int = 0
     active_gateway_users: int = 0
-    gateway_credits_used: int = 0
+    gateway_input_tokens: int = 0
+    gateway_output_tokens: int = 0
 
 
 # --- Config ---
@@ -154,49 +158,55 @@ class PaginationParams(BaseModel):
 
 class DailySeries(BaseModel):
     date: str
-    credits: int
+    input_tokens: int
+    output_tokens: int
 
 
-class UserCredit(BaseModel):
+class UserTokenUsage(BaseModel):
     kiro_user_id: str
     display_name: str
-    credits: int
+    input_tokens: int
+    output_tokens: int
 
 
 class TopUser(BaseModel):
     rank: int
     kiro_user_id: str
     display_name: str
-    credits: int
+    input_tokens: int
+    output_tokens: int
     share_pct: float
 
 
-class CreditShare(BaseModel):
+class TokenShare(BaseModel):
     kiro_user_id: str
     display_name: str
-    credits: int
+    input_tokens: int
+    output_tokens: int
     pct: float
 
 
 class AnalyticsResponse(BaseModel):
     time_range: str
     daily_series: list[DailySeries]
-    user_credits: list[UserCredit]
+    user_tokens: list[UserTokenUsage]
     top_users: list[TopUser]
-    credit_share: list[CreditShare]
+    token_share: list[TokenShare]
 
 
 # --- Kiro User Credit Usage ---
 
 class KiroUserCreditUsage(BaseModel):
     kiro_user_id: str
+    display_name: str
     username: str | None = None
     email: str | None = None
     used_credit: int
     quota: int
     remaining: int
     remaining_pct: float
-    shared_usage: int
+    shared_input_tokens: int = 0
+    shared_output_tokens: int = 0
 
 
 class KiroUserCreditUsageResponse(BaseModel):
@@ -225,19 +235,22 @@ class GatewayKeyCreated(GatewayKeyResponse):
 
 class GatewayKeyDailySeries(BaseModel):
     date: str
-    credits: int
+    input_tokens: int
+    output_tokens: int
 
 
 class GatewayKeyUserUsage(BaseModel):
     gateway_key_id: int
     user_id: int
     username: str
-    credits: int
+    input_tokens: int
+    output_tokens: int
 
 
 class GatewayKeyAnalyticsResponse(BaseModel):
     time_range: str
-    total_credits: int
+    total_input_tokens: int
+    total_output_tokens: int
     total_gateway_users: int
     active_gateway_users: int
     daily_series: list[GatewayKeyDailySeries]

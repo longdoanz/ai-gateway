@@ -1,14 +1,19 @@
 "use client";
 
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { UserCredit } from "@/lib/types";
-import { formatCredits } from "@/lib/utils";
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import type { UserTokenUsage } from "@/lib/types";
 
-interface Props {
-  data: UserCredit[];
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return n.toLocaleString();
 }
 
-export function BarChartCredits({ data }: Props) {
+interface Props {
+  data: UserTokenUsage[];
+}
+
+export function BarChartTokens({ data }: Props) {
   if (data.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-on-surface-variant text-sm">
@@ -31,7 +36,7 @@ export function BarChartCredits({ data }: Props) {
           tick={{ fontSize: 12, fill: "#464555" }}
           tickLine={false}
           axisLine={false}
-          tickFormatter={(v) => formatCredits(v)}
+          tickFormatter={(v) => formatTokens(v)}
         />
         <Tooltip
           contentStyle={{
@@ -41,9 +46,11 @@ export function BarChartCredits({ data }: Props) {
             borderRadius: "12px",
             boxShadow: "0 8px 30px rgba(0,0,0,0.05)",
           }}
-          formatter={(value) => [formatCredits(Number(value ?? 0)), "Credits"]}
+          formatter={(value, name) => [formatTokens(Number(value ?? 0)), name === "input_tokens" ? "Input" : "Output"]}
         />
-        <Bar dataKey="credits" fill="#6366f1" radius={[6, 6, 0, 0]} barSize={40} />
+        <Legend formatter={(value) => (value === "input_tokens" ? "Input Tokens" : "Output Tokens")} />
+        <Bar dataKey="input_tokens" fill="#6366f1" radius={[6, 6, 0, 0]} barSize={20} />
+        <Bar dataKey="output_tokens" fill="#8b5cf6" radius={[6, 6, 0, 0]} barSize={20} />
       </BarChart>
     </ResponsiveContainer>
   );

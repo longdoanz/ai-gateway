@@ -19,29 +19,35 @@ class Granularity(str, Enum):
     monthly = "monthly"
 
 
-def _aggregate_weekly(daily_map: dict[str, int], start, end) -> list[DailyUsage]:
+def _aggregate_weekly(daily_map: dict[str, tuple[int, int]], start, end) -> list[DailyUsage]:
     """Aggregate daily data into ISO weeks. Label = Monday of each week."""
     from collections import defaultdict
 
-    weekly: dict[str, int] = defaultdict(int)
+    weekly: dict[str, list[int]] = defaultdict(lambda: [0, 0])
     d = start
     while d <= end:
         iso_monday = d - timedelta(days=d.weekday())
-        weekly[iso_monday.isoformat()] += daily_map.get(d.isoformat(), 0)
+        key = iso_monday.isoformat()
+        in_tok, out_tok = daily_map.get(d.isoformat(), (0, 0))
+        weekly[key][0] += in_tok
+        weekly[key][1] += out_tok
         d += timedelta(days=1)
-    return [DailyUsage(date=k, credits=v) for k, v in sorted(weekly.items())]
+    return [DailyUsage(date=k, input_tokens=v[0], output_tokens=v[1]) for k, v in sorted(weekly.items())]
 
 
-def _aggregate_monthly(daily_map: dict[str, int], start, end) -> list[DailyUsage]:
+def _aggregate_monthly(daily_map: dict[str, tuple[int, int]], start, end) -> list[DailyUsage]:
     """Aggregate daily data into calendar months. Label = YYYY-MM."""
     from collections import defaultdict
 
-    monthly: dict[str, int] = defaultdict(int)
+    monthly: dict[str, list[int]] = defaultdict(lambda: [0, 0])
     d = start
     while d <= end:
-        monthly[d.strftime("%Y-%m")] += daily_map.get(d.isoformat(), 0)
+        key = d.strftime("%Y-%m")
+        in_tok, out_tok = daily_map.get(d.isoformat(), (0, 0))
+        monthly[key][0] += in_tok
+        monthly[key][1] += out_tok
         d += timedelta(days=1)
-    return [DailyUsage(date=k, credits=v) for k, v in sorted(monthly.items())]
+    return [DailyUsage(date=k, input_tokens=v[0], output_tokens=v[1]) for k, v in sorted(monthly.items())]
 
 
 @router.get("", response_model=OverviewResponse)
@@ -109,20 +115,31 @@ async def get_overview(
     end_str = today.isoformat()
 
     daily_rows = (await session.execute(
-        select(DailyUsageModel.date, func.sum(DailyUsageModel.credits).label("credits"))
+        select(
+            DailyUsageModel.date,
+            func.sum(DailyUsageModel.input_tokens).label("input_tokens"),
+            func.sum(DailyUsageModel.output_tokens).label("output_tokens"),
+        )
         .where(DailyUsageModel.date >= start_str, DailyUsageModel.date <= end_str)
         .group_by(DailyUsageModel.date)
         .order_by(DailyUsageModel.date)
     )).all()
 
     gw_daily_rows = (await session.execute(
-        select(GatewayKeyDailyUsage.date, func.sum(GatewayKeyDailyUsage.credits).label("credits"))
+        select(
+            GatewayKeyDailyUsage.date,
+            func.sum(GatewayKeyDailyUsage.input_tokens).label("input_tokens"),
+            func.sum(GatewayKeyDailyUsage.output_tokens).label("output_tokens"),
+        )
         .where(GatewayKeyDailyUsage.date >= start_str, GatewayKeyDailyUsage.date <= end_str)
         .group_by(GatewayKeyDailyUsage.date)
     )).all()
-    gw_daily_map = {row.date: row.credits for row in gw_daily_rows}
+    gw_daily_map = {row.date: (row.input_tokens, row.output_tokens) for row in gw_daily_rows}
 
-    daily_map = {row.date: max(0, row.credits - gw_daily_map.get(row.date, 0)) for row in daily_rows}
+    daily_map: dict[str, tuple[int, int]] = {}
+    for row in daily_rows:
+        gw_in, gw_out = gw_daily_map.get(row.date, (0, 0))
+        daily_map[row.date] = (max(0, row.input_tokens - gw_in), max(0, row.output_tokens - gw_out))
 
     if granularity == Granularity.weekly:
         daily_usage = _aggregate_weekly(daily_map, start_date, today)
@@ -133,12 +150,35 @@ async def get_overview(
         daily_usage = [
             DailyUsage(
                 date=(start_date + timedelta(days=i)).isoformat(),
-                credits=daily_map.get((start_date + timedelta(days=i)).isoformat(), 0),
+                input_tokens=daily_map.get((start_date + timedelta(days=i)).isoformat(), (0, 0))[0],
+                output_tokens=daily_map.get((start_date + timedelta(days=i)).isoformat(), (0, 0))[1],
             )
             for i in range(days_in_range)
         ]
 
+    # Gateway token totals for this month
+    gw_token_result = await session.execute(
+        select(
+            func.coalesce(func.sum(GatewayKeyDailyUsage.input_tokens), 0),
+            func.coalesce(func.sum(GatewayKeyDailyUsage.output_tokens), 0),
+        )
+        .where(GatewayKeyDailyUsage.date >= today.replace(day=1).isoformat(), GatewayKeyDailyUsage.date <= end_str)
+    )
+    gw_input_total, gw_output_total = gw_token_result.one()
+
+    # Own token totals for this month
+    own_token_result = await session.execute(
+        select(
+            func.coalesce(func.sum(DailyUsageModel.input_tokens), 0),
+            func.coalesce(func.sum(DailyUsageModel.output_tokens), 0),
+        )
+        .where(DailyUsageModel.date >= today.replace(day=1).isoformat(), DailyUsageModel.date <= end_str)
+    )
+    total_input, total_output = own_token_result.one()
+
     return OverviewResponse(
+        total_input_tokens=int(total_input),
+        total_output_tokens=int(total_output),
         total_credits_used=int(total_used),
         total_credits_limit=int(total_limit),
         total_users=total_users,
@@ -152,8 +192,6 @@ async def get_overview(
             select(func.count(func.distinct(GatewayKeyUsage.gateway_key_id)))
             .where(GatewayKeyUsage.month == current_month, GatewayKeyUsage.current_usage > 0)
         )).scalar_one(),
-        gateway_credits_used=int((await session.execute(
-            select(func.coalesce(func.sum(GatewayKeyUsage.current_usage), 0))
-            .where(GatewayKeyUsage.month == current_month)
-        )).scalar_one()),
+        gateway_input_tokens=int(gw_input_total),
+        gateway_output_tokens=int(gw_output_total),
     )

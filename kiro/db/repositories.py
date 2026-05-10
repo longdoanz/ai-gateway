@@ -113,10 +113,25 @@ async def get_api_key_by_hash(session: AsyncSession, key_hash: str) -> ApiKey | 
 
 async def get_or_create_api_key(session: AsyncSession, raw_key: str, default_user_id: int = 1) -> tuple[ApiKey, bool]:
     """Returns (api_key, is_new) — is_new=True when the key was just created."""
+    # Use an advisory lock keyed by the hash to avoid a race where concurrent
+    # requests concurrently don't see an existing row and both insert duplicates.
     key_h = hash_api_key(raw_key)
+    lock_key = int.from_bytes(hashlib.sha256(key_h.encode()).digest()[:8], "big", signed=False)
+
+    # Acquire a transaction-scoped advisory lock for this key hash.
+    await session.execute(text("SELECT pg_advisory_xact_lock(:lk)"), {"lk": lock_key})
+
+    # Re-check for existing row under the lock, then create if still missing.
     existing = await get_api_key_by_hash(session, key_h)
     if existing:
+        # update cache for existing mapping
+        try:
+            from kiro.usage.token_cache import token_cache
+            await token_cache.set(key_h, existing.id)
+        except Exception:
+            pass
         return existing, False
+
     prefix, suffix = mask_key(raw_key)
     api_key = ApiKey(
         user_id=default_user_id,
@@ -128,6 +143,12 @@ async def get_or_create_api_key(session: AsyncSession, raw_key: str, default_use
     session.add(api_key)
     await session.commit()
     await session.refresh(api_key)
+    # populate cache for new key
+    try:
+        from kiro.usage.token_cache import token_cache
+        await token_cache.set(key_h, api_key.id)
+    except Exception:
+        pass
     return api_key, True
 
 
@@ -147,32 +168,91 @@ async def list_active_api_keys(session: AsyncSession) -> list[ApiKey]:
 
 async def create_api_key(session: AsyncSession, user_id: int, raw_key: str) -> ApiKey:
     prefix, suffix = mask_key(raw_key)
+    key_hash = hash_api_key(raw_key)
+    key_encrypted = encrypt_api_key(raw_key)
+
+    result = await session.execute(
+        select(ApiKey).where(ApiKey.user_id == user_id).order_by(ApiKey.id)
+    )
+    existing_keys = list(result.scalars().all())
+
+    if existing_keys:
+        api_key = existing_keys[0]
+        await session.execute(
+            update(ApiKey).where(ApiKey.id == api_key.id).values(
+                key_hash=key_hash,
+                key_encrypted=key_encrypted,
+                key_prefix=prefix,
+                key_suffix=suffix,
+                is_active=True,
+            )
+        )
+
+        if len(existing_keys) > 1:
+            from sqlalchemy import delete
+
+            duplicate_ids = [key.id for key in existing_keys[1:]]
+            await session.execute(delete(KeyUsage).where(KeyUsage.key_id.in_(duplicate_ids)))
+            await session.execute(delete(DailyUsage).where(DailyUsage.key_id.in_(duplicate_ids)))
+            await session.execute(delete(FallbackUsage).where(
+                (FallbackUsage.original_key_id.in_(duplicate_ids)) | (FallbackUsage.fallback_key_id.in_(duplicate_ids))
+            ))
+            await session.execute(delete(ApiKey).where(ApiKey.id.in_(duplicate_ids)))
+
+        await session.commit()
+        await session.refresh(api_key)
+        # update cache mapping
+        try:
+            from kiro.usage.token_cache import token_cache
+            await token_cache.set(key_hash, api_key.id)
+        except Exception:
+            pass
+        return api_key
+
     api_key = ApiKey(
         user_id=user_id,
-        key_hash=hash_api_key(raw_key),
-        key_encrypted=encrypt_api_key(raw_key),
+        key_hash=key_hash,
+        key_encrypted=key_encrypted,
         key_prefix=prefix,
         key_suffix=suffix,
     )
     session.add(api_key)
     await session.commit()
     await session.refresh(api_key)
+    # populate cache
+    try:
+        from kiro.usage.token_cache import token_cache
+        await token_cache.set(key_hash, api_key.id)
+    except Exception:
+        pass
     return api_key
 
 
 async def update_api_key(session: AsyncSession, key_id: int, **kwargs) -> None:
     await session.execute(update(ApiKey).where(ApiKey.id == key_id).values(**kwargs))
     await session.commit()
+    # If key_hash was updated, refresh cache; otherwise ensure no stale entries for this id
+    try:
+        from kiro.usage.token_cache import token_cache
+        if 'key_hash' in kwargs:
+            await token_cache.invalidate_by_key_id(key_id)
+            await token_cache.set(kwargs['key_hash'], key_id)
+        else:
+            await token_cache.invalidate_by_key_id(key_id)
+        
+    except Exception:
+        pass
 
 
 async def merge_duplicate_keys_for_user(session: AsyncSession, keep_key_id: int, kiro_user_id: str) -> tuple[int, list[int]]:
-    """Merge duplicate keys for a kiro_user_id into the oldest key.
+    """Refresh the chosen key for a kiro user without deleting any keys.
 
-    Keeps the oldest key_id (preserving all usage history) and updates its
-    credentials with the newest key's. Deletes all other keys.
+    The caller still gets back the key id that should be treated as the
+    preferred record for subsequent usage updates, but all matching keys are
+    left in place.
 
-    Returns (survivor_key_id, deleted_key_ids)."""
-    from sqlalchemy import delete
+    Returns (survivor_key_id, deleted_key_ids). The deleted list is always
+    empty now."""
 
     result = await session.execute(
         select(ApiKey).where(ApiKey.kiro_user_id == kiro_user_id).order_by(ApiKey.id)
@@ -181,10 +261,14 @@ async def merge_duplicate_keys_for_user(session: AsyncSession, keep_key_id: int,
     if len(all_keys) <= 1:
         return keep_key_id, []
 
-    survivor = all_keys[0]
+    # Prefer the caller-provided keep_key_id as the survivor when it exists among the keys.
+    survivor = next((k for k in all_keys if k.id == keep_key_id), None)
+    if survivor is None:
+        survivor = all_keys[0]
     newest = all_keys[-1]
-    to_delete = [k for k in all_keys if k.id != survivor.id]
 
+    # If the survivor isn't the newest, propagate the newest credentials to the survivor
+    # so the preferred record retains the latest secrets.
     if survivor.id != newest.id:
         await session.execute(
             update(ApiKey).where(ApiKey.id == survivor.id).values(
@@ -196,17 +280,9 @@ async def merge_duplicate_keys_for_user(session: AsyncSession, keep_key_id: int,
             )
         )
 
-    deleted_ids = [k.id for k in to_delete]
-    for old_id in deleted_ids:
-        await session.execute(delete(DailyUsage).where(DailyUsage.key_id == old_id))
-        await session.execute(delete(KeyUsage).where(KeyUsage.key_id == old_id))
-        await session.execute(delete(FallbackUsage).where(
-            (FallbackUsage.original_key_id == old_id) | (FallbackUsage.fallback_key_id == old_id)
-        ))
-        await session.execute(delete(ApiKey).where(ApiKey.id == old_id))
-
     await session.commit()
-    return survivor.id, deleted_ids
+    # No cache invalidation is needed because no rows are deleted.
+    return survivor.id, []
 
 
 # --- KeyUsage ---
@@ -233,25 +309,25 @@ async def get_all_usage_for_month(session: AsyncSession, month: str) -> list[Key
     return list(result.scalars().all())
 
 
-async def increment_daily_usage(session: AsyncSession, key_id: int, date: str, amount: int = 1) -> None:
-    stmt = pg_insert(DailyUsage).values(key_id=key_id, date=date, credits=amount)
+async def increment_daily_usage(session: AsyncSession, key_id: int, date: str, input_tokens: int = 0, output_tokens: int = 0, model: str = "unknown") -> None:
+    stmt = pg_insert(DailyUsage).values(key_id=key_id, date=date, model=model, input_tokens=input_tokens, output_tokens=output_tokens)
     stmt = stmt.on_conflict_do_update(
-        constraint="uq_daily_usage_key_date",
-        set_={"credits": DailyUsage.credits + amount},
+        constraint="uq_daily_usage_key_date_model",
+        set_={"input_tokens": DailyUsage.input_tokens + input_tokens, "output_tokens": DailyUsage.output_tokens + output_tokens},
     )
     await session.execute(stmt)
     await session.commit()
 
 
 async def increment_fallback_usage(
-    session: AsyncSession, original_key_id: int, fallback_key_id: int, month: str, amount: int = 1
+    session: AsyncSession, original_key_id: int, fallback_key_id: int, month: str, input_tokens: int = 0, output_tokens: int = 0, model: str = "unknown"
 ) -> None:
     stmt = pg_insert(FallbackUsage).values(
-        original_key_id=original_key_id, fallback_key_id=fallback_key_id, month=month, credits=amount
+        original_key_id=original_key_id, fallback_key_id=fallback_key_id, month=month, model=model, input_tokens=input_tokens, output_tokens=output_tokens
     )
     stmt = stmt.on_conflict_do_update(
-        constraint="uq_fallback_usage_orig_fb_month",
-        set_={"credits": FallbackUsage.credits + amount},
+        constraint="uq_fallback_usage_orig_fb_month_model",
+        set_={"input_tokens": FallbackUsage.input_tokens + input_tokens, "output_tokens": FallbackUsage.output_tokens + output_tokens},
     )
     await session.execute(stmt)
     await session.commit()
@@ -391,11 +467,11 @@ async def increment_gateway_key_usage(session: AsyncSession, gateway_key_id: int
     await session.commit()
 
 
-async def increment_gateway_key_daily_usage(session: AsyncSession, gateway_key_id: int, date: str, amount: int = 1, key_id: int | None = None) -> None:
-    stmt = pg_insert(GatewayKeyDailyUsage).values(gateway_key_id=gateway_key_id, date=date, credits=amount, key_id=key_id)
+async def increment_gateway_key_daily_usage(session: AsyncSession, gateway_key_id: int, date: str, input_tokens: int = 0, output_tokens: int = 0, model: str = "unknown", key_id: int | None = None) -> None:
+    stmt = pg_insert(GatewayKeyDailyUsage).values(gateway_key_id=gateway_key_id, date=date, model=model, input_tokens=input_tokens, output_tokens=output_tokens, key_id=key_id)
     stmt = stmt.on_conflict_do_update(
-        constraint="uq_gw_daily_usage_gwkey_date_poolkey",
-        set_={"credits": GatewayKeyDailyUsage.credits + amount},
+        constraint="uq_gw_daily_usage_gwkey_date_poolkey_model",
+        set_={"input_tokens": GatewayKeyDailyUsage.input_tokens + input_tokens, "output_tokens": GatewayKeyDailyUsage.output_tokens + output_tokens},
     )
     await session.execute(stmt)
     await session.commit()
@@ -404,6 +480,34 @@ async def increment_gateway_key_daily_usage(session: AsyncSession, gateway_key_i
 async def get_user_by_email(session: AsyncSession, email: str) -> User | None:
     result = await session.execute(select(User).where(User.email == email))
     return result.scalar_one_or_none()
+
+
+async def get_canonical_usage_key_id(session: AsyncSession, key_id: int) -> int:
+    """Return a stable key id for usage tracking.
+
+    If the key is mapped to a Kiro user, this resolves to the oldest key for
+    that Kiro user so usage keeps flowing to the same surviving record even
+    when other keys for the user are deleted or rotated.
+
+    Args:
+        session: Active async database session.
+        key_id: The raw API key id seen at request time.
+
+    Returns:
+        A stable key id to use for usage writes.
+    """
+    result = await session.execute(select(ApiKey.kiro_user_id).where(ApiKey.id == key_id))
+    kiro_user_id = result.scalar_one_or_none()
+    if not kiro_user_id:
+        return key_id
+
+    result = await session.execute(
+        select(ApiKey.id)
+        .where(ApiKey.kiro_user_id == kiro_user_id)
+        .order_by(ApiKey.id.asc())
+    )
+    canonical_key_id = result.scalar_one_or_none()
+    return canonical_key_id or key_id
 
 
 # --- SystemConfig ---

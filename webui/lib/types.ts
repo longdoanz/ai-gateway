@@ -92,10 +92,13 @@ export interface KeyUsageResponse {
 
 export interface DailyUsage {
   date: string;
-  credits: number;
+  input_tokens: number;
+  output_tokens: number;
 }
 
 export interface OverviewResponse {
+  total_input_tokens: number;
+  total_output_tokens: number;
   total_credits_used: number;
   total_credits_limit: number;
   total_users: number;
@@ -104,7 +107,8 @@ export interface OverviewResponse {
   daily_usage: DailyUsage[];
   total_gateway_users: number;
   active_gateway_users: number;
-  gateway_credits_used: number;
+  gateway_input_tokens: number;
+  gateway_output_tokens: number;
 }
 
 // --- Config ---
@@ -133,49 +137,55 @@ export interface ImportResult {
 
 export interface DailySeries {
   date: string;
-  credits: number;
+  input_tokens: number;
+  output_tokens: number;
 }
 
-export interface UserCredit {
+export interface UserTokenUsage {
   kiro_user_id: string;
   display_name: string;
-  credits: number;
+  input_tokens: number;
+  output_tokens: number;
 }
 
 export interface TopUser {
   rank: number;
   kiro_user_id: string;
   display_name: string;
-  credits: number;
+  input_tokens: number;
+  output_tokens: number;
   share_pct: number;
 }
 
-export interface CreditShare {
+export interface TokenShare {
   kiro_user_id: string;
   display_name: string;
-  credits: number;
+  input_tokens: number;
+  output_tokens: number;
   pct: number;
 }
 
 export interface AnalyticsResponse {
   time_range: string;
   daily_series: DailySeries[];
-  user_credits: UserCredit[];
+  user_tokens: UserTokenUsage[];
   top_users: TopUser[];
-  credit_share: CreditShare[];
+  token_share: TokenShare[];
 }
 
 // --- Kiro User Credit Usage ---
 
 export interface KiroUserCreditUsage {
   kiro_user_id: string;
+  display_name: string;
   username: string | null;
   email: string | null;
   used_credit: number;
   quota: number;
   remaining: number;
   remaining_pct: number;
-  shared_usage: number;
+  shared_input_tokens: number;
+  shared_output_tokens: number;
 }
 
 export interface KiroUserCreditUsageResponse {
@@ -202,19 +212,22 @@ export interface GatewayKeyCreated extends GatewayKeyResponse {
 
 export interface GatewayKeyDailySeries {
   date: string;
-  credits: number;
+  input_tokens: number;
+  output_tokens: number;
 }
 
 export interface GatewayKeyUserUsage {
   gateway_key_id: number;
   user_id: number;
   username: string;
-  credits: number;
+  input_tokens: number;
+  output_tokens: number;
 }
 
 export interface GatewayKeyAnalyticsResponse {
   time_range: string;
-  total_credits: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
   total_gateway_users: number;
   active_gateway_users: number;
   daily_series: GatewayKeyDailySeries[];

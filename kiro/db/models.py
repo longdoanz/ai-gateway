@@ -76,21 +76,23 @@ class KeyUsage(Base):
 class DailyUsage(Base):
     __tablename__ = "daily_usage"
     __table_args__ = (
-        UniqueConstraint("key_id", "date", name="uq_daily_usage_key_date"),
+        UniqueConstraint("key_id", "date", "model", name="uq_daily_usage_key_date_model"),
         Index("ix_daily_usage_date", "date"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     key_id: Mapped[int] = mapped_column(Integer, ForeignKey("api_keys.id"), nullable=False)
     date: Mapped[str] = mapped_column(String(10), nullable=False)  # "YYYY-MM-DD"
-    credits: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    model: Mapped[str] = mapped_column(String(100), nullable=False, default="unknown")
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
 
 class FallbackUsage(Base):
     __tablename__ = "fallback_usage"
     __table_args__ = (
-        UniqueConstraint("original_key_id", "fallback_key_id", "month", name="uq_fallback_usage_orig_fb_month"),
+        UniqueConstraint("original_key_id", "fallback_key_id", "month", "model", name="uq_fallback_usage_orig_fb_month_model"),
         Index("ix_fallback_usage_month", "month"),
     )
 
@@ -98,7 +100,9 @@ class FallbackUsage(Base):
     original_key_id: Mapped[int] = mapped_column(Integer, ForeignKey("api_keys.id"), nullable=False)
     fallback_key_id: Mapped[int] = mapped_column(Integer, ForeignKey("api_keys.id"), nullable=False)
     month: Mapped[str] = mapped_column(String(7), nullable=False)
-    credits: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    model: Mapped[str] = mapped_column(String(100), nullable=False, default="unknown")
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
 
@@ -137,7 +141,7 @@ class GatewayKeyUsage(Base):
 class GatewayKeyDailyUsage(Base):
     __tablename__ = "gateway_key_daily_usage"
     __table_args__ = (
-        UniqueConstraint("gateway_key_id", "date", "key_id", name="uq_gw_daily_usage_gwkey_date_poolkey"),
+        UniqueConstraint("gateway_key_id", "date", "key_id", "model", name="uq_gw_daily_usage_gwkey_date_poolkey_model"),
         Index("ix_gw_daily_usage_date", "date"),
         Index("ix_gw_daily_usage_key_id", "key_id"),
     )
@@ -145,7 +149,9 @@ class GatewayKeyDailyUsage(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     gateway_key_id: Mapped[int] = mapped_column(Integer, ForeignKey("gateway_keys.id"), nullable=False)
     date: Mapped[str] = mapped_column(String(10), nullable=False)
-    credits: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    model: Mapped[str] = mapped_column(String(100), nullable=False, default="unknown")
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
     key_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("api_keys.id"), nullable=True)
 

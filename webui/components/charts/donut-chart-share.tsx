@@ -1,8 +1,13 @@
 "use client";
 
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
-import type { CreditShare } from "@/lib/types";
-import { formatCredits } from "@/lib/utils";
+import type { TokenShare } from "@/lib/types";
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return n.toLocaleString();
+}
 
 const COLORS = [
   "#6366f1", "#0ea5e9", "#8b5cf6", "#10b981", "#f59e0b",
@@ -10,7 +15,7 @@ const COLORS = [
 ];
 
 interface Props {
-  data: CreditShare[];
+  data: TokenShare[];
 }
 
 export function DonutChartShare({ data }: Props) {
@@ -22,12 +27,17 @@ export function DonutChartShare({ data }: Props) {
     );
   }
 
+  const chartData = data.map((d) => ({
+    ...d,
+    total_tokens: d.input_tokens + d.output_tokens,
+  }));
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <PieChart>
         <Pie
-          data={data}
-          dataKey="credits"
+          data={chartData}
+          dataKey="total_tokens"
           nameKey="display_name"
           cx="50%"
           cy="45%"
@@ -35,7 +45,7 @@ export function DonutChartShare({ data }: Props) {
           outerRadius="70%"
           paddingAngle={2}
         >
-          {data.map((_, i) => (
+          {chartData.map((_, i) => (
             <Cell key={i} fill={COLORS[i % COLORS.length]} />
           ))}
         </Pie>
@@ -48,7 +58,7 @@ export function DonutChartShare({ data }: Props) {
             boxShadow: "0 8px 30px rgba(0,0,0,0.05)",
           }}
           formatter={(value, name, props) => [
-            `${formatCredits(Number(value))} (${props.payload.pct}%)`,
+            `${formatTokens(Number(value))} (${props.payload.pct}%)`,
             name,
           ]}
         />

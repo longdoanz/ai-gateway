@@ -1,7 +1,8 @@
 import asyncio
-from collections import defaultdict
 
 from loguru import logger
+
+from sqlalchemy.exc import IntegrityError
 
 from kiro.db.engine import async_session_factory
 from kiro.db.repositories import increment_daily_usage
@@ -11,12 +12,14 @@ _FLUSH_INTERVAL = 60
 
 class DailyBuffer:
     def __init__(self) -> None:
-        self._buffer: dict[tuple[int, str], int] = defaultdict(int)
+        self._buffer: dict[tuple[int, str, str], tuple[int, int]] = {}
         self._lock = asyncio.Lock()
         self._task: asyncio.Task | None = None
 
-    def record(self, key_id: int, date_str: str, amount: int) -> None:
-        self._buffer[(key_id, date_str)] += amount
+    def record(self, key_id: int, date_str: str, input_tokens: int, output_tokens: int, model: str = "unknown") -> None:
+        key = (key_id, date_str, model)
+        cur = self._buffer.get(key, (0, 0))
+        self._buffer[key] = (cur[0] + input_tokens, cur[1] + output_tokens)
 
     async def flush(self) -> None:
         if not self._buffer:
@@ -30,17 +33,22 @@ class DailyBuffer:
             return
         try:
             async with async_session_factory() as session:
-                for (key_id, date_str), credits in snapshot.items():
-                    await increment_daily_usage(session, key_id, date_str, credits)
+                for (key_id, date_str, model), (in_tok, out_tok) in snapshot.items():
+                    try:
+                        await increment_daily_usage(session, key_id, date_str, in_tok, out_tok, model=model)
+                    except IntegrityError as ie:
+                        msg = str(ie)
+                        if "daily_usage_key_id_fkey" in msg or "foreign key" in msg.lower():
+                            logger.warning(f"DailyBuffer: skipping missing key_id={key_id} during flush: {ie}")
+                            continue
+                        raise
             logger.debug(f"DailyBuffer: flushed {len(snapshot)} entries")
         except Exception as e:
             logger.error(f"DailyBuffer: flush failed: {e}")
-            # Restore snapshot on failure. Note: if some entries were already committed
-            # before the error, they will be written again on the next flush (double-count).
-            # This is an acceptable trade-off to avoid data loss.
             async with self._lock:
                 for k, v in snapshot.items():
-                    self._buffer[k] += v
+                    cur = self._buffer.get(k, (0, 0))
+                    self._buffer[k] = (cur[0] + v[0], cur[1] + v[1])
 
     async def _run_loop(self) -> None:
         while True:
@@ -67,12 +75,14 @@ daily_buffer = DailyBuffer()
 
 class GatewayKeyDailyBuffer:
     def __init__(self) -> None:
-        self._buffer: dict[tuple[int, str, int | None], int] = defaultdict(int)
+        self._buffer: dict[tuple[int, str, int | None, str], tuple[int, int]] = {}
         self._lock = asyncio.Lock()
         self._task: asyncio.Task | None = None
 
-    def record(self, gateway_key_id: int, date_str: str, amount: int, key_id: int | None = None) -> None:
-        self._buffer[(gateway_key_id, date_str, key_id)] += amount
+    def record(self, gateway_key_id: int, date_str: str, input_tokens: int, output_tokens: int, model: str = "unknown", key_id: int | None = None) -> None:
+        key = (gateway_key_id, date_str, key_id, model)
+        cur = self._buffer.get(key, (0, 0))
+        self._buffer[key] = (cur[0] + input_tokens, cur[1] + output_tokens)
 
     async def flush(self) -> None:
         if not self._buffer:
@@ -87,14 +97,22 @@ class GatewayKeyDailyBuffer:
         try:
             from kiro.db.repositories import increment_gateway_key_daily_usage
             async with async_session_factory() as session:
-                for (gw_key_id, date_str, key_id), credits in snapshot.items():
-                    await increment_gateway_key_daily_usage(session, gw_key_id, date_str, credits, key_id=key_id)
+                for (gw_key_id, date_str, key_id, model), (in_tok, out_tok) in snapshot.items():
+                    try:
+                        await increment_gateway_key_daily_usage(session, gw_key_id, date_str, in_tok, out_tok, model=model, key_id=key_id)
+                    except IntegrityError as ie:
+                        msg = str(ie)
+                        if "foreign key" in msg.lower() and ("api_keys" in msg or "key_id" in msg.lower()):
+                            logger.warning(f"GatewayKeyDailyBuffer: skipping missing key_id={key_id} during flush: {ie}")
+                            continue
+                        raise
             logger.debug(f"GatewayKeyDailyBuffer: flushed {len(snapshot)} entries")
         except Exception as e:
             logger.error(f"GatewayKeyDailyBuffer: flush failed: {e}")
             async with self._lock:
                 for k, v in snapshot.items():
-                    self._buffer[k] += v
+                    cur = self._buffer.get(k, (0, 0))
+                    self._buffer[k] = (cur[0] + v[0], cur[1] + v[1])
 
     async def _run_loop(self) -> None:
         while True:

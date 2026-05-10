@@ -300,20 +300,24 @@ async def _resolve_gateway_key(token: str) -> tuple[str, int, int] | None:
         return None
 
 
-async def _track_gateway_key_usage(gateway_key_id: int, credits: int | None, key_id: int | None = None) -> None:
+async def _track_gateway_key_usage(gateway_key_id: int, input_tokens: int = 0, output_tokens: int = 0, model: str = "unknown", key_id: int | None = None) -> None:
     if not is_db_configured():
         return
     try:
         from kiro.db.engine import async_session_factory
-        from kiro.db.repositories import increment_gateway_key_usage
+        from kiro.db.repositories import get_canonical_usage_key_id, increment_gateway_key_usage
         from kiro.usage.daily_buffer import gateway_key_daily_buffer
         import time
         month = time.strftime("%Y-%m")
-        amount = credits if credits is not None and credits > 0 else 1
+        total = input_tokens + output_tokens
+        amount = total if total > 0 else 1
         async with async_session_factory() as session:
-            await increment_gateway_key_usage(session, gateway_key_id, month, amount, key_id=key_id)
+            canonical_key_id = key_id
+            if key_id is not None:
+                canonical_key_id = await get_canonical_usage_key_id(session, key_id)
+            await increment_gateway_key_usage(session, gateway_key_id, month, amount, key_id=canonical_key_id)
         today = time.strftime("%Y-%m-%d")
-        gateway_key_daily_buffer.record(gateway_key_id, today, amount, key_id=key_id)
+        gateway_key_daily_buffer.record(gateway_key_id, today, input_tokens, output_tokens, model=model, key_id=canonical_key_id)
     except Exception as e:
         logger.debug(f"Gateway key usage tracking failed: {e}")
 
@@ -323,9 +327,19 @@ async def _resolve_key_id(token: str) -> int | None:
         return None
     from kiro.db.engine import async_session_factory
     from kiro.db.repositories import get_or_create_api_key
+    from kiro.db.repositories import hash_api_key
+    from kiro.usage.token_cache import token_cache
     try:
+        # Check in-process cache first (uses key_hash, not raw token)
+        key_h = hash_api_key(token)
+        cached = await token_cache.get(key_h)
+        if cached is not None:
+            return cached
+
         async with async_session_factory() as session:
             api_key, is_new = await get_or_create_api_key(session, token)
+        # Populate cache for subsequent requests
+        await token_cache.set(key_h, api_key.id)
         if is_new:
             logger.info(f"New API key detected (id={api_key.id}), fetching usage limits")
             asyncio.ensure_future(_sync_new_key(api_key.id, token))
@@ -414,29 +428,61 @@ async def _try_fallback_pre_check(token: str, key_id: int | None) -> tuple[str, 
     return None
 
 
-async def _track_usage_background(key_id: int | None, credits: int | None) -> None:
+async def _track_usage_background(key_id: int | None, input_tokens: int = 0, output_tokens: int = 0, model: str = "unknown") -> None:
     if key_id is None or not is_db_configured():
         return
     try:
         from kiro.usage.tracker import track_usage
         from kiro.usage.sync_worker import record_activity
-        await track_usage(key_id, credits)
-        record_activity(key_id)
+        tracked_key_id = await track_usage(key_id, input_tokens, output_tokens, model=model)
+        if tracked_key_id is not None:
+            record_activity(tracked_key_id)
     except Exception as e:
         logger.debug(f"Usage tracking failed: {e}")
 
 
-def _extract_credits_from_chunk(chunk: str) -> int | None:
+def _extract_response_model(chunk: str) -> str | None:
+    """Extract model from message_start or first SSE chunk."""
     try:
         for line in chunk.splitlines():
             if line.startswith("data: ") and line != "data: [DONE]":
                 parsed = json.loads(line[6:])
-                val = parsed.get("usage", {}).get("credits_used")
-                if val is not None:
-                    return int(val)
-    except Exception:
+                msg = parsed.get("message")
+                if isinstance(msg, dict):
+                    return msg.get("model")
+                if "model" in parsed:
+                    return parsed.get("model")
+    except (json.JSONDecodeError, ValueError, TypeError):
         pass
     return None
+
+
+def _accumulate_tokens_from_chunk(chunk: str, token_counts: dict) -> None:
+    """Parse usage fields from SSE chunk and accumulate into token_counts dict."""
+    try:
+        for line in chunk.splitlines():
+            if line.startswith("data: ") and line != "data: [DONE]":
+                try:
+                    parsed = json.loads(line[6:])
+                    usage = parsed.get("usage")
+                    if isinstance(usage, dict):
+                        it = usage.get("input_tokens") or usage.get("prompt_tokens")
+                        ot = usage.get("output_tokens") or usage.get("completion_tokens")
+                        if it is not None and int(it) > 0:
+                            token_counts["input"] = int(it)
+                        if ot is not None and int(ot) > 0:
+                            token_counts["output"] = int(ot)
+                    msg = parsed.get("message")
+                    if isinstance(msg, dict):
+                        msg_usage = msg.get("usage")
+                        if isinstance(msg_usage, dict):
+                            it = msg_usage.get("input_tokens")
+                            if it is not None and int(it) > 0:
+                                token_counts["input"] = int(it)
+                except (json.JSONDecodeError, ValueError, TypeError):
+                    pass
+    except Exception:
+        pass
 
 
 from dataclasses import dataclass
@@ -489,16 +535,18 @@ async def _read_error_response(response, http_client: "ApiKeyModeClient") -> str
 
 
 async def _track_all_usage(
-    key_id: int | None, original_key_id: int | None, gateway_key_id: int | None, credits: int | None
+    key_id: int | None, original_key_id: int | None, gateway_key_id: int | None,
+    input_tokens: int = 0, output_tokens: int = 0, model: str = "unknown"
 ) -> None:
-    await _track_usage_background(key_id, credits)
-    await _track_fallback_usage_background(original_key_id, key_id, credits)
+    await _track_usage_background(key_id, input_tokens, output_tokens, model=model)
+    await _track_fallback_usage_background(original_key_id, key_id, input_tokens, output_tokens, model=model)
     if gateway_key_id is not None:
-        await _track_gateway_key_usage(gateway_key_id, credits, key_id=key_id)
+        await _track_gateway_key_usage(gateway_key_id, input_tokens, output_tokens, model=model, key_id=key_id)
 
 
 async def _track_fallback_usage_background(
-    original_key_id: int | None, actual_key_id: int | None, credits: int | None
+    original_key_id: int | None, actual_key_id: int | None,
+    input_tokens: int = 0, output_tokens: int = 0, model: str = "unknown"
 ) -> None:
     if original_key_id is None or actual_key_id is None or not is_db_configured():
         return
@@ -508,9 +556,8 @@ async def _track_fallback_usage_background(
         from kiro.db.engine import async_session_factory
         from kiro.db.repositories import increment_fallback_usage
         month = time.strftime("%Y-%m")
-        amount = credits if credits is not None and credits > 0 else 1
         async with async_session_factory() as session:
-            await increment_fallback_usage(session, original_key_id, actual_key_id, month, amount)
+            await increment_fallback_usage(session, original_key_id, actual_key_id, month, input_tokens, output_tokens, model=model)
     except Exception as e:
         logger.debug(f"Fallback usage tracking failed: {e}")
 
@@ -806,7 +853,8 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
 
         if request_data.stream:
             async def stream_wrapper():
-                credits_from_stream: int | None = None
+                response_model: str | None = None
+                token_counts = {"input": 0, "output": 0}
                 try:
                     async def make_retry_request():
                         return await http_client.request_with_retry("POST", url, kiro_payload, stream=True)
@@ -822,8 +870,10 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
                         request_tools=tools_for_tokenizer,
                     ):
                         yield chunk
-                        if credits_from_stream is None and '"credits_used"' in chunk:
-                            credits_from_stream = _extract_credits_from_chunk(chunk)
+                        if response_model is None and '"model"' in chunk:
+                            response_model = _extract_response_model(chunk)
+                        if '"usage"' in chunk:
+                            _accumulate_tokens_from_chunk(chunk, token_counts)
                 except GeneratorExit:
                     pass
                 except Exception as e:
@@ -833,7 +883,13 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
                         pass
                     raise
                 finally:
-                    await asyncio.shield(_track_all_usage(key_id, original_key_id, gateway_key_id, credits_from_stream))
+                    billing_model = response_model or request_data.model
+                    await asyncio.shield(_track_all_usage(
+                        key_id, original_key_id, gateway_key_id,
+                        input_tokens=token_counts["input"],
+                        output_tokens=token_counts["output"],
+                        model=billing_model,
+                    ))
                     await http_client.close()
 
             return StreamingResponse(stream_wrapper(), media_type="text/event-stream")
@@ -848,13 +904,15 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
                 request_messages=messages_for_tokenizer,
                 request_tools=tools_for_tokenizer,
             )
-            credits = None
-            try:
-                from kiro.usage.tracker import extract_credits_from_response
-                credits = extract_credits_from_response(openai_response)
-            except Exception:
-                pass
-            await _track_all_usage(key_id, original_key_id, gateway_key_id, credits)
+            input_tokens = 0
+            output_tokens = 0
+            resp_model = request_data.model
+            if isinstance(openai_response, dict):
+                usage = openai_response.get("usage", {})
+                input_tokens = usage.get("prompt_tokens", 0) or usage.get("input_tokens", 0)
+                output_tokens = usage.get("completion_tokens", 0) or usage.get("output_tokens", 0)
+                resp_model = openai_response.get("model") or request_data.model
+            await _track_all_usage(key_id, original_key_id, gateway_key_id, input_tokens=input_tokens, output_tokens=output_tokens, model=resp_model)
             await http_client.close()
             return JSONResponse(content=openai_response)
 
@@ -964,7 +1022,8 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
 
         if request_data.stream:
             async def stream_wrapper():
-                credits_from_stream: int | None = None
+                response_model: str | None = None
+                token_counts = {"input": 0, "output": 0}
                 try:
                     async def make_retry_request():
                         return await http_client.request_with_retry("POST", url, kiro_payload, stream=True)
@@ -980,8 +1039,10 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
                         request_system=system_for_tokenizer,
                     ):
                         yield chunk
-                        if credits_from_stream is None and '"credits_used"' in chunk:
-                            credits_from_stream = _extract_credits_from_chunk(chunk)
+                        if response_model is None and '"message_start"' in chunk:
+                            response_model = _extract_response_model(chunk)
+                        if '"usage"' in chunk:
+                            _accumulate_tokens_from_chunk(chunk, token_counts)
                 except GeneratorExit:
                     pass
                 except Exception as e:
@@ -995,7 +1056,13 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
                         pass
                     raise
                 finally:
-                    await asyncio.shield(_track_all_usage(key_id, original_key_id, gateway_key_id, credits_from_stream))
+                    billing_model = response_model or request_data.model
+                    await asyncio.shield(_track_all_usage(
+                        key_id, original_key_id, gateway_key_id,
+                        input_tokens=token_counts["input"],
+                        output_tokens=token_counts["output"],
+                        model=billing_model,
+                    ))
                     await http_client.close()
 
             return StreamingResponse(stream_wrapper(), media_type="text/event-stream")
@@ -1010,12 +1077,15 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
                 request_tools=tools_for_tokenizer,
                 request_system=system_for_tokenizer,
             )
-            credits = None
-            try:
-                credits = anthropic_response.get("usage", {}).get("credits_used")
-            except Exception:
-                pass
-            await _track_all_usage(key_id, original_key_id, gateway_key_id, credits)
+            input_tokens = 0
+            output_tokens = 0
+            resp_model = request_data.model
+            if isinstance(anthropic_response, dict):
+                usage = anthropic_response.get("usage", {})
+                input_tokens = usage.get("input_tokens", 0)
+                output_tokens = usage.get("output_tokens", 0)
+                resp_model = anthropic_response.get("model") or request_data.model
+            await _track_all_usage(key_id, original_key_id, gateway_key_id, input_tokens=input_tokens, output_tokens=output_tokens, model=resp_model)
             await http_client.close()
             return JSONResponse(content=anthropic_response)
 

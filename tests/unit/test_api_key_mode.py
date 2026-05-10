@@ -14,6 +14,15 @@ Covers:
 import pytest
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
+from kiro.usage.token_cache import token_cache
+
+
+@pytest.fixture(autouse=True)
+def _clear_token_cache():
+    token_cache.clear_sync()
+    yield
+    token_cache.clear_sync()
+
 import httpx
 from fastapi import HTTPException
 
@@ -438,3 +447,28 @@ class TestResolveKeyId:
              patch("kiro.db.repositories.get_or_create_api_key", new_callable=AsyncMock, side_effect=Exception("DB error")):
             result = await _resolve_key_id("sk-proj-somekey")
         assert result is None
+
+    @pytest.mark.asyncio
+    async def test_uses_cache_on_subsequent_calls(self):
+        """First call should populate cache; second call should not call DB."""
+        from kiro.api_key_mode import _resolve_key_id
+        mock_api_key = MagicMock()
+        mock_api_key.id = 123
+
+        mock_session = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+
+        get_or_create = AsyncMock(return_value=(mock_api_key, False))
+
+        with patch("kiro.api_key_mode.is_db_configured", return_value=True), \
+             patch("kiro.db.engine.async_session_factory", return_value=mock_session), \
+             patch("kiro.db.repositories.get_or_create_api_key", new=get_or_create):
+            # first call populates cache
+            r1 = await _resolve_key_id("sk-proj-somekey")
+            # second call should hit in-process cache and not call repository again
+            r2 = await _resolve_key_id("sk-proj-somekey")
+
+        assert r1 == 123
+        assert r2 == 123
+        assert get_or_create.call_count == 1

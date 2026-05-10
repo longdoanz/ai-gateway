@@ -48,7 +48,7 @@ services:
       args:
         - API_URL=http://kiro-gateway-apikey:18000
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
       - API_URL=http://kiro-gateway-apikey:18000
     depends_on:

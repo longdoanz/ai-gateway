@@ -89,12 +89,9 @@ async def sync_usage_limits(key_ids: list[int]) -> None:
                     await update_api_key(session, key.id, kiro_user_id=kiro_user_id)
 
                 if kiro_user_id:
-                    survivor_id, deleted = await merge_duplicate_keys_for_user(session, key.id, kiro_user_id)
-                    for old_id in deleted:
-                        usage_cache.remove_key(old_id)
-                        deactivated_this_cycle.add(old_id)
-                    if deleted:
-                        logger.info(f"Sync worker: merged keys for user {kiro_user_id}, survivor={survivor_id}, deleted={deleted}")
+                    survivor_id, _ = await merge_duplicate_keys_for_user(session, key.id, kiro_user_id)
+                    if survivor_id != key.id:
+                        logger.info(f"Sync worker: updated preferred key for user {kiro_user_id}, survivor={survivor_id}")
 
                 logger.debug(f"Synced key {key.id}: usage={current_usage}/{usage_limit} next_reset_at={next_reset_at}")
 
