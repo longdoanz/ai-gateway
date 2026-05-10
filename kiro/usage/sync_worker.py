@@ -1,13 +1,13 @@
 import asyncio
 import random
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from loguru import logger
 
 from kiro.db.engine import async_session_factory
-from kiro.db.models import ApiKey
-from kiro.db.repositories import decrypt_api_key, merge_duplicate_keys_for_user, get_all_config, upsert_kiro_user_mappings, upsert_usage_limits, update_api_key
+from kiro.db.models import ApiKey, KeyUsage
+from kiro.db.repositories import decrypt_api_key, merge_duplicate_keys_for_user, get_all_config, upsert_kiro_user_mappings, upsert_usage_limits, upsert_daily_credit_snapshot, update_api_key
 from kiro.usage.usage_cache import usage_cache
 
 _SYNC_DELAY_MIN = 300   # 5 minutes
@@ -109,6 +109,37 @@ async def sync_usage_limits(key_ids: list[int]) -> None:
         await usage_cache.refresh_limits(cache_updates)
         logger.info(f"Sync worker: refreshed cache for {len(cache_updates)} keys")
 
+    await _snapshot_daily_credits()
+
+
+async def _snapshot_daily_credits() -> None:
+    """Snapshot current_usage per kiro_user for today (MAX per user across keys)."""
+    if async_session_factory is None:
+        return
+    from sqlalchemy import func, select
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    current_month = datetime.now(timezone.utc).strftime("%Y-%m")
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(
+                ApiKey.kiro_user_id,
+                func.max(KeyUsage.current_usage).label("current_usage"),
+            )
+            .join(ApiKey, ApiKey.id == KeyUsage.key_id)
+            .where(KeyUsage.month == current_month, ApiKey.kiro_user_id.isnot(None))
+            .group_by(ApiKey.kiro_user_id)
+        )
+        rows = result.all()
+
+    if not rows:
+        return
+
+    async with async_session_factory() as session:
+        for row in rows:
+            await upsert_daily_credit_snapshot(session, row.kiro_user_id, today, int(row.current_usage))
+
 
 async def sync_all_active_keys() -> None:
     """Fetch all active key IDs from DB and sync usage limits for each."""
@@ -146,6 +177,27 @@ async def run_monthly_sync_loop() -> None:
             await sync_all_active_keys()
         except Exception as e:
             logger.error(f"Monthly sync: unexpected error: {e}")
+
+
+async def run_daily_snapshot_loop() -> None:
+    """Snapshot credit usage at 23:55 UTC daily."""
+    while True:
+        now = datetime.now(timezone.utc)
+        target = now.replace(hour=23, minute=55, second=0, microsecond=0)
+        if now >= target:
+            target = target + timedelta(days=1)
+        sleep_secs = (target - now).total_seconds()
+        logger.info(f"Daily snapshot: next run at {target.isoformat()} (in {sleep_secs:.0f}s)")
+        try:
+            await asyncio.sleep(sleep_secs)
+        except asyncio.CancelledError:
+            logger.info("Daily snapshot: cancelled")
+            break
+        try:
+            await _snapshot_daily_credits()
+            logger.info("Daily snapshot: completed")
+        except Exception as e:
+            logger.error(f"Daily snapshot: unexpected error: {e}")
 
 
 async def run_sync_loop() -> None:

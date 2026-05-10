@@ -6,9 +6,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiro.dashboard.deps import get_current_user
-from kiro.dashboard.schemas import DailyUsage, OverviewResponse
+from kiro.dashboard.schemas import CreditTrendPoint, DailyUsage, OverviewResponse
 from kiro.db.engine import get_session
 from kiro.db.models import ApiKey, DailyUsage as DailyUsageModel, GatewayKey, GatewayKeyDailyUsage, GatewayKeyUsage, KeyUsage, KiroUserMapping, User
+from kiro.db.repositories import get_credit_snapshots
 
 router = APIRouter(prefix="/overview", tags=["overview"])
 
@@ -176,6 +177,16 @@ async def get_overview(
     )
     total_input, total_output = own_token_result.one()
 
+    # Credit trend: daily deltas from snapshots
+    snapshot_start = (start_date - timedelta(days=1)).isoformat()
+    snapshots = await get_credit_snapshots(session, snapshot_start, end_str)
+    credit_trend: list[CreditTrendPoint] = []
+    for i in range(1, len(snapshots)):
+        prev_date, prev_total = snapshots[i - 1]
+        cur_date, cur_total = snapshots[i]
+        delta = max(0, cur_total - prev_total)
+        credit_trend.append(CreditTrendPoint(date=cur_date, credits_used=delta))
+
     return OverviewResponse(
         total_input_tokens=int(total_input),
         total_output_tokens=int(total_output),
@@ -185,6 +196,7 @@ async def get_overview(
         active_users=active_users,
         active_keys=active_keys,
         daily_usage=daily_usage,
+        credit_trend=credit_trend,
         total_gateway_users=(await session.execute(
             select(func.count()).select_from(GatewayKey).where(GatewayKey.is_active == True)
         )).scalar_one(),

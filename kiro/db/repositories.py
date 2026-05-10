@@ -12,7 +12,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiro.config import ENCRYPTION_KEY
-from kiro.db.models import ApiKey, DailyUsage, FallbackUsage, GatewayKey, GatewayKeyDailyUsage, GatewayKeyUsage, KeyUsage, KiroUserMapping, SystemConfig, User
+from kiro.db.models import ApiKey, DailyCreditSnapshot, DailyUsage, FallbackUsage, GatewayKey, GatewayKeyDailyUsage, GatewayKeyUsage, KeyUsage, KiroUserMapping, SystemConfig, User
 
 
 _fernet = None
@@ -350,6 +350,32 @@ async def upsert_usage_limits(session: AsyncSession, key_id: int, month: str, us
     )
     await session.execute(stmt)
     await session.commit()
+
+
+# --- DailyCreditSnapshot ---
+
+async def upsert_daily_credit_snapshot(session: AsyncSession, kiro_user_id: str, date_str: str, current_usage: int) -> None:
+    stmt = pg_insert(DailyCreditSnapshot).values(
+        kiro_user_id=kiro_user_id, date=date_str, current_usage=current_usage
+    )
+    stmt = stmt.on_conflict_do_update(
+        constraint="uq_credit_snapshot_user_date",
+        set_={"current_usage": text("GREATEST(daily_credit_snapshots.current_usage, EXCLUDED.current_usage)")},
+    )
+    await session.execute(stmt)
+    await session.commit()
+
+
+async def get_credit_snapshots(session: AsyncSession, start_date: str, end_date: str) -> list[tuple[str, int]]:
+    """Returns list of (date, total_current_usage) aggregated across all users."""
+    from sqlalchemy import func
+    result = await session.execute(
+        select(DailyCreditSnapshot.date, func.sum(DailyCreditSnapshot.current_usage).label("total"))
+        .where(DailyCreditSnapshot.date >= start_date, DailyCreditSnapshot.date <= end_date)
+        .group_by(DailyCreditSnapshot.date)
+        .order_by(DailyCreditSnapshot.date)
+    )
+    return [(row.date, int(row.total)) for row in result.all()]
 
 
 # --- KiroUserMapping ---

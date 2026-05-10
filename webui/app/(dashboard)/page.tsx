@@ -5,6 +5,7 @@ import { TrendingUp, Users, Key, Wallet, KeyRound } from "lucide-react";
 import { useOverview, type Granularity } from "@/hooks/use-overview";
 import { formatCredits } from "@/lib/utils";
 import { AreaChartUsage } from "@/components/charts/area-chart-usage";
+import { AreaChartCreditTrend } from "@/components/charts/area-chart-credit-trend";
 import { Skeleton } from "@/components/ui/skeleton";
 
 function KpiCard({
@@ -130,11 +131,32 @@ export default function DashboardPage() {
         <BudgetCard used={data.total_credits_used} limit={data.total_credits_limit} />
       </div>
 
-      {/* Consumption Trend Chart */}
+      {/* Credit Consumption Trend Chart */}
       <div className="glass-panel rounded-3xl p-6 flex flex-col h-[400px]">
         <div className="flex justify-between items-center mb-6">
           <div>
             <h3 className="text-lg font-semibold text-on-surface">Credit Consumption Trend</h3>
+            <p className="text-xs text-on-surface-variant mt-1">
+              Daily credits consumed (delta from previous day)
+            </p>
+          </div>
+        </div>
+        <div className="h-[280px]">
+          {data.credit_trend && data.credit_trend.length > 0 ? (
+            <AreaChartCreditTrend data={data.credit_trend} />
+          ) : (
+            <div className="flex items-center justify-center h-full text-on-surface-variant text-sm">
+              No credit snapshot data yet. Data will appear after the first sync.
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Token Usage Trend Chart */}
+      <div className="glass-panel rounded-3xl p-6 flex flex-col h-[400px]">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h3 className="text-lg font-semibold text-on-surface">Token Usage Trend</h3>
             <p className="text-xs text-on-surface-variant mt-1">
               {granularity === "daily" && "Daily usage this month"}
               {granularity === "weekly" && "Weekly usage (last 90 days)"}

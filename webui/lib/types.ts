@@ -96,6 +96,11 @@ export interface DailyUsage {
   output_tokens: number;
 }
 
+export interface CreditTrendPoint {
+  date: string;
+  credits_used: number;
+}
+
 export interface OverviewResponse {
   total_input_tokens: number;
   total_output_tokens: number;
@@ -105,6 +110,7 @@ export interface OverviewResponse {
   active_users: number;
   active_keys: number;
   daily_usage: DailyUsage[];
+  credit_trend: CreditTrendPoint[];
   total_gateway_users: number;
   active_gateway_users: number;
   gateway_input_tokens: number;

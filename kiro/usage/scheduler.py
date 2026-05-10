@@ -6,12 +6,13 @@ from kiro.config import DATABASE_URL
 from kiro.db.engine import async_session_factory, init_db, close_db
 from kiro.db.repositories import create_user, get_user_by_username
 from kiro.usage.usage_cache import usage_cache
-from kiro.usage.sync_worker import run_sync_loop, run_monthly_sync_loop
+from kiro.usage.sync_worker import run_sync_loop, run_monthly_sync_loop, run_daily_snapshot_loop
 from kiro.usage.daily_buffer import daily_buffer, gateway_key_daily_buffer
 
 
 _sync_task: asyncio.Task | None = None
 _monthly_sync_task: asyncio.Task | None = None
+_daily_snapshot_task: asyncio.Task | None = None
 
 
 def is_db_configured() -> bool:
@@ -73,6 +74,9 @@ async def startup() -> None:
     _monthly_sync_task = asyncio.create_task(run_monthly_sync_loop())
     logger.info("Usage management: monthly sync job scheduled")
 
+    _daily_snapshot_task = asyncio.create_task(run_daily_snapshot_loop())
+    logger.info("Usage management: daily credit snapshot job scheduled")
+
     daily_buffer.start()
     logger.info("Usage management: daily buffer started")
 
@@ -81,7 +85,7 @@ async def startup() -> None:
 
 
 async def shutdown() -> None:
-    global _sync_task, _monthly_sync_task
+    global _sync_task, _monthly_sync_task, _daily_snapshot_task
 
     if not is_db_configured():
         return
@@ -101,6 +105,14 @@ async def shutdown() -> None:
         except asyncio.CancelledError:
             pass
         logger.info("Usage management: monthly sync job stopped")
+
+    if _daily_snapshot_task is not None:
+        _daily_snapshot_task.cancel()
+        try:
+            await _daily_snapshot_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("Usage management: daily snapshot job stopped")
 
     await daily_buffer.stop()
     logger.info("Usage management: daily buffer stopped")

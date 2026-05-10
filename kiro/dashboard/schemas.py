@@ -101,6 +101,11 @@ class DailyUsage(BaseModel):
     output_tokens: int
 
 
+class CreditTrendPoint(BaseModel):
+    date: str
+    credits_used: int
+
+
 class OverviewResponse(BaseModel):
     total_input_tokens: int
     total_output_tokens: int
@@ -110,6 +115,7 @@ class OverviewResponse(BaseModel):
     active_users: int
     active_keys: int
     daily_usage: list[DailyUsage]
+    credit_trend: list[CreditTrendPoint] = []
     total_gateway_users: int = 0
     active_gateway_users: int = 0
     gateway_input_tokens: int = 0

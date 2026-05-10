@@ -158,6 +158,20 @@ class GatewayKeyDailyUsage(Base):
     gateway_key: Mapped["GatewayKey"] = relationship("GatewayKey", back_populates="daily_usages")
 
 
+class DailyCreditSnapshot(Base):
+    __tablename__ = "daily_credit_snapshots"
+    __table_args__ = (
+        UniqueConstraint("kiro_user_id", "date", name="uq_credit_snapshot_user_date"),
+        Index("ix_credit_snapshot_date", "date"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    kiro_user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    date: Mapped[str] = mapped_column(String(10), nullable=False)
+    current_usage: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+
 class SystemConfig(Base):
     __tablename__ = "system_config"
 
