@@ -113,18 +113,10 @@ async def get_api_key_by_hash(session: AsyncSession, key_hash: str) -> ApiKey | 
 
 async def get_or_create_api_key(session: AsyncSession, raw_key: str, default_user_id: int = 1) -> tuple[ApiKey, bool]:
     """Returns (api_key, is_new) — is_new=True when the key was just created."""
-    # Use an advisory lock keyed by the hash to avoid a race where concurrent
-    # requests concurrently don't see an existing row and both insert duplicates.
     key_h = hash_api_key(raw_key)
-    lock_key = int.from_bytes(hashlib.sha256(key_h.encode()).digest()[:8], "big", signed=False)
 
-    # Acquire a transaction-scoped advisory lock for this key hash.
-    await session.execute(text("SELECT pg_advisory_xact_lock(:lk)"), {"lk": lock_key})
-
-    # Re-check for existing row under the lock, then create if still missing.
     existing = await get_api_key_by_hash(session, key_h)
     if existing:
-        # update cache for existing mapping
         try:
             from kiro.usage.token_cache import token_cache
             await token_cache.set(key_h, existing.id)
@@ -133,17 +125,28 @@ async def get_or_create_api_key(session: AsyncSession, raw_key: str, default_use
         return existing, False
 
     prefix, suffix = mask_key(raw_key)
-    api_key = ApiKey(
+    stmt = pg_insert(ApiKey).values(
         user_id=default_user_id,
         key_hash=key_h,
         key_encrypted=encrypt_api_key(raw_key),
         key_prefix=prefix,
         key_suffix=suffix,
     )
-    session.add(api_key)
+    stmt = stmt.on_conflict_do_nothing(index_elements=["key_hash"])
+    result = await session.execute(stmt)
     await session.commit()
-    await session.refresh(api_key)
-    # populate cache for new key
+
+    if result.rowcount == 0:
+        existing = await get_api_key_by_hash(session, key_h)
+        if existing:
+            try:
+                from kiro.usage.token_cache import token_cache
+                await token_cache.set(key_h, existing.id)
+            except Exception:
+                pass
+            return existing, False
+
+    api_key = await get_api_key_by_hash(session, key_h)
     try:
         from kiro.usage.token_cache import token_cache
         await token_cache.set(key_h, api_key.id)

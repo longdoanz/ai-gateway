@@ -45,7 +45,7 @@ class ApiKey(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     kiro_user_id: Mapped[str | None] = mapped_column(String(255), ForeignKey("kiro_user_mappings.kiro_user_id"), nullable=True)
-    key_hash: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    key_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
     key_encrypted: Mapped[str] = mapped_column(String(512), nullable=False)
     key_prefix: Mapped[str] = mapped_column(String(20), nullable=False)
     key_suffix: Mapped[str] = mapped_column(String(10), nullable=False)

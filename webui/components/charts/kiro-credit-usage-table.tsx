@@ -26,12 +26,12 @@ export function KiroCreditUsageTable({ data }: { data: KiroUserCreditUsage[] }) 
         <thead>
           <tr className="text-on-surface-variant text-xs border-b border-outline-variant/30">
             <th className="text-left px-4 py-3 font-medium">User</th>
-            <th className="text-right px-4 py-3 font-medium">Used</th>
-            <th className="text-right px-4 py-3 font-medium">Quota</th>
-            <th className="text-right px-4 py-3 font-medium">Remaining</th>
+            <th className="text-right px-4 py-3 font-medium">Used (credits)</th>
+            <th className="text-right px-4 py-3 font-medium">Quota (credits)</th>
+            <th className="text-right px-4 py-3 font-medium">Remaining (credits)</th>
             <th className="text-right px-4 py-3 font-medium">Remaining %</th>
-            <th className="text-right px-4 py-3 font-medium">Shared In</th>
-            <th className="text-right px-4 py-3 font-medium">Shared Out</th>
+            <th className="text-right px-4 py-3 font-medium">Shared In (tokens)</th>
+            <th className="text-right px-4 py-3 font-medium">Shared Out (tokens)</th>
           </tr>
         </thead>
         <tbody>
