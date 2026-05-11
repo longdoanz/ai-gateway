@@ -9,8 +9,8 @@ from kiro.usage.daily_buffer import daily_buffer
 
 
 async def track_usage(key_id: int, input_tokens: int = 0, output_tokens: int = 0, model: str = "unknown") -> int | None:
-    """Increment usage counter for a key using token counts per model.
-    The sync worker periodically overwrites KeyUsage with real values from getUsageLimits API."""
+    """Record token usage for a key. KeyUsage.current_usage is a rough request counter
+    between syncs; the sync worker overwrites it with real credit values from Kiro API."""
     total = input_tokens + output_tokens
     if total == 0:
         logger.debug(f"track_usage: skipping zero tokens for key_id={key_id}")
@@ -25,8 +25,8 @@ async def track_usage(key_id: int, input_tokens: int = 0, output_tokens: int = 0
             return None
         async with async_session_factory() as session:
             canonical_key_id = await get_canonical_usage_key_id(session, key_id)
-            await increment_usage(session, canonical_key_id, month, total)
-        await usage_cache.increment(canonical_key_id, total)
+            await increment_usage(session, canonical_key_id, month, 1)
+        await usage_cache.increment(canonical_key_id, 1)
         today = now.strftime("%Y-%m-%d")
         daily_buffer.record(canonical_key_id, today, input_tokens, output_tokens, model=model)
         logger.info(f"Tracked {input_tokens}in/{output_tokens}out tokens model={model} for key_id={canonical_key_id} date={today}")

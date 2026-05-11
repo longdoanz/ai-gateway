@@ -60,6 +60,12 @@ async def startup() -> None:
     async with async_session_factory() as session:
         await usage_cache.load_from_db(session)
 
+    # Immediately sync all keys to get real credit values from Kiro API.
+    # Runs in background so startup is not blocked.
+    from kiro.usage.sync_worker import sync_all_active_keys
+    asyncio.create_task(sync_all_active_keys())
+    logger.info("Usage management: triggered immediate startup sync")
+
     # Load initial fallback config
     from kiro.usage.fallback import fallback_router
     from kiro.db.repositories import get_all_config

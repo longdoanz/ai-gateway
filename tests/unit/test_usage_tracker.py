@@ -29,8 +29,8 @@ class TestTrackUsage:
                         mock_cache.increment = AsyncMock()
                         with patch("kiro.usage.tracker.daily_buffer"):
                             await track_usage(key_id=1, input_tokens=100, output_tokens=50)
-                            # increment_usage(session, key_id, month, total) — total at index 3
-                            assert mock_inc.call_args[0][3] == 150
+                            # increment_usage counts requests (1 per call), not tokens
+                            assert mock_inc.call_args[0][3] == 1
 
     @pytest.mark.asyncio
     async def test_proceeds_with_tokens_positive(self):
@@ -44,8 +44,8 @@ class TestTrackUsage:
                         mock_cache.increment = AsyncMock()
                         with patch("kiro.usage.tracker.daily_buffer"):
                             await track_usage(key_id=2, input_tokens=200, output_tokens=100, model="claude-sonnet-4.6")
-                            # increment_usage(session, key_id, month, total) — total at index 3
-                            assert mock_inc.call_args[0][3] == 300
+                            # increment_usage counts requests (1 per call), not tokens
+                            assert mock_inc.call_args[0][3] == 1
 
     @pytest.mark.asyncio
     async def test_uses_canonical_key_for_same_kiro_user(self):
@@ -63,7 +63,7 @@ class TestTrackUsage:
         assert resolved == 17
         mock_resolve.assert_awaited_once()
         assert mock_inc.call_args[0][1] == 17
-        mock_cache.increment.assert_awaited_once_with(17, 150)
+        mock_cache.increment.assert_awaited_once_with(17, 1)
         mock_buffer.record.assert_called_once()
         assert mock_buffer.record.call_args[0][0] == 17
         # Check tokens passed to buffer

@@ -531,6 +531,7 @@ async def get_canonical_usage_key_id(session: AsyncSession, key_id: int) -> int:
         select(ApiKey.id)
         .where(ApiKey.kiro_user_id == kiro_user_id)
         .order_by(ApiKey.id.asc())
+        .limit(1)
     )
     canonical_key_id = result.scalar_one_or_none()
     return canonical_key_id or key_id

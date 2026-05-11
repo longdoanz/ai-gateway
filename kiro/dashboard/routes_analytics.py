@@ -12,7 +12,7 @@ from kiro.dashboard.schemas import (
     GatewayKeyDailySeries, GatewayKeyUserUsage, GatewayKeyAnalyticsResponse,
 )
 from kiro.db.engine import get_session
-from kiro.db.models import ApiKey, DailyUsage, FallbackUsage, GatewayKey, GatewayKeyDailyUsage, GatewayKeyUsage, KeyUsage, KiroUserMapping, User
+from kiro.db.models import ApiKey, DailyUsage, FallbackUsage, GatewayKey, GatewayKeyDailyUsage, KeyUsage, KiroUserMapping, User
 
 router = APIRouter(prefix="/overview", tags=["analytics"])
 
@@ -248,18 +248,6 @@ async def _aggregate_kiro_credit_usage(
     for row in fallback_rows:
         fallback_map[row.kiro_user_id] = (row.shared_input, row.shared_output)
 
-    # Gateway usage through this user's pool keys (monthly)
-    gw_pool_rows = (await session.execute(
-        select(
-            ApiKey.kiro_user_id,
-            func.coalesce(func.sum(GatewayKeyUsage.current_usage), 0).label("gw_pool_usage"),
-        )
-        .join(GatewayKeyUsage, GatewayKeyUsage.key_id == ApiKey.id)
-        .where(GatewayKeyUsage.month == month, ApiKey.kiro_user_id.isnot(None))
-        .group_by(ApiKey.kiro_user_id)
-    )).all()
-    gw_pool_map: dict[str, int] = {row.kiro_user_id: row.gw_pool_usage for row in gw_pool_rows}
-
     mapping_rows = (await session.execute(
         select(KiroUserMapping.kiro_user_id, KiroUserMapping.username, KiroUserMapping.email)
     )).all()
@@ -275,9 +263,8 @@ async def _aggregate_kiro_credit_usage(
         total_used = data["used_credit"]
         quota = data["quota"]
         shared_in, shared_out = fallback_map.get(kiro_uid, (0, 0))
-        gw_pool = gw_pool_map.get(kiro_uid, 0)
-        shared_total = shared_in + shared_out + gw_pool
-        used = max(0, total_used - shared_total)
+        # total_used is credits from Kiro API — authoritative, no adjustment needed
+        # shared_in/shared_out are tokens (monitor only, shown as separate columns)
         remaining = quota - total_used
         remaining_pct = round(remaining / quota * 100, 1) if quota > 0 else 0.0
         normalized = normalize_kiro_user_id(kiro_uid)
@@ -287,7 +274,7 @@ async def _aggregate_kiro_credit_usage(
             display_name=_display_name(kiro_uid, username, email),
             username=username,
             email=email,
-            used_credit=used,
+            used_credit=total_used,
             quota=quota,
             remaining=remaining,
             remaining_pct=remaining_pct,

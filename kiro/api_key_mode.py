@@ -309,13 +309,11 @@ async def _track_gateway_key_usage(gateway_key_id: int, input_tokens: int = 0, o
         from kiro.usage.daily_buffer import gateway_key_daily_buffer
         import time
         month = time.strftime("%Y-%m")
-        total = input_tokens + output_tokens
-        amount = total if total > 0 else 1
         async with async_session_factory() as session:
             canonical_key_id = key_id
             if key_id is not None:
                 canonical_key_id = await get_canonical_usage_key_id(session, key_id)
-            await increment_gateway_key_usage(session, gateway_key_id, month, amount, key_id=canonical_key_id)
+            await increment_gateway_key_usage(session, gateway_key_id, month, 1, key_id=canonical_key_id)
         today = time.strftime("%Y-%m-%d")
         gateway_key_daily_buffer.record(gateway_key_id, today, input_tokens, output_tokens, model=model, key_id=canonical_key_id)
     except Exception as e:
