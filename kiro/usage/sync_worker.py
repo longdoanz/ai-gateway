@@ -118,8 +118,9 @@ async def _snapshot_daily_credits() -> None:
         return
     from sqlalchemy import func, select
 
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    current_month = datetime.now(timezone.utc).strftime("%Y-%m")
+    tz_utc7 = timezone(timedelta(hours=7))
+    today = datetime.now(tz_utc7).strftime("%Y-%m-%d")
+    current_month = datetime.now(tz_utc7).strftime("%Y-%m")
 
     async with async_session_factory() as session:
         result = await session.execute(
@@ -180,9 +181,10 @@ async def run_monthly_sync_loop() -> None:
 
 
 async def run_daily_snapshot_loop() -> None:
-    """Snapshot credit usage at 23:55 UTC daily."""
+    """Snapshot credit usage at 23:55 UTC+7 daily."""
+    tz_utc7 = timezone(timedelta(hours=7))
     while True:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(tz_utc7)
         target = now.replace(hour=23, minute=55, second=0, microsecond=0)
         if now >= target:
             target = target + timedelta(days=1)
