@@ -167,7 +167,6 @@ async def test_merge_duplicate_keys_for_user_does_not_delete_rows():
             SimpleNamespace(id=7, key_hash="hash-old", key_encrypted="enc-old", key_prefix="pre-old", key_suffix="suf-old"),
             SimpleNamespace(id=9, key_hash="hash-new", key_encrypted="enc-new", key_prefix="pre-new", key_suffix="suf-new"),
         ]),
-        None,
     ])
     session.commit = AsyncMock()
 
@@ -175,5 +174,5 @@ async def test_merge_duplicate_keys_for_user_does_not_delete_rows():
 
     assert survivor_id == 7
     assert deleted_ids == []
-    assert session.execute.call_count == 2
-    session.commit.assert_called_once()
+    assert session.execute.call_count == 1  # Only the SELECT
+    session.commit.assert_not_called()

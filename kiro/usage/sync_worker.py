@@ -43,16 +43,41 @@ async def sync_usage_limits(key_ids: list[int]) -> None:
     if not keys:
         return
 
-    logger.info(f"Sync worker: syncing usage limits for {len(keys)} keys")
-    cache_updates: dict[int, tuple[int, int]] = {}
+    logger.info(f"Sync worker: processing {len(keys)} keys")
+
+    # Group keys by kiro_user_id to avoid redundant API calls.
+    # If a user has multiple active keys, we only need to sync one of them.
+    # Keys with None kiro_user_id (newly added) must all be synced.
+    keys_by_user: dict[str, list[ApiKey]] = {}
+    new_keys: list[ApiKey] = []
+    for k in keys:
+        if k.kiro_user_id:
+            if k.kiro_user_id not in keys_by_user:
+                keys_by_user[k.kiro_user_id] = []
+            keys_by_user[k.kiro_user_id].append(k)
+        else:
+            new_keys.append(k)
+
+    keys_to_sync: list[ApiKey] = []
+    for uid, ukeys in keys_by_user.items():
+        # Pick the newest key (highest ID) as the representative for this user
+        ukeys.sort(key=lambda x: x.id, reverse=True)
+        keys_to_sync.append(ukeys[0])
+    keys_to_sync.extend(new_keys)
+
+    if len(keys_to_sync) < len(keys):
+        logger.info(f"Sync worker: optimized batch from {len(keys)} to {len(keys_to_sync)} API calls")
+
+    cache_updates: dict[int, tuple[int, int, float | None]] = {}
     deactivated_this_cycle: set[int] = set()
 
-    async with async_session_factory() as session:
-        for key in keys:
-            if key.id in deactivated_this_cycle:
-                logger.debug(f"Sync worker: skipping key {key.id} (deactivated earlier this cycle)")
-                continue
-            try:
+    for key in keys_to_sync:
+        if key.id in deactivated_this_cycle:
+            continue
+        
+        try:
+            # Use a fresh session for each key to isolate transaction failures
+            async with async_session_factory() as session:
                 raw_key = decrypt_api_key(key.key_encrypted)
                 data = await get_usage_limits(raw_key, resource_type="CREDIT")
 
@@ -75,35 +100,47 @@ async def sync_usage_limits(key_ids: list[int]) -> None:
                 raw_reset = credit_entry.get("nextDateReset") or data.get("nextDateReset")
                 next_reset_at: float | None = float(raw_reset) if raw_reset is not None else None
 
-                from datetime import datetime, timezone
                 month = datetime.now(timezone.utc).strftime("%Y-%m")
 
-                await upsert_usage_limits(session, key.id, month, usage_limit, current_usage)
-
-                cache_updates[key.id] = (usage_limit, current_usage, next_reset_at)
-
+                # Fetch ALL active keys for this Kiro user to update them together
                 user_info = data.get("userInfo", {})
-                kiro_user_id = user_info.get("userId")
-                if kiro_user_id and kiro_user_id != key.kiro_user_id:
+                kiro_user_id = user_info.get("userId") or key.kiro_user_id
+                
+                target_key_ids = [key.id]
+                if kiro_user_id:
+                    # Sync this user's mapping first
                     await upsert_kiro_user_mappings(session, [{"kiro_user_id": kiro_user_id}])
-                    await update_api_key(session, key.id, kiro_user_id=kiro_user_id)
+                    if kiro_user_id != key.kiro_user_id:
+                        await update_api_key(session, key.id, kiro_user_id=kiro_user_id)
+                    
+                    # Find all active keys for this user to propagate limits
+                    result = await session.execute(
+                        select(ApiKey.id).where(ApiKey.kiro_user_id == kiro_user_id, ApiKey.is_active == True)
+                    )
+                    target_key_ids = [row[0] for row in result.all()]
+
+                for kid in target_key_ids:
+                    await upsert_usage_limits(session, kid, month, usage_limit, current_usage)
+                    cache_updates[kid] = (usage_limit, current_usage, next_reset_at)
 
                 if kiro_user_id:
                     survivor_id, _ = await merge_duplicate_keys_for_user(session, key.id, kiro_user_id)
                     if survivor_id != key.id:
                         logger.info(f"Sync worker: updated preferred key for user {kiro_user_id}, survivor={survivor_id}")
 
-                logger.debug(f"Synced key {key.id}: usage={current_usage}/{usage_limit} next_reset_at={next_reset_at}")
+                logger.debug(f"Synced key {key.id} (and {len(target_key_ids)-1} siblings): usage={current_usage}/{usage_limit}")
 
-            except Exception as e:
-                from fastapi import HTTPException as FastAPIHTTPException
-                if isinstance(e, FastAPIHTTPException) and e.status_code == 401:
-                    logger.warning(f"Sync worker: key {key.id} returned 401/403 — deactivating")
+        except Exception as e:
+            from fastapi import HTTPException as FastAPIHTTPException
+            if isinstance(e, FastAPIHTTPException) and e.status_code == 401:
+                logger.warning(f"Sync worker: key {key.id} returned 401/403 — deactivating")
+                async with async_session_factory() as session:
                     await update_api_key(session, key.id, is_active=False)
-                    usage_cache.set_key_active(key.id, False)
-                else:
-                    logger.warning(f"Sync worker: failed to sync key {key.id}: {e}")
-                continue
+                usage_cache.set_key_active(key.id, False)
+                deactivated_this_cycle.add(key.id)
+            else:
+                logger.warning(f"Sync worker: failed to sync key {key.id}: {e}")
+            continue
 
     if cache_updates:
         await usage_cache.refresh_limits(cache_updates)
@@ -137,9 +174,12 @@ async def _snapshot_daily_credits() -> None:
     if not rows:
         return
 
-    async with async_session_factory() as session:
-        for row in rows:
-            await upsert_daily_credit_snapshot(session, row.kiro_user_id, today, int(row.current_usage))
+    for row in rows:
+        try:
+            async with async_session_factory() as session:
+                await upsert_daily_credit_snapshot(session, row.kiro_user_id, today, int(row.current_usage))
+        except Exception as e:
+            logger.warning(f"Sync worker: failed to snapshot user {row.kiro_user_id}: {e}")
 
 
 async def sync_all_active_keys() -> None:

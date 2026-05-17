@@ -40,12 +40,23 @@ class FallbackRouter:
         return await self._pick_fallback_key(current_key_id)
 
     async def _pick_fallback_key(self, exclude_key_id: int) -> tuple[int, str]:
-        available = usage_cache.get_available_keys(exclude_key_id=exclude_key_id)
-        if not available:
+        available_ids = usage_cache.get_available_keys(exclude_key_id=exclude_key_id)
+        if not available_ids:
             raise NoAvailableKeyError("No available keys with remaining quota")
 
-        picked_key_id, raw_key = await sticky_binder.pick_and_decrypt(exclude_key_id, available)
-        logger.info(f"Fallback: switched from key {exclude_key_id} to key {picked_key_id}")
+        # Prioritize system keys
+        system_available = []
+        user_available = []
+        for kid in available_ids:
+            entry = usage_cache.get(kid)
+            if entry and entry.is_system:
+                system_available.append(kid)
+            else:
+                user_available.append(kid)
+
+        pool = system_available if system_available else user_available
+        picked_key_id, raw_key = await sticky_binder.pick_and_decrypt(exclude_key_id, pool)
+        logger.info(f"Fallback: switched from key {exclude_key_id} to key {picked_key_id} (system_key={picked_key_id in system_available})")
         return picked_key_id, raw_key
 
 

@@ -66,15 +66,28 @@ class ApiKeyCreate(BaseModel):
 
 class ApiKeyResponse(BaseModel):
     id: int
-    user_id: int
+    user_id: int | None = None
     kiro_user_id: str | None = None
     kiro_email: str | None = None
     key_prefix: str
     key_suffix: str
     is_active: bool
+    is_system: bool = False
+    use_proxy: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class SystemKeyCreate(BaseModel):
+    raw_key: str = Field(min_length=10)
+    use_proxy: bool = False
+    is_active: bool = True
+
+
+class SystemKeyUpdate(BaseModel):
+    is_active: bool | None = None
+    use_proxy: bool | None = None
 
 
 class ApiKeyToggle(BaseModel):

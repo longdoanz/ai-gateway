@@ -169,55 +169,67 @@ async def list_active_api_keys(session: AsyncSession) -> list[ApiKey]:
     return list(result.scalars().all())
 
 
-async def create_api_key(session: AsyncSession, user_id: int, raw_key: str) -> ApiKey:
+async def create_api_key(
+    session: AsyncSession,
+    user_id: int | None,
+    raw_key: str,
+    is_system: bool = False,
+    use_proxy: bool = False,
+) -> ApiKey:
     prefix, suffix = mask_key(raw_key)
     key_hash = hash_api_key(raw_key)
     key_encrypted = encrypt_api_key(raw_key)
 
-    result = await session.execute(
-        select(ApiKey).where(ApiKey.user_id == user_id).order_by(ApiKey.id)
-    )
-    existing_keys = list(result.scalars().all())
-
-    if existing_keys:
-        api_key = existing_keys[0]
-        await session.execute(
-            update(ApiKey).where(ApiKey.id == api_key.id).values(
-                key_hash=key_hash,
-                key_encrypted=key_encrypted,
-                key_prefix=prefix,
-                key_suffix=suffix,
-                is_active=True,
-            )
+    if user_id is not None:
+        result = await session.execute(
+            select(ApiKey).where(ApiKey.user_id == user_id).order_by(ApiKey.id)
         )
+        existing_keys = list(result.scalars().all())
 
-        if len(existing_keys) > 1:
-            from sqlalchemy import delete
+        if existing_keys:
+            api_key = existing_keys[0]
+            await session.execute(
+                update(ApiKey).where(ApiKey.id == api_key.id).values(
+                    key_hash=key_hash,
+                    key_encrypted=key_encrypted,
+                    key_prefix=prefix,
+                    key_suffix=suffix,
+                    is_active=True,
+                    is_system=is_system,
+                    use_proxy=use_proxy,
+                )
+            )
 
-            duplicate_ids = [key.id for key in existing_keys[1:]]
-            await session.execute(delete(KeyUsage).where(KeyUsage.key_id.in_(duplicate_ids)))
-            await session.execute(delete(DailyUsage).where(DailyUsage.key_id.in_(duplicate_ids)))
-            await session.execute(delete(FallbackUsage).where(
-                (FallbackUsage.original_key_id.in_(duplicate_ids)) | (FallbackUsage.fallback_key_id.in_(duplicate_ids))
-            ))
-            await session.execute(delete(ApiKey).where(ApiKey.id.in_(duplicate_ids)))
+            if len(existing_keys) > 1:
+                from sqlalchemy import delete
+                duplicate_ids = [key.id for key in existing_keys[1:]]
+                await session.execute(delete(KeyUsage).where(KeyUsage.key_id.in_(duplicate_ids)))
+                await session.execute(delete(DailyUsage).where(DailyUsage.key_id.in_(duplicate_ids)))
+                await session.execute(delete(FallbackUsage).where(
+                    (FallbackUsage.original_key_id.in_(duplicate_ids)) | (FallbackUsage.fallback_key_id.in_(duplicate_ids))
+                ))
+                await session.execute(delete(ApiKey).where(ApiKey.id.in_(duplicate_ids)))
 
-        await session.commit()
-        await session.refresh(api_key)
-        # update cache mapping
-        try:
-            from kiro.usage.token_cache import token_cache
-            await token_cache.set(key_hash, api_key.id)
-        except Exception:
-            pass
-        return api_key
+            await session.commit()
+            await session.refresh(api_key)
+            # update cache mapping
+            try:
+                from kiro.usage.token_cache import token_cache
+                await token_cache.set(key_hash, api_key.id)
+            except Exception:
+                pass
+            return api_key
 
+    # New key (System Key or User Key without existing)
     api_key = ApiKey(
         user_id=user_id,
         key_hash=key_hash,
         key_encrypted=key_encrypted,
         key_prefix=prefix,
         key_suffix=suffix,
+        is_active=True,
+        is_system=is_system,
+        use_proxy=use_proxy,
     )
     session.add(api_key)
     await session.commit()
@@ -268,23 +280,11 @@ async def merge_duplicate_keys_for_user(session: AsyncSession, keep_key_id: int,
     survivor = next((k for k in all_keys if k.id == keep_key_id), None)
     if survivor is None:
         survivor = all_keys[0]
-    newest = all_keys[-1]
 
-    # If the survivor isn't the newest, propagate the newest credentials to the survivor
-    # so the preferred record retains the latest secrets.
-    if survivor.id != newest.id:
-        await session.execute(
-            update(ApiKey).where(ApiKey.id == survivor.id).values(
-                key_hash=newest.key_hash,
-                key_encrypted=newest.key_encrypted,
-                key_prefix=newest.key_prefix,
-                key_suffix=newest.key_suffix,
-                is_active=True,
-            )
-        )
-
-    await session.commit()
-    # No cache invalidation is needed because no rows are deleted.
+    # No update is performed here to avoid UNIQUE constraint violations on key_hash.
+    # The system supports multiple active keys per user, and usage is aggregated
+    # via get_canonical_usage_key_id().
+    
     return survivor.id, []
 
 

@@ -586,6 +586,15 @@ class ApiKeyModeClient:
     async def _get_client(self, stream: bool = False) -> httpx.AsyncClient:
         if self._shared_client is not None:
             return self._shared_client
+        
+        # Check if we should use proxy for this key
+        trust_env = True
+        if self.key_id is not None:
+            from kiro.usage.usage_cache import usage_cache
+            entry = usage_cache.get(self.key_id)
+            if entry and not entry.use_proxy:
+                trust_env = False
+
         if self.client is None or self.client.is_closed:
             if stream:
                 timeout = httpx.Timeout(
@@ -596,7 +605,7 @@ class ApiKeyModeClient:
                 )
             else:
                 timeout = httpx.Timeout(timeout=300.0)
-            self.client = httpx.AsyncClient(timeout=timeout, follow_redirects=True)
+            self.client = httpx.AsyncClient(timeout=timeout, follow_redirects=True, trust_env=trust_env)
         return self.client
 
     async def close(self) -> None:

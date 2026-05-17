@@ -43,16 +43,18 @@ class ApiKey(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     kiro_user_id: Mapped[str | None] = mapped_column(String(255), ForeignKey("kiro_user_mappings.kiro_user_id"), nullable=True)
     key_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
     key_encrypted: Mapped[str] = mapped_column(String(512), nullable=False)
     key_prefix: Mapped[str] = mapped_column(String(20), nullable=False)
     key_suffix: Mapped[str] = mapped_column(String(10), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    use_proxy: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
-    owner: Mapped["User"] = relationship("User", back_populates="api_keys")
+    owner: Mapped["User | None"] = relationship("User", back_populates="api_keys")
     usages: Mapped[list["KeyUsage"]] = relationship("KeyUsage", back_populates="api_key", lazy="selectin")
 
 

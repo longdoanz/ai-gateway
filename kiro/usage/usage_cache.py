@@ -11,6 +11,8 @@ class UsageEntry:
     current_usage: int
     usage_limit: int
     is_active: bool
+    is_system: bool = False
+    use_proxy: bool = False
     next_reset_at: float | None = None
 
 
@@ -49,6 +51,8 @@ class UsageCache:
                     current_usage=usage.current_usage if usage else 0,
                     usage_limit=usage.usage_limit if usage else 0,
                     is_active=key.is_active,
+                    is_system=key.is_system,
+                    use_proxy=key.use_proxy,
                 )
         logger.info(f"UsageCache loaded: {len(self._cache)} keys")
 
