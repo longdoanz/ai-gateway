@@ -3,6 +3,8 @@
 .env.local
 .env.test
 .production
+credentials.json
+state.json
 
 # IDE
 .vscode/
