@@ -22,6 +22,16 @@ from kiro.routes_anthropic import verify_anthropic_api_key, router
 from kiro.config import PROXY_API_KEY
 
 
+@pytest.fixture(autouse=True)
+def force_standard_auth_mode():
+    """Ensure API_KEY_MODE=False for all tests in this file regardless of .env."""
+    import kiro.routes_anthropic as _mod
+    original = _mod.API_KEY_MODE
+    _mod.API_KEY_MODE = False
+    yield
+    _mod.API_KEY_MODE = original
+
+
 # =============================================================================
 # Tests for verify_anthropic_api_key function
 # =============================================================================

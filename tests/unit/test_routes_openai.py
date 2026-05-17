@@ -26,6 +26,16 @@ from kiro.routes_openai import verify_api_key, router
 from kiro.config import PROXY_API_KEY, APP_VERSION
 
 
+@pytest.fixture(autouse=True)
+def force_standard_auth_mode():
+    """Ensure API_KEY_MODE=False for all tests in this file regardless of .env."""
+    import kiro.routes_openai as _mod
+    original = _mod.API_KEY_MODE
+    _mod.API_KEY_MODE = False
+    yield
+    _mod.API_KEY_MODE = original
+
+
 # =============================================================================
 # Tests for verify_api_key function
 # =============================================================================
@@ -1276,6 +1286,12 @@ class TestTruncationRecoveryEdgeCases:
             assert modified_messages[0].content == "Result"
             assert "[API Limitation]" not in modified_messages[0].content
         
+        # Restore config.TRUNCATION_RECOVERY — reload(config) inside the patch.dict
+        # block set it to False; patch.dict only restores the env var, not the module.
+        from importlib import reload
+        from kiro import config as _cfg
+        reload(_cfg)
+
         print("Checking: Cache entry still exists (not cleaned up)...")
         # Note: get_tool_truncation() was NOT called, so entry should still be there
         # But we can't verify this without calling get_tool_truncation again

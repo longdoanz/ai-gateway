@@ -807,12 +807,14 @@ class TestWebSearchConfig:
 
 def test_api_key_mode_default_false(monkeypatch):
     monkeypatch.delenv("API_KEY_MODE", raising=False)
+    monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **kw: None)
     import importlib, kiro.config as cfg
     importlib.reload(cfg)
     assert cfg.API_KEY_MODE is False
 
 def test_api_key_mode_true_when_set(monkeypatch):
     monkeypatch.setenv("API_KEY_MODE", "true")
+    monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **kw: None)
     import importlib, kiro.config as cfg
     importlib.reload(cfg)
     assert cfg.API_KEY_MODE is True

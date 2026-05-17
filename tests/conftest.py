@@ -86,19 +86,19 @@ def setup_test_environment(tmp_path_factory):
     import kiro.config
     original_creds_file = kiro.config.ACCOUNTS_CONFIG_FILE
     original_state_file = kiro.config.ACCOUNTS_STATE_FILE
-    
+
     kiro.config.ACCOUNTS_CONFIG_FILE = str(creds_file)
     kiro.config.ACCOUNTS_STATE_FILE = str(tmp_dir / "state.json")
-    
+
     print(f"✅ Test credentials: {creds_file}")
     print(f"✅ Test state: {tmp_dir / 'state.json'}")
-    
+
     yield
-    
+
     # Restore original paths
     kiro.config.ACCOUNTS_CONFIG_FILE = original_creds_file
     kiro.config.ACCOUNTS_STATE_FILE = original_state_file
-    
+
     print("🧹 Test environment cleaned up")
 
 
@@ -538,11 +538,47 @@ def test_client(clean_app):
     """
     Creates a FastAPI TestClient for synchronous endpoint tests,
     properly handling lifespan events.
+
+    Forces API_KEY_MODE=False and mocks AccountManager so the lifespan
+    completes account initialization regardless of .env settings.
     """
+    import main as _main
+    from unittest.mock import patch, AsyncMock, MagicMock
+
+    mock_account = MagicMock()
+    mock_account.auth_manager = MagicMock()
+
+    mock_manager = AsyncMock()
+    mock_manager._accounts = {"test": mock_account}
+    mock_manager._current_account_index = 0
+    mock_manager._initialize_account = AsyncMock(return_value=True)
+    mock_manager._save_state = AsyncMock()
+    mock_manager.save_state_periodically = AsyncMock()
+    mock_manager.get_first_account = MagicMock(return_value=mock_account)
+    mock_manager.get_all_available_models = MagicMock(return_value=["claude-sonnet-4-5", "claude-opus-4-5"])
+
+    original_api_key_mode = _main.API_KEY_MODE
+    original_account_system = _main.ACCOUNT_SYSTEM
+    _main.API_KEY_MODE = False
+    _main.ACCOUNT_SYSTEM = True
+
+    import kiro.routes_openai as _routes_openai
+    import kiro.routes_anthropic as _routes_anthropic
+    original_openai_mode = _routes_openai.API_KEY_MODE
+    original_anthropic_mode = _routes_anthropic.API_KEY_MODE
+    _routes_openai.API_KEY_MODE = False
+    _routes_anthropic.API_KEY_MODE = False
+
     print("Creating TestClient with lifespan support...")
-    with TestClient(clean_app) as client:
-        yield client
+    with patch("main.AccountManager", return_value=mock_manager):
+        with TestClient(clean_app) as client:
+            yield client
     print("Closing TestClient...")
+
+    _main.API_KEY_MODE = original_api_key_mode
+    _main.ACCOUNT_SYSTEM = original_account_system
+    _routes_openai.API_KEY_MODE = original_openai_mode
+    _routes_anthropic.API_KEY_MODE = original_anthropic_mode
 
 
 @pytest.fixture

@@ -89,11 +89,14 @@ async def update_system_key(
 
 
 @router.delete("/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def deactivate_system_key(
+async def delete_system_key(
     key_id: int, 
     _=Depends(require_admin), 
     session: AsyncSession = Depends(get_session)
 ):
+    from sqlalchemy import delete
+    from kiro.db.models import KeyUsage, DailyUsage, FallbackUsage
+    
     stmt = select(ApiKey).where(ApiKey.id == key_id, ApiKey.is_system == True)
     result = await session.execute(stmt)
     key = result.scalar_one_or_none()
@@ -101,10 +104,19 @@ async def deactivate_system_key(
     if key is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="System key not found")
     
-    await update_api_key(session, key_id, is_active=False)
+    # Delete related usage data first to avoid foreign key constraints
+    await session.execute(delete(KeyUsage).where(KeyUsage.key_id == key_id))
+    await session.execute(delete(DailyUsage).where(DailyUsage.key_id == key_id))
+    await session.execute(delete(FallbackUsage).where(
+        (FallbackUsage.original_key_id == key_id) | (FallbackUsage.fallback_key_id == key_id)
+    ))
+    
+    # Delete the key itself
+    await session.execute(delete(ApiKey).where(ApiKey.id == key_id))
+    await session.commit()
     
     try:
         from kiro.usage.usage_cache import usage_cache
-        usage_cache.set_key_active(key_id, False)
+        usage_cache.remove_key(key_id)
     except Exception:
         pass

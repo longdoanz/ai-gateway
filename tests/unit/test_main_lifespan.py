@@ -20,6 +20,16 @@ from contextlib import asynccontextmanager
 
 
 # =============================================================================
+# Module-level fixture: isolate API_KEY_MODE from .env
+# =============================================================================
+
+@pytest.fixture(autouse=True)
+def force_standard_auth_mode(monkeypatch):
+    """Ensure API_KEY_MODE=False for all lifespan tests regardless of .env."""
+    monkeypatch.setattr("main.API_KEY_MODE", False)
+
+
+# =============================================================================
 # Test Class: Legacy Fallback (Migration)
 # =============================================================================
 
@@ -905,3 +915,88 @@ class TestLifespanAccountManagerInit:
         print(f"Save calls: {len(save_calls)}")
         assert len(save_calls) >= 2
         print("✓ Final state save was performed on shutdown")
+
+
+# =============================================================================
+# Test Class: Global Initialization (Cache & Resolver)
+# =============================================================================
+
+class TestLifespanGlobalInit:
+    """
+    Tests for global objects initialization in lifespan.
+    
+    What it does: Verifies that model_cache and model_resolver are initialized regardless of mode
+    Purpose: Prevent AttributeError when these objects are accessed in API_KEY_MODE or other modes
+    """
+    
+    @pytest.mark.asyncio
+    async def test_lifespan_initializes_cache_and_resolver(self, monkeypatch):
+        """
+        Test 108: Инициализация model_cache и model_resolver
+        
+        What it does: Verifies that cache and resolver are set in app.state
+        Purpose: Prevent regression of AttributeError
+        """
+        print("\n=== Test 108: Initialize cache and resolver ===")
+        
+        # Mode doesn't matter, but let's test both
+        for mode in [True, False]:
+            print(f"Testing with API_KEY_MODE={mode}")
+            monkeypatch.setattr("main.API_KEY_MODE", mode)
+            monkeypatch.setattr("main.ACCOUNT_SYSTEM", not mode)
+            
+            # Mock objects that might interfere
+            mock_manager = AsyncMock()
+            mock_manager._accounts = {"test": MagicMock()} if not mode else {}
+            mock_manager._current_account_index = 0
+            mock_manager._initialize_account = AsyncMock(return_value=True)
+            mock_manager._save_state = AsyncMock()
+            mock_manager.save_state_periodically = AsyncMock()
+            
+            with patch("main.AccountManager", return_value=mock_manager):
+                with patch("main.httpx.AsyncClient") as mock_client_class:
+                    mock_client = AsyncMock()
+                    mock_client_class.return_value = mock_client
+                    
+                    from main import lifespan, app
+                    
+                    async with lifespan(app):
+                        # Assert
+                        assert hasattr(app.state, "model_cache")
+                        assert hasattr(app.state, "model_resolver")
+                        assert app.state.model_cache is not None
+                        assert app.state.model_resolver is not None
+                        print(f"✓ Cache and resolver initialized (API_KEY_MODE={mode})")
+    
+    @pytest.mark.asyncio
+    async def test_lifespan_populates_cache_with_fallbacks(self, monkeypatch):
+        """
+        Test 109: Наполнение cache моделями FALLBACK_MODELS và HIDDEN_MODELS
+        
+        What it does: Verifies cache is initially populated
+        Purpose: Ensure models are available even before first API fetch
+        """
+        print("\n=== Test 109: Populate cache with fallbacks ===")
+        
+        monkeypatch.setattr("main.API_KEY_MODE", True)
+        
+        mock_manager = AsyncMock()
+        mock_manager._accounts = {}
+        
+        with patch("main.AccountManager", return_value=mock_manager):
+            with patch("main.httpx.AsyncClient"):
+                from main import lifespan, app
+                from kiro.config import FALLBACK_MODELS, HIDDEN_MODELS
+                
+                async with lifespan(app):
+                    cache = app.state.model_cache
+                    
+                    # Verify fallback models are present
+                    for model in FALLBACK_MODELS:
+                        assert cache.get(model["modelId"]) is not None
+                    
+                    # Verify hidden models are present
+                    for display_name in HIDDEN_MODELS:
+                        assert cache.get(display_name) is not None
+                        
+                    print("✓ Cache populated with fallback and hidden models")

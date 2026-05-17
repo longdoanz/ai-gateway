@@ -71,7 +71,20 @@ export interface ApiKeyResponse {
   key_prefix: string;
   key_suffix: string;
   is_active: boolean;
+  is_system: boolean;
+  use_proxy: boolean;
   created_at: string;
+}
+
+export interface SystemKeyCreate {
+  raw_key: string;
+  use_proxy?: boolean;
+  is_active?: boolean;
+}
+
+export interface SystemKeyUpdate {
+  is_active?: boolean;
+  use_proxy?: boolean;
 }
 
 export interface ApiKeyToggle {

@@ -363,6 +363,22 @@ async def lifespan(app: FastAPI):
     )
     logger.info("Shared HTTP client created with connection pooling")
 
+    # Initialize model cache and resolver for shared use (especially for API_KEY_MODE)
+    app.state.model_cache = ModelInfoCache()
+    # Populate with fallback models initially
+    await app.state.model_cache.update(FALLBACK_MODELS)
+    # Add hidden models
+    for display_name, internal_id in HIDDEN_MODELS.items():
+        app.state.model_cache.add_hidden_model(display_name, internal_id)
+    
+    app.state.model_resolver = ModelResolver(
+        cache=app.state.model_cache,
+        hidden_models=HIDDEN_MODELS,
+        aliases=MODEL_ALIASES,
+        hidden_from_list=HIDDEN_FROM_LIST
+    )
+    logger.info("Global model cache and resolver initialized")
+
     # ==============================================================================
     # Legacy Fallback: .env → credentials.json
     # ==============================================================================
