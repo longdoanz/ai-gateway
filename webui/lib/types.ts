@@ -74,6 +74,8 @@ export interface ApiKeyResponse {
   is_system: boolean;
   use_proxy: boolean;
   created_at: string;
+  current_usage: number;
+  last_used_at: string | null;
 }
 
 export interface SystemKeyCreate {
@@ -132,16 +134,35 @@ export interface OverviewResponse {
 
 // --- Config ---
 
+export interface ModelOverrideRule {
+  from: string;
+  to: string;
+}
+
 export interface SystemConfigResponse {
   enable_model_override: boolean;
-  enforced_global_model: string;
+  model_override_rules: ModelOverrideRule[];
+  model_override_default: string;
   enable_usage_sharing: boolean;
 }
 
 export interface SystemConfigUpdate {
   enable_model_override?: boolean;
-  enforced_global_model?: string;
+  model_override_rules?: ModelOverrideRule[];
+  model_override_default?: string;
   enable_usage_sharing?: boolean;
+}
+
+// --- Models ---
+
+export interface ModelInfo {
+  id: string;
+  source: "cache" | "fallback";
+}
+
+export interface ModelListResponse {
+  models: ModelInfo[];
+  total: number;
 }
 
 // --- Import ---

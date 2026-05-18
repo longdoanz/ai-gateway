@@ -66,29 +66,13 @@ from kiro.http_client import KiroHttpClient
 
 def _is_runtime_endpoint(auth_manager: KiroAuthManager) -> bool:
     """
-    Check if auth manager uses runtime endpoint that doesn't provide /ListAvailableModels.
-    
-    Runtime endpoint pattern: https://runtime.{region}.kiro.dev
-    Old endpoint pattern: https://q.{region}.amazonaws.com
-    
-    Runtime endpoint does not provide /ListAvailableModels API (AWS limitation).
-    
-    Args:
-        auth_manager: KiroAuthManager instance
-    
+    Check if auth manager uses the old runtime.kiro.dev endpoint.
+
+    The runtime endpoint does not provide /ListAvailableModels.
+    The current default is q.{region}.amazonaws.com which supports it.
+
     Returns:
-        True if using runtime endpoint, False otherwise
-    
-    Examples:
-        >>> auth_manager.api_host = "https://runtime.us-east-1.kiro.dev"
-        >>> _is_runtime_endpoint(auth_manager)
-        True
-        >>> auth_manager.api_host = "https://runtime.eu-central-1.kiro.dev"
-        >>> _is_runtime_endpoint(auth_manager)
-        True
-        >>> auth_manager.api_host = "https://q.us-east-1.amazonaws.com"
-        >>> _is_runtime_endpoint(auth_manager)
-        False
+        True if using runtime.kiro.dev endpoint, False otherwise
     """
     return "://runtime." in auth_manager.api_host
 
@@ -499,7 +483,7 @@ class AccountManager:
             
             # Determine if we should fetch models or use static list
             if _is_runtime_endpoint(auth_manager):
-                # New runtime endpoint does not provide /ListAvailableModels (AWS limitation)
+                # Old runtime.kiro.dev endpoint does not provide /ListAvailableModels
                 # Use static list without attempting request
                 logger.debug(f"Account {account_id}: Using static model list for runtime.kiro.dev endpoint")
                 models_list = FALLBACK_MODELS
@@ -591,7 +575,7 @@ class AccountManager:
         
         # Check if using runtime endpoint (no dynamic model list available)
         if _is_runtime_endpoint(account.auth_manager):
-            # Runtime endpoint does not provide /ListAvailableModels
+            # Old runtime.kiro.dev endpoint does not provide /ListAvailableModels
             # Use static list and update cache timestamp
             logger.debug(f"Account {account_id}: Skipping model refresh for runtime.kiro.dev endpoint (using static list)")
             await account.model_cache.update(FALLBACK_MODELS)

@@ -40,8 +40,7 @@ from loguru import logger
 if TYPE_CHECKING:
     from kiro.cache import ModelInfoCache
 
-
-# Valid model IDs accepted by runtime.{region}.kiro.dev
+# Valid model IDs accepted by the Kiro API
 # Generated from FALLBACK_MODELS to maintain single source of truth
 from kiro.config import FALLBACK_MODELS
 
@@ -50,8 +49,8 @@ VALID_RUNTIME_MODEL_IDS: set = {model["modelId"] for model in FALLBACK_MODELS}
 
 def to_runtime_model_id(normalized: str) -> str:
     """
-    Pass-through function for runtime.kiro.dev model ID.
-    
+    Pass-through function for Kiro API model ID.
+
     Previously performed fallback to "auto" for unknown models, but this violated
     the "gateway, not gatekeeper" principle. Now returns model as-is and lets
     Kiro API decide if the model exists.

@@ -8,8 +8,10 @@ from kiro.db.models import User
 from kiro.db.repositories import (
     build_kiro_email_lookup,
     create_api_key,
+    delete_api_key,
     get_api_key_by_hash,
     get_all_usage_for_month,
+    get_usage_history,
     get_usage_for_month,
     hash_api_key,
     list_api_keys,
@@ -71,17 +73,13 @@ async def toggle_key(key_id: int, body: ApiKeyToggle, caller: User = Depends(get
 
 
 @router.delete("/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def deactivate_key(key_id: int, caller: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+async def delete_key(key_id: int, caller: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
     keys = await list_api_keys(session, user_id=None if caller.role == "admin" else caller.id)
     key = next((k for k in keys if k.id == key_id), None)
     if key is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Key not found")
-    await update_api_key(session, key_id, is_active=False)
-    try:
-        from kiro.usage.usage_cache import usage_cache
-        usage_cache.set_key_active(key_id, False)
-    except Exception:
-        pass
+
+    await delete_api_key(session, key_id)
 
 
 @router.get("/{key_id}/usage", response_model=list[KeyUsageResponse])
@@ -90,5 +88,4 @@ async def get_key_usage(key_id: int, caller: User = Depends(get_current_user), s
     key = next((k for k in keys if k.id == key_id), None)
     if key is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Key not found")
-    from kiro.db.repositories import get_usage_history
     return await get_usage_history(session, key_id)

@@ -14,7 +14,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { useKeys, useCreateKey, useToggleKey } from "@/hooks/use-keys";
+import { useKeys, useCreateKey, useToggleKey, useDeleteKey } from "@/hooks/use-keys";
 import { useUsers, useCreateUser, useUpdateUser, useProvisionUserByEmail } from "@/hooks/use-users";
 import { useImportUsers, useKiroUsers, useToggleKiroUser } from "@/hooks/use-import";
 import { useAuth } from "@/hooks/use-auth";
@@ -127,12 +127,40 @@ function groupKeysByKiroUser(keys: ApiKeyResponse[]): KiroUserGroup[] {
 
 function KeyRow({ apiKey }: { apiKey: ApiKeyResponse }) {
   const toggleKey = useToggleKey();
+  const deleteKey = useDeleteKey();
+  const { user: authUser } = useAuth();
+  const isAdmin = authUser?.role === "admin";
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  async function handleDelete() {
+    if (window.confirm("Are you sure you want to delete this key? This will also delete all usage history for this specific key. This action cannot be undone.")) {
+      setIsDeleting(true);
+      try {
+        await deleteKey.mutateAsync(apiKey.id);
+      } catch (error) {
+        console.error("Failed to delete key:", error);
+      } finally {
+        setIsDeleting(false);
+      }
+    }
+  }
+
   return (
-    <tr className="border-b border-outline-variant/20">
+    <tr className="border-b border-outline-variant/20 hover:bg-surface-container-lowest/50 transition-colors">
       <td className="py-3 px-4 font-mono text-on-surface-variant text-xs">{maskKey(apiKey.key_prefix, apiKey.key_suffix)}</td>
       <td className="py-3 px-4 text-on-surface-variant text-xs">{new Date(apiKey.created_at).toLocaleDateString()}</td>
-      <td className="py-3 px-4 text-right">
+      <td className="py-3 px-4 text-right flex items-center justify-end gap-3">
         <Switch checked={apiKey.is_active} onCheckedChange={(checked) => toggleKey.mutate({ keyId: apiKey.id, isActive: checked })} disabled={toggleKey.isPending} />
+        {isAdmin && (
+          <button 
+            onClick={handleDelete}
+            disabled={isDeleting || deleteKey.isPending}
+            className="text-on-surface-variant hover:text-error transition-colors p-1 rounded-md hover:bg-error/10"
+            title="Delete Key"
+          >
+            <span className="material-symbols-outlined text-lg">{isDeleting ? "sync" : "delete"}</span>
+          </button>
+        )}
       </td>
     </tr>
   );

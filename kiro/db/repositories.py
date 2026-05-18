@@ -51,6 +51,14 @@ def mask_key(key: str) -> tuple[str, str]:
     return key[:10] if len(key) > 10 else key[:4], key[-4:]
 
 
+async def _cache_key_hash(key_h: str, key_id: int) -> None:
+    try:
+        from kiro.usage.token_cache import token_cache
+        await token_cache.set(key_h, key_id)
+    except Exception:
+        pass
+
+
 # --- User ---
 
 async def get_user_by_username(session: AsyncSession, username: str) -> User | None:
@@ -117,11 +125,7 @@ async def get_or_create_api_key(session: AsyncSession, raw_key: str, default_use
 
     existing = await get_api_key_by_hash(session, key_h)
     if existing:
-        try:
-            from kiro.usage.token_cache import token_cache
-            await token_cache.set(key_h, existing.id)
-        except Exception:
-            pass
+        await _cache_key_hash(key_h, existing.id)
         return existing, False
 
     prefix, suffix = mask_key(raw_key)
@@ -139,19 +143,11 @@ async def get_or_create_api_key(session: AsyncSession, raw_key: str, default_use
     if result.rowcount == 0:
         existing = await get_api_key_by_hash(session, key_h)
         if existing:
-            try:
-                from kiro.usage.token_cache import token_cache
-                await token_cache.set(key_h, existing.id)
-            except Exception:
-                pass
+            await _cache_key_hash(key_h, existing.id)
             return existing, False
 
     api_key = await get_api_key_by_hash(session, key_h)
-    try:
-        from kiro.usage.token_cache import token_cache
-        await token_cache.set(key_h, api_key.id)
-    except Exception:
-        pass
+    await _cache_key_hash(key_h, api_key.id)
     return api_key, True
 
 
@@ -212,12 +208,7 @@ async def create_api_key(
 
             await session.commit()
             await session.refresh(api_key)
-            # update cache mapping
-            try:
-                from kiro.usage.token_cache import token_cache
-                await token_cache.set(key_hash, api_key.id)
-            except Exception:
-                pass
+            await _cache_key_hash(key_hash, api_key.id)
             return api_key
 
     # New key (System Key or User Key without existing)
@@ -234,29 +225,57 @@ async def create_api_key(
     session.add(api_key)
     await session.commit()
     await session.refresh(api_key)
-    # populate cache
-    try:
-        from kiro.usage.token_cache import token_cache
-        await token_cache.set(key_hash, api_key.id)
-    except Exception:
-        pass
+    await _cache_key_hash(key_hash, api_key.id)
     return api_key
 
 
 async def update_api_key(session: AsyncSession, key_id: int, **kwargs) -> None:
     await session.execute(update(ApiKey).where(ApiKey.id == key_id).values(**kwargs))
     await session.commit()
-    # If key_hash was updated, refresh cache; otherwise ensure no stale entries for this id
     try:
         from kiro.usage.token_cache import token_cache
+        await token_cache.invalidate_by_key_id(key_id)
         if 'key_hash' in kwargs:
-            await token_cache.invalidate_by_key_id(key_id)
             await token_cache.set(kwargs['key_hash'], key_id)
-        else:
-            await token_cache.invalidate_by_key_id(key_id)
-        
     except Exception:
         pass
+
+
+async def delete_api_key(session: AsyncSession, key_id: int) -> bool:
+    from sqlalchemy import delete
+
+    if await session.get(ApiKey, key_id) is None:
+        return False
+
+    # Delete related usage data first to avoid foreign key constraints
+    await session.execute(delete(KeyUsage).where(KeyUsage.key_id == key_id))
+    await session.execute(delete(DailyUsage).where(DailyUsage.key_id == key_id))
+    await session.execute(delete(FallbackUsage).where(
+        (FallbackUsage.original_key_id == key_id) | (FallbackUsage.fallback_key_id == key_id)
+    ))
+    await session.execute(
+        update(GatewayKeyUsage).where(GatewayKeyUsage.key_id == key_id).values(key_id=None)
+    )
+    await session.execute(
+        update(GatewayKeyDailyUsage).where(GatewayKeyDailyUsage.key_id == key_id).values(key_id=None)
+    )
+
+    await session.execute(delete(ApiKey).where(ApiKey.id == key_id))
+    await session.commit()
+
+    try:
+        from kiro.usage.usage_cache import usage_cache
+        usage_cache.remove_key(key_id)
+    except Exception:
+        pass
+
+    try:
+        from kiro.usage.token_cache import token_cache
+        await token_cache.invalidate_by_key_id(key_id)
+    except Exception:
+        pass
+
+    return True
 
 
 async def merge_duplicate_keys_for_user(session: AsyncSession, keep_key_id: int, kiro_user_id: str) -> tuple[int, list[int]]:

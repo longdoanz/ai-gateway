@@ -1,71 +1,125 @@
 """
 DB-based model override for Kiro Gateway.
 
-Reads `enable_model_override` and `enforced_global_model` from the
-system_config table with a short TTL cache, and applies the override
+Reads `enable_model_override`, `model_override_rules`, and `model_override_default`
+from the system_config table with a short TTL cache, and applies override rules
 to incoming request objects before they are converted to Kiro payloads.
+
+Rule matching: case-insensitive substring on normalized model name, first match wins.
+Default model is applied when enabled but no rule matches.
 """
 
 import asyncio
+import json
 import time
-from typing import Any, Tuple
+from dataclasses import dataclass, field
+from typing import Any, List, Tuple
 
 from loguru import logger
 
 _CACHE_TTL = 30  # seconds
-_override_cache: Tuple[bool, str, float] | None = None
+_override_cache: Tuple["OverrideConfig", float] | None = None
 _override_cache_lock = asyncio.Lock()
 
 
-async def get_model_override() -> Tuple[bool, str]:
+def _parse_rules(raw: str) -> list:
+    try:
+        rules = json.loads(raw)
+        return rules if isinstance(rules, list) else []
+    except (json.JSONDecodeError, ValueError):
+        return []
+
+
+@dataclass(frozen=True)
+class OverrideConfig:
+    enabled: bool
+    rules: List[dict] = field(default_factory=list)
+    default_model: str = "auto"
+
+
+def resolve_model(model: str, config: OverrideConfig) -> str:
+    """
+    Pure function — no I/O. Returns the overridden model name.
+
+    Normalizes model to lowercase, iterates rules (first substring match wins),
+    falls back to config.default_model if no rule matches.
+    """
+    if not config.enabled:
+        return model
+
+    from kiro.model_resolver import normalize_model_name
+    normalized = normalize_model_name(model).lower()
+
+    for rule in config.rules:
+        from_pattern = (rule.get("from") or "").lower().strip()
+        if from_pattern and from_pattern in normalized:
+            target = rule.get("to") or model
+            if model != target:
+                logger.debug(f"Model override rule '{from_pattern}': {model} -> {target}")
+            return target
+
+    # No rule matched — apply default
+    default = config.default_model or "auto"
+    if default != "auto" and model != default:
+        logger.debug(f"Model override default: {model} -> {default}")
+        return default
+
+    return model
+
+
+async def get_override_config() -> OverrideConfig:
     global _override_cache
 
     now = time.time()
-    if _override_cache is not None and now - _override_cache[2] < _CACHE_TTL:
-        return _override_cache[0], _override_cache[1]
+    if _override_cache is not None and now - _override_cache[1] < _CACHE_TTL:
+        return _override_cache[0]
 
     async with _override_cache_lock:
-        if _override_cache is not None and now - _override_cache[2] < _CACHE_TTL:
-            return _override_cache[0], _override_cache[1]
+        if _override_cache is not None and now - _override_cache[1] < _CACHE_TTL:
+            return _override_cache[0]
 
-        enabled, model = await _fetch_override_config()
-        _override_cache = (enabled, model, time.time())
-        return enabled, model
+        config = await _fetch_override_config()
+        _override_cache = (config, time.time())
+        return config
 
 
-async def _fetch_override_config() -> Tuple[bool, str]:
+async def _fetch_override_config() -> OverrideConfig:
     from kiro.config import ENABLE_MODEL_OVERRIDE, ENFORCED_GLOBAL_MODEL, API_KEY_MODE
+
+    def _env_config() -> OverrideConfig:
+        return OverrideConfig(
+            enabled=ENABLE_MODEL_OVERRIDE,
+            rules=[],
+            default_model=ENFORCED_GLOBAL_MODEL or "auto",
+        )
+
     try:
         from kiro.db.engine import async_session_factory
         if async_session_factory is None:
             if API_KEY_MODE:
-                return False, "auto"
-            return ENABLE_MODEL_OVERRIDE, ENFORCED_GLOBAL_MODEL or "auto"
+                return OverrideConfig(enabled=False)
+            return _env_config()
 
-        from kiro.db.repositories import get_config
+        from kiro.db.repositories import get_all_config
         async with async_session_factory() as session:
-            enabled_raw = await get_config(session, "enable_model_override")
-            model_raw = await get_config(session, "enforced_global_model")
+            cfg = await get_all_config(session)
 
-        enabled = (enabled_raw or "false").lower() == "true"
-        model = model_raw or "auto"
-        return enabled, model
+        enabled = cfg.get("enable_model_override", "false").lower() == "true"
+        # Soft migration: fall back to old key if new one not yet written
+        default_model = cfg.get("model_override_default") or cfg.get("enforced_global_model") or "auto"
+        rules = _parse_rules(cfg.get("model_override_rules", "[]"))
+        return OverrideConfig(enabled=enabled, rules=rules, default_model=default_model)
+
     except Exception as e:
         logger.warning(f"Failed to read model override config: {e}")
         if not API_KEY_MODE:
-            return ENABLE_MODEL_OVERRIDE, ENFORCED_GLOBAL_MODEL or "auto"
-        return False, "auto"
+            return _env_config()
+        return OverrideConfig(enabled=False)
 
 
 async def apply_model_override(request_data: Any) -> None:
-    enabled, enforced_model = await get_model_override()
-    if not enabled:
-        return
-
-    original = request_data.model
-    if original != enforced_model:
-        logger.debug(f"Model override: {original} -> {enforced_model}")
-    request_data.model = enforced_model
+    config = await get_override_config()
+    request_data.model = resolve_model(request_data.model, config)
 
 
 def invalidate_cache() -> None:

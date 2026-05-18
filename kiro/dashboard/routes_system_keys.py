@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -8,12 +9,28 @@ from kiro.db.engine import get_session
 from kiro.db.models import ApiKey
 from kiro.db.repositories import (
     create_api_key,
+    delete_api_key,
     get_api_key_by_hash,
     hash_api_key,
     update_api_key,
 )
 
 router = APIRouter(prefix="/system-keys", tags=["system-keys"])
+
+
+def _build_key_response(key: ApiKey) -> ApiKeyResponse:
+    current_month = datetime.now(timezone.utc).strftime("%Y-%m")
+    current_usage = 0
+    last_used_at = None
+    for u in key.usages:
+        if u.last_used_at and (last_used_at is None or u.last_used_at > last_used_at):
+            last_used_at = u.last_used_at
+        if u.month == current_month:
+            current_usage = u.current_usage
+    data = ApiKeyResponse.model_validate(key)
+    data.current_usage = current_usage
+    data.last_used_at = last_used_at
+    return data
 
 
 @router.get("", response_model=list[ApiKeyResponse])
@@ -26,7 +43,7 @@ async def get_system_keys(
     stmt = select(ApiKey).where(ApiKey.is_system == True).order_by(ApiKey.id).limit(limit).offset(offset)
     result = await session.execute(stmt)
     keys = result.scalars().all()
-    return [ApiKeyResponse.model_validate(k) for k in keys]
+    return [_build_key_response(k) for k in keys]
 
 
 @router.post("", response_model=ApiKeyResponse, status_code=status.HTTP_201_CREATED)
@@ -94,29 +111,11 @@ async def delete_system_key(
     _=Depends(require_admin), 
     session: AsyncSession = Depends(get_session)
 ):
-    from sqlalchemy import delete
-    from kiro.db.models import KeyUsage, DailyUsage, FallbackUsage
-    
     stmt = select(ApiKey).where(ApiKey.id == key_id, ApiKey.is_system == True)
     result = await session.execute(stmt)
     key = result.scalar_one_or_none()
     
     if key is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="System key not found")
-    
-    # Delete related usage data first to avoid foreign key constraints
-    await session.execute(delete(KeyUsage).where(KeyUsage.key_id == key_id))
-    await session.execute(delete(DailyUsage).where(DailyUsage.key_id == key_id))
-    await session.execute(delete(FallbackUsage).where(
-        (FallbackUsage.original_key_id == key_id) | (FallbackUsage.fallback_key_id == key_id)
-    ))
-    
-    # Delete the key itself
-    await session.execute(delete(ApiKey).where(ApiKey.id == key_id))
-    await session.commit()
-    
-    try:
-        from kiro.usage.usage_cache import usage_cache
-        usage_cache.remove_key(key_id)
-    except Exception:
-        pass
+
+    await delete_api_key(session, key_id)

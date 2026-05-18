@@ -344,7 +344,11 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
     # ==============================================================================
     # Account System: Account System Failover or Legacy Mode
     # ==============================================================================
-    
+
+    # Apply model override once before account selection (covers both failover and legacy paths)
+    from kiro.model_override import apply_model_override
+    await apply_model_override(request_data)
+
     if request.app.state.account_system:
         # ==============================================================================
         # ACCOUNT SYSTEM ENABLED: Failover Loop
@@ -393,9 +397,9 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
             conversation_id = generate_conversation_id()
             
             # Build payload for Kiro
-            # profileArn is required by runtime.kiro.dev for all auth types
+            # profileArn is required by the Kiro API for all auth types
             profile_arn_for_payload = auth_manager.profile_arn or PROFILE_ARN or ""
-            
+
             try:
                 kiro_payload = build_kiro_payload(
                     request_data,
@@ -640,11 +644,8 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
     # Generate conversation ID for Kiro API (random UUID, not used for tracking)
     conversation_id = generate_conversation_id()
 
-    from kiro.model_override import apply_model_override
-    await apply_model_override(request_data)
-
     # Build payload for Kiro
-    # profileArn is required by runtime.kiro.dev for all auth types
+    # profileArn is required by the Kiro API for all auth types
     profile_arn_for_payload = auth_manager.profile_arn or PROFILE_ARN or ""
 
     try:

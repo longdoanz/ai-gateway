@@ -1,16 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Save, RefreshCw, Trash2, Plus, Key } from "lucide-react";
+import { Save, RefreshCw, Trash2, Plus, Key, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { useConfig, useUpdateConfig } from "@/hooks/use-config";
 import { useSystemKeys, useCreateSystemKey, useUpdateSystemKey, useDeleteSystemKey } from "@/hooks/use-system-keys";
+import { useModels } from "@/hooks/use-models";
 import { maskKey } from "@/lib/utils";
+import type { ModelOverrideRule } from "@/lib/types";
 
 function AddSystemKeyDialog() {
   const [rawKey, setRawKey] = useState("");
@@ -31,10 +34,8 @@ function AddSystemKeyDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" className="gap-2">
-          <Plus className="w-4 h-4" /> Add Kiro Key
-        </Button>
+      <DialogTrigger render={<Button size="sm" className="gap-2" />}>
+        <Plus className="w-4 h-4" /> Add Kiro Key
       </DialogTrigger>
       <DialogContent className="glass-panel-elevated max-w-md w-full">
         <DialogHeader>
@@ -104,6 +105,8 @@ function SystemKeysSection() {
           <thead>
             <tr className="border-b border-outline-variant/30">
               <th className="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Key</th>
+              <th className="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider text-right">Usage (month)</th>
+              <th className="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Last Used</th>
               <th className="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider text-center">Proxy</th>
               <th className="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider text-center">Status</th>
               <th className="py-3 px-4 text-right"></th>
@@ -114,6 +117,14 @@ function SystemKeysSection() {
               <tr key={key.id} className="hover:bg-surface-container-lowest/50 transition-colors">
                 <td className="py-3 px-4 font-mono text-xs text-on-surface">
                   {maskKey(key.key_prefix, key.key_suffix)}
+                </td>
+                <td className="py-3 px-4 text-right text-sm tabular-nums text-on-surface">
+                  {key.current_usage.toLocaleString()}
+                </td>
+                <td className="py-3 px-4 text-xs text-on-surface-variant whitespace-nowrap">
+                  {key.last_used_at
+                    ? new Date(key.last_used_at).toLocaleString()
+                    : <span className="italic">Never</span>}
                 </td>
                 <td className="py-3 px-4 text-center">
                   <Switch
@@ -152,7 +163,7 @@ function SystemKeysSection() {
             ))}
             {keys?.length === 0 && (
               <tr>
-                <td colSpan={4} className="py-8 text-center text-sm text-on-surface-variant italic">
+                <td colSpan={6} className="py-8 text-center text-sm text-on-surface-variant italic">
                   No system keys registered yet.
                 </td>
               </tr>
@@ -164,19 +175,158 @@ function SystemKeysSection() {
   );
 }
 
+interface ModelSelectProps {
+  value: string;
+  onChange: (v: string) => void;
+  modelIds: string[];
+  placeholder?: string;
+}
+
+function ModelSelect({ value, onChange, modelIds, placeholder = "Select model..." }: ModelSelectProps) {
+  return (
+    <Select value={value} onValueChange={(v) => onChange(v ?? "auto")}>
+      <SelectTrigger className="font-mono text-xs h-8 min-w-[200px]">
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="auto">auto</SelectItem>
+        {modelIds.map((id) => (
+          <SelectItem key={id} value={id}>{id}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+interface ModelOverrideSectionProps {
+  enabled: boolean;
+  onEnabledChange: (v: boolean) => void;
+  rules: ModelOverrideRule[];
+  onRulesChange: (rules: ModelOverrideRule[]) => void;
+  defaultModel: string;
+  onDefaultModelChange: (v: string) => void;
+  modelIds: string[];
+}
+
+function ModelOverrideSection({
+  enabled,
+  onEnabledChange,
+  rules,
+  onRulesChange,
+  defaultModel,
+  onDefaultModelChange,
+  modelIds,
+}: ModelOverrideSectionProps) {
+  function addRule() {
+    onRulesChange([...rules, { from: modelIds[0] ?? "auto", to: "auto" }]);
+  }
+
+  function updateRule(index: number, field: "from" | "to", value: string) {
+    const updated = rules.map((r, i) => (i === index ? { ...r, [field]: value } : r));
+    onRulesChange(updated);
+  }
+
+  function removeRule(index: number) {
+    onRulesChange(rules.filter((_, i) => i !== index));
+  }
+
+  return (
+    <div className="glass-panel rounded-3xl p-8 md:p-10 group relative overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+      <div className="flex items-start justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-on-surface">Global Model Enforcement</h3>
+          <p className="text-sm text-on-surface-variant mt-1 max-w-lg">
+            Override models on all API requests. Rules are matched by substring (first match wins).
+            The default applies when no rule matches.
+          </p>
+        </div>
+        <Switch checked={enabled} onCheckedChange={onEnabledChange} />
+      </div>
+
+      {enabled && (
+        <div className="mt-6 space-y-5">
+          {/* Default model */}
+          <div className="space-y-2">
+            <Label>Default Model</Label>
+            <p className="text-xs text-on-surface-variant">Applied when no rule matches the requested model.</p>
+            <ModelSelect
+              value={defaultModel}
+              onChange={onDefaultModelChange}
+              modelIds={modelIds}
+              placeholder="Select default model..."
+            />
+          </div>
+
+          {/* Rules table */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Override Rules</Label>
+              <Button size="sm" variant="outline" onClick={addRule} className="gap-1 h-7 text-xs">
+                <Plus className="w-3 h-3" /> Add Rule
+              </Button>
+            </div>
+            <p className="text-xs text-on-surface-variant">
+              First matching rule wins. &quot;From&quot; is matched as a substring of the normalized model name.
+            </p>
+
+            {rules.length === 0 ? (
+              <p className="text-sm text-on-surface-variant italic py-3">
+                No rules — only the default model applies.
+              </p>
+            ) : (
+              <div className="space-y-2 mt-2">
+                {rules.map((rule, i) => (
+                  <div key={`${rule.from}-${rule.to}-${i}`} className="flex items-center gap-2">
+                    <span className="text-xs text-on-surface-variant w-5 text-right shrink-0">{i + 1}.</span>
+                    <ModelSelect
+                      value={rule.from}
+                      onChange={(v) => updateRule(i, "from", v)}
+                      modelIds={modelIds}
+                      placeholder="Match model..."
+                    />
+                    <ArrowRight className="w-4 h-4 text-on-surface-variant shrink-0" />
+                    <ModelSelect
+                      value={rule.to}
+                      onChange={(v) => updateRule(i, "to", v)}
+                      modelIds={modelIds}
+                      placeholder="Replace with..."
+                    />
+                    <button
+                      onClick={() => removeRule(i)}
+                      className="text-on-surface-variant hover:text-error transition-colors p-1 shrink-0"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { data: config, isLoading, refetch } = useConfig();
+  const { data: modelsData } = useModels();
   const updateConfig = useUpdateConfig();
 
   const [enableModelOverride, setEnableModelOverride] = useState(false);
-  const [enforcedModel, setEnforcedModel] = useState("auto");
+  const [overrideRules, setOverrideRules] = useState<ModelOverrideRule[]>([]);
+  const [defaultModel, setDefaultModel] = useState("auto");
   const [enableUsageSharing, setEnableUsageSharing] = useState(false);
   const [dirty, setDirty] = useState(false);
+
+  const modelIds = (modelsData?.models ?? []).map((m) => m.id);
 
   useEffect(() => {
     if (config) {
       setEnableModelOverride(config.enable_model_override);
-      setEnforcedModel(config.enforced_global_model);
+      setOverrideRules(config.model_override_rules ?? []);
+      setDefaultModel(config.model_override_default ?? "auto");
       setEnableUsageSharing(config.enable_usage_sharing);
       setDirty(false);
     }
@@ -192,7 +342,8 @@ export default function SettingsPage() {
   async function handleSave() {
     await updateConfig.mutateAsync({
       enable_model_override: enableModelOverride,
-      enforced_global_model: enforcedModel,
+      model_override_rules: overrideRules,
+      model_override_default: defaultModel,
       enable_usage_sharing: enableUsageSharing,
     });
     setDirty(false);
@@ -223,56 +374,25 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Model Override Section */}
-      <div className="glass-panel rounded-3xl p-8 md:p-10 group relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-        <div className="flex items-start justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-on-surface">
-              Global Model Enforcement
-            </h3>
-            <p className="text-sm text-on-surface-variant mt-1 max-w-lg">
-              When enabled, all API requests will be forced to use the specified
-              model, regardless of what the client requests.
-            </p>
-          </div>
-          <Switch
-            checked={enableModelOverride}
-            onCheckedChange={handleChange(setEnableModelOverride)}
-          />
-        </div>
-        {enableModelOverride && (
-          <div className="mt-6 space-y-2">
-            <Label htmlFor="enforced-model">Enforced Model</Label>
-            <Input
-              id="enforced-model"
-              value={enforcedModel}
-              onChange={(e) =>
-                handleChange(setEnforcedModel)(e.target.value)
-              }
-              placeholder="e.g. auto, claude-haiku-4.5, claude-sonnet-4.6"
-              className="max-w-md font-mono text-sm"
-            />
-            <p className="text-xs text-on-surface-variant">
-              Use &quot;auto&quot; for automatic model selection, or specify an
-              exact model ID.
-            </p>
-          </div>
-        )}
-      </div>
+      <ModelOverrideSection
+        enabled={enableModelOverride}
+        onEnabledChange={handleChange(setEnableModelOverride)}
+        rules={overrideRules}
+        onRulesChange={handleChange(setOverrideRules)}
+        defaultModel={defaultModel}
+        onDefaultModelChange={handleChange(setDefaultModel)}
+        modelIds={modelIds}
+      />
 
       {/* Usage Sharing / Fallback Section */}
       <div className="glass-panel rounded-3xl p-8 md:p-10 group relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
         <div className="flex items-start justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-on-surface">
-              Usage Sharing (Fallback)
-            </h3>
+            <h3 className="text-lg font-semibold text-on-surface">Usage Sharing (Fallback)</h3>
             <p className="text-sm text-on-surface-variant mt-1 max-w-lg">
-              When enabled, the gateway will automatically use round-robin
-              fallback to borrow a backup key when the primary key is below 1%
-              of its usage limit.
+              When enabled, the gateway will automatically use round-robin fallback to borrow a backup
+              key when the primary key is below 1% of its usage limit.
             </p>
           </div>
           <Switch
@@ -282,20 +402,16 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* System Keys Section */}
       <SystemKeysSection />
 
-      {/* Save confirmation */}
       {updateConfig.isSuccess && !dirty && (
         <div className="glass-panel-elevated rounded-3xl p-4 text-center text-sm text-emerald-700 bg-emerald-50/50">
-          Configuration saved and applied successfully. Backend cache has been
-          refreshed.
+          Configuration saved and applied successfully. Backend cache has been refreshed.
         </div>
       )}
       {updateConfig.isError && (
         <div className="glass-panel-elevated rounded-3xl p-4 text-center text-sm text-error bg-error/5">
-          {(updateConfig.error as any)?.response?.data?.detail ||
-            "Failed to save configuration"}
+          {(updateConfig.error as any)?.response?.data?.detail || "Failed to save configuration"}
         </div>
       )}
     </div>

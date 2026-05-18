@@ -270,6 +270,10 @@ async def messages(
         request_data.messages = modified_messages
         logger.info(f"Truncation recovery: modified {tool_results_modified} tool_result(s), added {content_notices_added} content notice(s)")
     
+    # Apply model override before any early-return path (Path A, Path B, failover, legacy)
+    from kiro.model_override import apply_model_override
+    await apply_model_override(request_data)
+
     # ==============================================================================
     # WebSearch Support - Path B: Auto-Injection (MCP Tool Emulation)
     # ==============================================================================
@@ -334,7 +338,7 @@ async def messages(
     # ==============================================================================
     # Account System: Account System Failover or Legacy Mode
     # ==============================================================================
-    
+
     if request.app.state.account_system:
         # ==============================================================================
         # ACCOUNT SYSTEM ENABLED: Failover Loop
@@ -398,9 +402,9 @@ async def messages(
             conversation_id = generate_conversation_id()
             
             # Build payload for Kiro
-            # profileArn is required by runtime.kiro.dev for all auth types
+            # profileArn is required by the Kiro API for all auth types
             profile_arn_for_payload = auth_manager.profile_arn or PROFILE_ARN or ""
-            
+
             try:
                 kiro_payload = anthropic_to_kiro(
                     request_data,
@@ -705,13 +709,10 @@ async def messages(
     # Generate conversation ID for Kiro API (random UUID, not used for tracking)
     conversation_id = generate_conversation_id()
 
-    from kiro.model_override import apply_model_override
-    await apply_model_override(request_data)
-
     # Build payload for Kiro
-    # profileArn is required by runtime.kiro.dev for all auth types
+    # profileArn is required by the Kiro API for all auth types
     profile_arn_for_payload = auth_manager.profile_arn or PROFILE_ARN or ""
-    
+
     try:
         kiro_payload = anthropic_to_kiro(
             request_data,

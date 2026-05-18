@@ -336,8 +336,10 @@ async def _resolve_key_id(token: str) -> int | None:
 
         async with async_session_factory() as session:
             api_key, is_new = await get_or_create_api_key(session, token)
-        # Populate cache for subsequent requests
-        await token_cache.set(key_h, api_key.id)
+        try:
+            await token_cache.set(key_h, api_key.id)
+        except Exception:
+            pass
         if is_new:
             logger.info(f"New API key detected (id={api_key.id}), fetching usage limits")
             asyncio.ensure_future(_sync_new_key(api_key.id, token))
@@ -738,10 +740,9 @@ class ApiKeyAuthAdapter:
     using the caller-supplied token and the default region from config.
 
     Attributes:
-        api_host: Kiro generateAssistantResponse host
-        q_host: Kiro Q (MCP / ListAvailableModels) host
+        api_host: Kiro generateAssistantResponse host (q.amazonaws.com)
+        q_host: Kiro Q (ListAvailableModels) host
         profile_arn: Always None in API_KEY_MODE
-        auth_type: Always KIRO_DESKTOP (no profileArn sent)
         fingerprint: Machine fingerprint for User-Agent
     """
 
@@ -787,6 +788,47 @@ class ApiKeyAuthAdapter:
     @property
     def region(self) -> str:
         return self._region
+
+
+async def _stream_and_track(
+    stream_source: Any,
+    model_sentinel: str,
+    error_chunk_fn: Any,
+    request_model: str,
+    key_id: int | None,
+    original_key_id: int | None,
+    gateway_key_id: int | None,
+    http_client: "ApiKeyModeClient",
+):
+    """Iterate stream_source, accumulate tokens, fire usage tracking on close."""
+    response_model: str | None = None
+    token_counts = {"input": 0, "output": 0}
+    try:
+        async for chunk in stream_source:
+            yield chunk
+            if response_model is None and model_sentinel in chunk:
+                response_model = _extract_response_model(chunk)
+            if '"usage"' in chunk:
+                _accumulate_tokens_from_chunk(chunk, token_counts)
+    except GeneratorExit:
+        pass
+    except Exception as e:
+        try:
+            yield error_chunk_fn(e)
+        except Exception:
+            pass
+        raise
+    finally:
+        billing_model = response_model or request_model
+        try:
+            await asyncio.shield(_track_all_usage(
+                key_id, original_key_id, gateway_key_id,
+                input_tokens=token_counts["input"],
+                output_tokens=token_counts["output"],
+                model=billing_model,
+            ))
+        finally:
+            await http_client.close()
 
 
 # ==================================================================================================
@@ -859,47 +901,26 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
         tools_for_tokenizer = [t.model_dump() for t in request_data.tools] if request_data.tools else None
 
         if request_data.stream:
-            async def stream_wrapper():
-                response_model: str | None = None
-                token_counts = {"input": 0, "output": 0}
-                try:
-                    async def make_retry_request():
-                        return await http_client.request_with_retry("POST", url, kiro_payload, stream=True)
+            async def make_retry_request():
+                return await http_client.request_with_retry("POST", url, kiro_payload, stream=True)
 
-                    async for chunk in stream_with_first_token_retry(
-                        make_request=make_retry_request,
-                        client=http_client.client,
-                        model=request_data.model,
-                        model_cache=model_cache,
-                        auth_manager=auth_adapter,
-                        initial_response=response,
-                        request_messages=messages_for_tokenizer,
-                        request_tools=tools_for_tokenizer,
-                    ):
-                        yield chunk
-                        if response_model is None and '"model"' in chunk:
-                            response_model = _extract_response_model(chunk)
-                        if '"usage"' in chunk:
-                            _accumulate_tokens_from_chunk(chunk, token_counts)
-                except GeneratorExit:
-                    pass
-                except Exception as e:
-                    try:
-                        yield "data: [DONE]\n\n"
-                    except Exception:
-                        pass
-                    raise
-                finally:
-                    billing_model = response_model or request_data.model
-                    await asyncio.shield(_track_all_usage(
-                        key_id, original_key_id, gateway_key_id,
-                        input_tokens=token_counts["input"],
-                        output_tokens=token_counts["output"],
-                        model=billing_model,
-                    ))
-                    await http_client.close()
-
-            return StreamingResponse(stream_wrapper(), media_type="text/event-stream")
+            source = stream_with_first_token_retry(
+                make_request=make_retry_request,
+                client=http_client.client,
+                model=request_data.model,
+                model_cache=model_cache,
+                auth_manager=auth_adapter,
+                initial_response=response,
+                request_messages=messages_for_tokenizer,
+                request_tools=tools_for_tokenizer,
+            )
+            return StreamingResponse(
+                _stream_and_track(
+                    source, '"model"', lambda e: "data: [DONE]\n\n",
+                    request_data.model, key_id, original_key_id, gateway_key_id, http_client,
+                ),
+                media_type="text/event-stream",
+            )
 
         else:
             openai_response = await collect_stream_response(
@@ -1010,13 +1031,6 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
     else:
         http_client = ApiKeyModeClient(raw_token, shared_client=request.app.state.http_client, key_id=key_id)
 
-    messages_for_tokenizer = [msg.model_dump() for msg in request_data.messages]
-    tools_for_tokenizer = [t.model_dump() for t in request_data.tools] if request_data.tools else None
-    if isinstance(request_data.system, list):
-        system_for_tokenizer = [b.model_dump() if hasattr(b, "model_dump") else b for b in request_data.system]
-    else:
-        system_for_tokenizer = request_data.system
-
     try:
         response = await http_client.request_with_retry("POST", url, kiro_payload, stream=True)
 
@@ -1027,52 +1041,38 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
                 content={"type": "error", "error": {"type": "api_error", "message": error_text}},
             )
 
+        messages_for_tokenizer = [msg.model_dump() for msg in request_data.messages]
+        tools_for_tokenizer = [t.model_dump() for t in request_data.tools] if request_data.tools else None
+        if isinstance(request_data.system, list):
+            system_for_tokenizer = [b.model_dump() if hasattr(b, "model_dump") else b for b in request_data.system]
+        else:
+            system_for_tokenizer = request_data.system
+
         if request_data.stream:
-            async def stream_wrapper():
-                response_model: str | None = None
-                token_counts = {"input": 0, "output": 0}
-                try:
-                    async def make_retry_request():
-                        return await http_client.request_with_retry("POST", url, kiro_payload, stream=True)
+            async def make_retry_request():
+                return await http_client.request_with_retry("POST", url, kiro_payload, stream=True)
 
-                    async for chunk in stream_with_first_token_retry_anthropic(
-                        make_request=make_retry_request,
-                        model=request_data.model,
-                        model_cache=model_cache,
-                        auth_manager=auth_adapter,
-                        initial_response=response,
-                        request_messages=messages_for_tokenizer,
-                        request_tools=tools_for_tokenizer,
-                        request_system=system_for_tokenizer,
-                    ):
-                        yield chunk
-                        if response_model is None and '"message_start"' in chunk:
-                            response_model = _extract_response_model(chunk)
-                        if '"usage"' in chunk:
-                            _accumulate_tokens_from_chunk(chunk, token_counts)
-                except GeneratorExit:
-                    pass
-                except Exception as e:
-                    try:
-                        error_event = json.dumps({
-                            "type": "error",
-                            "error": {"type": "api_error", "message": str(e)},
-                        })
-                        yield f"event: error\ndata: {error_event}\n\n"
-                    except Exception:
-                        pass
-                    raise
-                finally:
-                    billing_model = response_model or request_data.model
-                    await asyncio.shield(_track_all_usage(
-                        key_id, original_key_id, gateway_key_id,
-                        input_tokens=token_counts["input"],
-                        output_tokens=token_counts["output"],
-                        model=billing_model,
-                    ))
-                    await http_client.close()
+            source = stream_with_first_token_retry_anthropic(
+                make_request=make_retry_request,
+                model=request_data.model,
+                model_cache=model_cache,
+                auth_manager=auth_adapter,
+                initial_response=response,
+                request_messages=messages_for_tokenizer,
+                request_tools=tools_for_tokenizer,
+                request_system=system_for_tokenizer,
+            )
 
-            return StreamingResponse(stream_wrapper(), media_type="text/event-stream")
+            def _anthropic_error_chunk(e: Exception) -> str:
+                return f"event: error\ndata: {json.dumps({'type': 'error', 'error': {'type': 'api_error', 'message': str(e)}})}\n\n"
+
+            return StreamingResponse(
+                _stream_and_track(
+                    source, '"message_start"', _anthropic_error_chunk,
+                    request_data.model, key_id, original_key_id, gateway_key_id, http_client,
+                ),
+                media_type="text/event-stream",
+            )
 
         else:
             anthropic_response = await collect_anthropic_response(

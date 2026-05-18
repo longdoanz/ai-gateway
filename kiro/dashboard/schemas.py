@@ -75,6 +75,8 @@ class ApiKeyResponse(BaseModel):
     is_system: bool = False
     use_proxy: bool = False
     created_at: datetime
+    current_usage: int = 0
+    last_used_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -137,16 +139,37 @@ class OverviewResponse(BaseModel):
 
 # --- Config ---
 
+class ModelOverrideRule(BaseModel):
+    from_: str = Field(alias="from")
+    to: str
+
+    model_config = {"populate_by_name": True}
+
+
 class SystemConfigResponse(BaseModel):
     enable_model_override: bool = False
-    enforced_global_model: str = "auto"
+    model_override_rules: list[ModelOverrideRule] = []
+    model_override_default: str = "auto"
     enable_usage_sharing: bool = False
 
 
 class SystemConfigUpdate(BaseModel):
     enable_model_override: bool | None = None
-    enforced_global_model: str | None = None
+    model_override_rules: list[ModelOverrideRule] | None = None
+    model_override_default: str | None = None
     enable_usage_sharing: bool | None = None
+
+
+# --- Models ---
+
+class ModelInfo(BaseModel):
+    id: str
+    source: str  # "cache" | "fallback"
+
+
+class ModelListResponse(BaseModel):
+    models: list[ModelInfo]
+    total: int
 
 
 # --- Import ---
