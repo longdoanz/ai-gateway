@@ -152,7 +152,7 @@ async def get_or_create_api_key(session: AsyncSession, raw_key: str, default_use
 
 
 async def list_api_keys(session: AsyncSession, user_id: int | None = None, limit: int = 50, offset: int = 0) -> list[ApiKey]:
-    stmt = select(ApiKey).order_by(ApiKey.id)
+    stmt = select(ApiKey).where(ApiKey.is_system == False).order_by(ApiKey.id)
     if user_id is not None:
         stmt = stmt.where(ApiKey.user_id == user_id)
     stmt = stmt.limit(limit).offset(offset)

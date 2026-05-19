@@ -55,7 +55,7 @@ async def register_system_key(
     existing = await get_api_key_by_hash(session, hash_api_key(body.raw_key))
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This API key is already registered")
-    
+
     return await create_api_key(
         session, 
         user_id=None, 
@@ -103,6 +103,57 @@ async def update_system_key(
     # Refresh key object
     await session.refresh(key)
     return ApiKeyResponse.model_validate(key)
+
+
+@router.get("/debug/pool")
+async def get_system_key_pool(
+    _=Depends(require_admin),
+):
+    """Show all system keys currently in the usage cache with live stats."""
+    import time
+    from kiro.usage.usage_cache import usage_cache
+
+    now = time.time()
+    result = []
+    for key_id, entry in usage_cache._cache.items():
+        if not entry.is_system:
+            continue
+        exhausted_for = None
+        if entry.quota_exhausted_until is not None and entry.quota_exhausted_until > now:
+            exhausted_for = round(entry.quota_exhausted_until - now)
+        result.append({
+            "key_id": key_id,
+            "is_active": entry.is_active,
+            "use_proxy": entry.use_proxy,
+            "current_usage": entry.current_usage,
+            "usage_limit": entry.usage_limit,
+            "remaining": max(0, entry.usage_limit - entry.current_usage) if entry.usage_limit > 0 else None,
+            "quota_exhausted_for_seconds": exhausted_for,
+        })
+    return result
+
+
+@router.get("/debug/bindings")
+async def get_sticky_bindings(
+    _=Depends(require_admin),
+):
+    """Show current sticky bindings: which gateway key is using which system key."""
+    import time
+    from kiro.usage.usage_cache import sticky_binder, usage_cache
+
+    now = time.time()
+    result = []
+    for binding_id, (bound_key_id, bound_until) in sticky_binder._bindings.items():
+        entry = usage_cache.get(bound_key_id)
+        result.append({
+            "gateway_key_id": binding_id,
+            "system_key_id": bound_key_id,
+            "expires_in_seconds": max(0, round(bound_until - now)),
+            "is_active": entry.is_active if entry else None,
+            "current_usage": entry.current_usage if entry else None,
+            "usage_limit": entry.usage_limit if entry else None,
+        })
+    return result
 
 
 @router.delete("/{key_id}", status_code=status.HTTP_204_NO_CONTENT)

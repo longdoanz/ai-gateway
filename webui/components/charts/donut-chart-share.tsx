@@ -39,10 +39,10 @@ export function DonutChartShare({ data }: Props) {
           data={chartData}
           dataKey="total_tokens"
           nameKey="display_name"
-          cx="50%"
-          cy="45%"
-          innerRadius="50%"
-          outerRadius="70%"
+          cx="38%"
+          cy="50%"
+          innerRadius="55%"
+          outerRadius="85%"
           paddingAngle={2}
         >
           {chartData.map((_, i) => (
@@ -63,6 +63,9 @@ export function DonutChartShare({ data }: Props) {
           ]}
         />
         <Legend
+          layout="vertical"
+          align="right"
+          verticalAlign="middle"
           iconType="circle"
           iconSize={8}
           formatter={(value) => (

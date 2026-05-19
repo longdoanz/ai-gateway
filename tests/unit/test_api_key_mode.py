@@ -359,10 +359,12 @@ class TestResolveGatewayKey:
         mock_entry_low = MagicMock()
         mock_entry_low.usage_limit = 1000
         mock_entry_low.current_usage = 900  # 100 remaining
+        mock_entry_low.is_system = False
 
         mock_entry_high = MagicMock()
         mock_entry_high.usage_limit = 1000
         mock_entry_high.current_usage = 100  # 900 remaining — best
+        mock_entry_high.is_system = False
 
         mock_cache = MagicMock()
         mock_cache.get_available_keys.return_value = [1, 2]
@@ -402,6 +404,7 @@ class TestResolveKeyId:
 
     @pytest.mark.asyncio
     async def test_returns_key_id_on_success(self):
+        # Existing key found in DB
         from kiro.api_key_mode import _resolve_key_id
         mock_api_key = MagicMock()
         mock_api_key.id = 42
@@ -412,13 +415,29 @@ class TestResolveKeyId:
 
         with patch("kiro.api_key_mode.is_db_configured", return_value=True), \
              patch("kiro.db.engine.async_session_factory", return_value=mock_session), \
-             patch("kiro.db.repositories.get_or_create_api_key", new_callable=AsyncMock, return_value=(mock_api_key, False)):
+             patch("kiro.db.repositories.get_api_key_by_hash", new_callable=AsyncMock, return_value=mock_api_key):
             result = await _resolve_key_id("sk-proj-somekey")
         assert result == 42
 
     @pytest.mark.asyncio
-    async def test_syncs_new_key_on_first_seen(self):
+    async def test_returns_none_for_unknown_key(self):
+        # Key not in DB — returns None, does NOT create
         from kiro.api_key_mode import _resolve_key_id
+
+        mock_session = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("kiro.api_key_mode.is_db_configured", return_value=True), \
+             patch("kiro.db.engine.async_session_factory", return_value=mock_session), \
+             patch("kiro.db.repositories.get_api_key_by_hash", new_callable=AsyncMock, return_value=None):
+            result = await _resolve_key_id("sk-proj-newkey")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_syncs_new_key_on_first_seen(self):
+        # _persist_new_key: new key gets created and synced
+        from kiro.api_key_mode import _persist_new_key
         mock_api_key = MagicMock()
         mock_api_key.id = 99
 
@@ -431,8 +450,7 @@ class TestResolveKeyId:
              patch("kiro.db.repositories.get_or_create_api_key", new_callable=AsyncMock, return_value=(mock_api_key, True)), \
              patch("kiro.api_key_mode.asyncio.ensure_future") as mock_future, \
              patch("kiro.api_key_mode._sync_new_key", new_callable=AsyncMock):
-            result = await _resolve_key_id("sk-proj-newkey")
-        assert result == 99
+            await _persist_new_key("sk-proj-newkey")
         mock_future.assert_called_once()
 
     @pytest.mark.asyncio
@@ -441,10 +459,12 @@ class TestResolveKeyId:
         from kiro.api_key_mode import _resolve_key_id
 
         mock_session = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
 
         with patch("kiro.api_key_mode.is_db_configured", return_value=True), \
              patch("kiro.db.engine.async_session_factory", return_value=mock_session), \
-             patch("kiro.db.repositories.get_or_create_api_key", new_callable=AsyncMock, side_effect=Exception("DB error")):
+             patch("kiro.db.repositories.get_api_key_by_hash", new_callable=AsyncMock, side_effect=Exception("DB error")):
             result = await _resolve_key_id("sk-proj-somekey")
         assert result is None
 
@@ -459,16 +479,14 @@ class TestResolveKeyId:
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=False)
 
-        get_or_create = AsyncMock(return_value=(mock_api_key, False))
+        get_by_hash = AsyncMock(return_value=mock_api_key)
 
         with patch("kiro.api_key_mode.is_db_configured", return_value=True), \
              patch("kiro.db.engine.async_session_factory", return_value=mock_session), \
-             patch("kiro.db.repositories.get_or_create_api_key", new=get_or_create):
-            # first call populates cache
+             patch("kiro.db.repositories.get_api_key_by_hash", new=get_by_hash):
             r1 = await _resolve_key_id("sk-proj-somekey")
-            # second call should hit in-process cache and not call repository again
             r2 = await _resolve_key_id("sk-proj-somekey")
 
         assert r1 == 123
         assert r2 == 123
-        assert get_or_create.call_count == 1
+        assert get_by_hash.call_count == 1

@@ -13,6 +13,47 @@ export function useSystemKeys(limit = 50, offset = 0) {
   });
 }
 
+export interface SystemKeyPoolEntry {
+  key_id: number;
+  is_active: boolean;
+  use_proxy: boolean;
+  current_usage: number;
+  usage_limit: number;
+  remaining: number | null;
+  quota_exhausted_for_seconds: number | null;
+}
+
+export interface StickyBinding {
+  gateway_key_id: number;
+  system_key_id: number;
+  expires_in_seconds: number;
+  is_active: boolean | null;
+  current_usage: number | null;
+  usage_limit: number | null;
+}
+
+export function useSystemKeyPool() {
+  return useQuery({
+    queryKey: ["system-keys-pool"],
+    queryFn: async () => {
+      const res = await apiClient.get<SystemKeyPoolEntry[]>("/system-keys/debug/pool");
+      return res.data;
+    },
+    refetchInterval: 10_000,
+  });
+}
+
+export function useStickyBindings() {
+  return useQuery({
+    queryKey: ["system-keys-bindings"],
+    queryFn: async () => {
+      const res = await apiClient.get<StickyBinding[]>("/system-keys/debug/bindings");
+      return res.data;
+    },
+    refetchInterval: 10_000,
+  });
+}
+
 export function useCreateSystemKey() {
   const qc = useQueryClient();
   return useMutation({

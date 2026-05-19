@@ -14,6 +14,7 @@ class UsageEntry:
     is_system: bool = False
     use_proxy: bool = False
     next_reset_at: float | None = None
+    quota_exhausted_until: float | None = None
 
 
 class UsageCache:
@@ -28,6 +29,9 @@ class UsageCache:
             logger.info(f"UsageCache: resetting usage for key {entry.key_id} (next_reset_at passed)")
             entry.current_usage = 0
             entry.next_reset_at = None
+        if entry.quota_exhausted_until is not None and time.time() >= entry.quota_exhausted_until:
+            logger.info(f"UsageCache: clearing quota_exhausted for key {entry.key_id}")
+            entry.quota_exhausted_until = None
 
     async def load_from_db(self, session) -> None:
         from kiro.db.models import ApiKey, KeyUsage
@@ -79,7 +83,7 @@ class UsageCache:
                     if next_reset_at is not None:
                         entry.next_reset_at = next_reset_at
 
-    def get_available_keys(self, exclude_key_id: int | None = None) -> list[int]:
+    def get_available_keys(self, exclude_key_id: int | None = None, system_only: bool = False) -> list[int]:
         available = []
         for key_id, entry in self._cache.items():
             self._maybe_reset(entry)
@@ -87,12 +91,24 @@ class UsageCache:
                 continue
             if key_id == exclude_key_id:
                 continue
-            if entry.usage_limit <= 0:
+            if system_only and not entry.is_system:
                 continue
-            remaining_ratio = (entry.usage_limit - entry.current_usage) / entry.usage_limit
-            if remaining_ratio > 0.01:
-                available.append(key_id)
+            if entry.quota_exhausted_until is not None:
+                continue
+            if not entry.is_system or entry.usage_limit > 0:
+                if entry.usage_limit <= 0:
+                    continue
+                remaining_ratio = (entry.usage_limit - entry.current_usage) / entry.usage_limit
+                if remaining_ratio <= 0.01:
+                    continue
+            available.append(key_id)
         return available
+
+    def mark_quota_exhausted(self, key_id: int, cooldown_seconds: int = 300) -> None:
+        entry = self._cache.get(key_id)
+        if entry:
+            entry.quota_exhausted_until = time.time() + cooldown_seconds
+            logger.warning(f"UsageCache: key {key_id} marked quota-exhausted for {cooldown_seconds}s")
 
     def set_key_active(self, key_id: int, is_active: bool) -> None:
         entry = self._cache.get(key_id)
@@ -128,13 +144,15 @@ class StickyKeyBinder:
             if now < bound_until and bound_key_id in available:
                 return bound_key_id
 
-        best = max(
-            available,
-            key=lambda kid: (
-                (usage_cache.get(kid).usage_limit - usage_cache.get(kid).current_usage)
-                if usage_cache.get(kid) else 0
-            ),
-        )
+        def _score(kid: int) -> int:
+            e = usage_cache.get(kid)
+            if e is None:
+                return 0
+            if e.is_system:
+                return 1  # system keys have no local limit; treat as always available
+            return e.usage_limit - e.current_usage
+
+        best = max(available, key=_score)
         self._bindings[binding_id] = (best, now + _STICKY_BIND_TTL)
         return best
 

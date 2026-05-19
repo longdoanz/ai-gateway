@@ -207,7 +207,13 @@ def get_token_fingerprint(token: str) -> str:
     return hash_api_key(token)
 
 
-def build_api_key_headers(token: str, stream: bool = False) -> dict:
+def build_api_key_headers(
+    token: str,
+    stream: bool = False,
+    attempt: int = 1,
+    max_attempts: Optional[int] = None,
+    invocation_id: Optional[str] = None,
+) -> dict:
     """
     Build Kiro API request headers using a caller-supplied token.
 
@@ -219,6 +225,9 @@ def build_api_key_headers(token: str, stream: bool = False) -> dict:
     Args:
         token: Kiro access token supplied by the client.
         stream: If True, use streaming endpoint headers (generateAssistantResponse).
+        attempt: Current attempt number (1-based). Used in amz-sdk-request header.
+        max_attempts: Max attempts for this invocation. Defaults to 3 (stream) or 1 (non-stream).
+        invocation_id: Stable UUID for amz-sdk-invocation-id. Generated fresh if not provided.
 
     Returns:
         Dictionary of HTTP headers ready for use with httpx.
@@ -237,13 +246,16 @@ def build_api_key_headers(token: str, stream: bool = False) -> dict:
         api_mod = KIRO_STREAMING_API_MODULE
         api_mod_ver = KIRO_STREAMING_API_MODULE_VERSION
         m_flags = KIRO_STREAMING_M_FLAGS
-        max_attempts = 3
+        default_max = 3
     else:
         sdk_ver = KIRO_SDK_VERSION
         api_mod = KIRO_API_MODULE
         api_mod_ver = KIRO_API_MODULE_VERSION
         m_flags = KIRO_M_FLAGS
-        max_attempts = 1
+        default_max = 1
+
+    effective_max = max_attempts if max_attempts is not None else default_max
+    effective_invocation_id = invocation_id if invocation_id is not None else str(uuid.uuid4())
 
     return {
         "Authorization": f"Bearer {token}",
@@ -257,8 +269,8 @@ def build_api_key_headers(token: str, stream: bool = False) -> dict:
         "x-amz-user-agent": f"aws-sdk-js/{sdk_ver} KiroIDE-{KIRO_IDE_VERSION}-{fingerprint}",
         "x-amzn-codewhisperer-optout": "true",
         "x-amzn-kiro-agent-mode": "vibe",
-        "amz-sdk-invocation-id": str(uuid.uuid4()),
-        "amz-sdk-request": f"attempt=1; max={max_attempts}",
+        "amz-sdk-invocation-id": effective_invocation_id,
+        "amz-sdk-request": f"attempt={attempt}; max={effective_max}",
         "Connection": "close",
         "tokentype": "API_KEY",
     }
@@ -288,12 +300,13 @@ async def _resolve_gateway_key(token: str) -> tuple[str, int, int] | None:
             if gk is None or not gk.is_active:
                 return None
 
-        available = usage_cache.get_available_keys()
+        available = usage_cache.get_available_keys(system_only=True)
         if not available:
             logger.warning("Gateway key used but no Kiro keys available in pool")
             return None
 
         best_key_id, raw_kiro_key = await sticky_binder.pick_and_decrypt(gk.id, available)
+        logger.info(f"Gateway key {gk.id} resolved to system key {best_key_id}")
         return raw_kiro_key, best_key_id, gk.id
     except Exception as e:
         logger.debug(f"Gateway key resolution failed: {e}")
@@ -321,32 +334,51 @@ async def _track_gateway_key_usage(gateway_key_id: int, input_tokens: int = 0, o
 
 
 async def _resolve_key_id(token: str) -> int | None:
+    """Look up an existing key_id for token. Does NOT create new keys."""
     if not is_db_configured():
         return None
     from kiro.db.engine import async_session_factory
-    from kiro.db.repositories import get_or_create_api_key
-    from kiro.db.repositories import hash_api_key
+    from kiro.db.repositories import get_api_key_by_hash, hash_api_key
     from kiro.usage.token_cache import token_cache
     try:
-        # Check in-process cache first (uses key_hash, not raw token)
         key_h = hash_api_key(token)
         cached = await token_cache.get(key_h)
         if cached is not None:
             return cached
 
         async with async_session_factory() as session:
+            existing = await get_api_key_by_hash(session, key_h)
+        if existing is not None:
+            try:
+                await token_cache.set(key_h, existing.id)
+            except Exception:
+                pass
+            return existing.id
+        return None
+    except Exception as e:
+        logger.debug(f"Failed to look up key: {e}")
+        return None
+
+
+async def _persist_new_key(token: str) -> None:
+    """Persist a new key to DB after a successful Kiro request, then sync usage."""
+    if not is_db_configured():
+        return
+    from kiro.db.engine import async_session_factory
+    from kiro.db.repositories import get_or_create_api_key, hash_api_key
+    from kiro.usage.token_cache import token_cache
+    try:
+        async with async_session_factory() as session:
             api_key, is_new = await get_or_create_api_key(session, token)
         try:
-            await token_cache.set(key_h, api_key.id)
+            await token_cache.set(hash_api_key(token), api_key.id)
         except Exception:
             pass
         if is_new:
-            logger.info(f"New API key detected (id={api_key.id}), fetching usage limits")
+            logger.info(f"New API key (id={api_key.id}) persisted after successful Kiro request")
             asyncio.ensure_future(_sync_new_key(api_key.id, token))
-        return api_key.id
     except Exception as e:
-        logger.debug(f"Failed to resolve/create key: {e}")
-        return None
+        logger.debug(f"Failed to persist new key: {e}")
 
 
 async def _sync_new_key(key_id: int, raw_token: str) -> None:
@@ -418,6 +450,10 @@ async def _try_fallback_pre_check(token: str, key_id: int | None) -> tuple[str, 
     if key_id is None or not is_db_configured():
         return None
     try:
+        from kiro.usage.usage_cache import usage_cache
+        entry = usage_cache.get(key_id)
+        if entry and entry.is_system:
+            return None  # system keys are managed by gateway resolution, not fallback
         from kiro.usage.fallback import fallback_router
         result = await fallback_router.pre_check(key_id)
         if result:
@@ -585,6 +621,43 @@ class ApiKeyModeClient:
         self._owns_client = shared_client is None
         self.client: Optional[httpx.AsyncClient] = shared_client
 
+    async def _try_switch_key_on_429(self) -> bool:
+        """Try to switch to a different key after a 429. Returns True if switched."""
+        if self.key_id is None or not is_db_configured():
+            return False
+        try:
+            from kiro.usage.usage_cache import usage_cache, sticky_binder
+            entry = usage_cache.get(self.key_id)
+            if entry is None:
+                return False
+
+            if entry.is_system:
+                # Mark this system key exhausted and pick another from pool
+                usage_cache.mark_quota_exhausted(self.key_id)
+                sticky_binder.invalidate(self.key_id)
+                available = usage_cache.get_available_keys(exclude_key_id=self.key_id, system_only=True)
+                if not available:
+                    return False
+                new_key_id, new_raw_key = await sticky_binder.pick_and_decrypt(self.key_id, available)
+                logger.info(f"ApiKeyModeClient: 429 on system key {self.key_id}, switched to {new_key_id}")
+                self.token = new_raw_key
+                self.key_id = new_key_id
+                return True
+            else:
+                # User key: use fallback router
+                from kiro.usage.fallback import fallback_router
+                result = await fallback_router.post_check(self.key_id)
+                if result is None:
+                    return False
+                new_key_id, new_raw_key = result
+                logger.info(f"ApiKeyModeClient: 429 on user key {self.key_id}, switched to {new_key_id}")
+                self.token = new_raw_key
+                self.key_id = new_key_id
+                return True
+        except Exception as e:
+            logger.debug(f"ApiKeyModeClient: key switch on 429 failed: {e}")
+            return False
+
     async def _get_client(self, stream: bool = False) -> httpx.AsyncClient:
         if self._shared_client is not None:
             return self._shared_client
@@ -647,10 +720,11 @@ class ApiKeyModeClient:
         """
         max_retries = FIRST_TOKEN_MAX_RETRIES if stream else MAX_RETRIES
         client = await self._get_client(stream=stream)
+        invocation_id = str(uuid.uuid4())
 
         for attempt in range(max_retries):
             try:
-                headers = build_api_key_headers(self.token, stream=stream)
+                headers = build_api_key_headers(self.token, stream=stream, attempt=attempt + 1, max_attempts=max_retries, invocation_id=invocation_id)
 
                 if stream:
                     req = client.build_request(method, url, json=json_data, headers=headers)
@@ -682,6 +756,7 @@ class ApiKeyModeClient:
                 if response.status_code == 429:
                     delay = BASE_RETRY_DELAY * (2 ** attempt)
                     logger.warning(f"ApiKeyModeClient: 429 rate-limit, retrying in {delay}s (attempt {attempt + 1}/{max_retries})")
+                    await self._try_switch_key_on_429()
                     await asyncio.sleep(delay)
                     continue
 
@@ -897,6 +972,9 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
                 content={"error": {"message": error_text, "type": "kiro_api_error", "code": response.status_code}},
             )
 
+        if key_id is None and gateway_key_id is None:
+            asyncio.ensure_future(_persist_new_key(token))
+
         messages_for_tokenizer = [msg.model_dump() for msg in request_data.messages]
         tools_for_tokenizer = [t.model_dump() for t in request_data.tools] if request_data.tools else None
 
@@ -1040,6 +1118,9 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
                 status_code=response.status_code,
                 content={"type": "error", "error": {"type": "api_error", "message": error_text}},
             )
+
+        if key_id is None and gateway_key_id is None:
+            asyncio.ensure_future(_persist_new_key(raw_token))
 
         messages_for_tokenizer = [msg.model_dump() for msg in request_data.messages]
         tools_for_tokenizer = [t.model_dump() for t in request_data.tools] if request_data.tools else None

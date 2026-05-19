@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useConfig, useUpdateConfig } from "@/hooks/use-config";
-import { useSystemKeys, useCreateSystemKey, useUpdateSystemKey, useDeleteSystemKey } from "@/hooks/use-system-keys";
+import { useSystemKeys, useCreateSystemKey, useUpdateSystemKey, useDeleteSystemKey, useSystemKeyPool, useStickyBindings } from "@/hooks/use-system-keys";
 import { useModels } from "@/hooks/use-models";
 import { maskKey } from "@/lib/utils";
 import type { ModelOverrideRule } from "@/lib/types";
@@ -170,6 +170,111 @@ function SystemKeysSection() {
             )}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+function SystemKeyLiveStatus() {
+  const { data: pool, isLoading: poolLoading } = useSystemKeyPool();
+  const { data: bindings, isLoading: bindingsLoading } = useStickyBindings();
+
+  if (poolLoading || bindingsLoading) {
+    return <Skeleton className="h-32 rounded-3xl" />;
+  }
+
+  return (
+    <div className="glass-panel rounded-3xl p-8 md:p-10 group relative overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+      <h3 className="text-lg font-semibold text-on-surface flex items-center gap-2 mb-6">
+        <Key className="w-5 h-5 text-emerald-600" />
+        Live Key Pool Status
+      </h3>
+
+      <div className="space-y-6">
+        {/* Pool */}
+        <div>
+          <p className="text-sm font-medium text-on-surface-variant mb-3">System Keys in Pool</p>
+          {!pool?.length ? (
+            <p className="text-sm text-on-surface-variant italic">No system keys in cache.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-outline-variant/30">
+                    <th className="py-2 px-3 text-xs text-on-surface-variant uppercase tracking-wider">Key ID</th>
+                    <th className="py-2 px-3 text-xs text-on-surface-variant uppercase tracking-wider text-right">Usage</th>
+                    <th className="py-2 px-3 text-xs text-on-surface-variant uppercase tracking-wider text-right">Remaining</th>
+                    <th className="py-2 px-3 text-xs text-on-surface-variant uppercase tracking-wider text-center">Proxy</th>
+                    <th className="py-2 px-3 text-xs text-on-surface-variant uppercase tracking-wider text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-outline-variant/20">
+                  {pool.map((entry) => (
+                    <tr key={entry.key_id} className="hover:bg-surface-container-lowest/50 transition-colors">
+                      <td className="py-2 px-3 font-mono text-xs text-on-surface">#{entry.key_id}</td>
+                      <td className="py-2 px-3 text-right text-xs tabular-nums text-on-surface">
+                        {entry.current_usage.toLocaleString()} / {entry.usage_limit > 0 ? entry.usage_limit.toLocaleString() : "∞"}
+                      </td>
+                      <td className="py-2 px-3 text-right text-xs tabular-nums">
+                        <span className={entry.remaining !== null && entry.remaining < 100 ? "text-amber-600 font-medium" : "text-emerald-600"}>
+                          {entry.remaining !== null ? entry.remaining.toLocaleString() : "∞"}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3 text-center text-xs">
+                        {entry.use_proxy ? <span className="text-sky-600">yes</span> : <span className="text-on-surface-variant">no</span>}
+                      </td>
+                      <td className="py-2 px-3 text-center text-xs">
+                        {!entry.is_active ? (
+                          <span className="text-error">inactive</span>
+                        ) : entry.quota_exhausted_for_seconds !== null ? (
+                          <span className="text-amber-600">cooldown {entry.quota_exhausted_for_seconds}s</span>
+                        ) : (
+                          <span className="text-emerald-600">active</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Bindings */}
+        <div>
+          <p className="text-sm font-medium text-on-surface-variant mb-3">Active Sticky Bindings</p>
+          {!bindings?.length ? (
+            <p className="text-sm text-on-surface-variant italic">No active bindings.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-outline-variant/30">
+                    <th className="py-2 px-3 text-xs text-on-surface-variant uppercase tracking-wider">Gateway Key</th>
+                    <th className="py-2 px-3 text-xs text-on-surface-variant uppercase tracking-wider">Using System Key</th>
+                    <th className="py-2 px-3 text-xs text-on-surface-variant uppercase tracking-wider text-right">Expires in</th>
+                    <th className="py-2 px-3 text-xs text-on-surface-variant uppercase tracking-wider text-right">Usage</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-outline-variant/20">
+                  {bindings.map((b) => (
+                    <tr key={b.gateway_key_id} className="hover:bg-surface-container-lowest/50 transition-colors">
+                      <td className="py-2 px-3 font-mono text-xs text-on-surface">#{b.gateway_key_id}</td>
+                      <td className="py-2 px-3 font-mono text-xs text-sky-700">#{b.system_key_id}</td>
+                      <td className="py-2 px-3 text-right text-xs tabular-nums text-on-surface-variant">
+                        {b.expires_in_seconds}s
+                      </td>
+                      <td className="py-2 px-3 text-right text-xs tabular-nums text-on-surface">
+                        {b.current_usage !== null ? `${b.current_usage.toLocaleString()} / ${b.usage_limit?.toLocaleString() ?? "∞"}` : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -403,6 +508,8 @@ export default function SettingsPage() {
       </div>
 
       <SystemKeysSection />
+
+      <SystemKeyLiveStatus />
 
       {updateConfig.isSuccess && !dirty && (
         <div className="glass-panel-elevated rounded-3xl p-4 text-center text-sm text-emerald-700 bg-emerald-50/50">

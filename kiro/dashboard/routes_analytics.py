@@ -103,6 +103,7 @@ async def _aggregate_analytics(
         select(KiroUserMapping.kiro_user_id, KiroUserMapping.username, KiroUserMapping.email)
     )).all()
     name_map: dict[str, str] = {}
+    username_map: dict[str, str] = {}
     for r in mapping_rows:
         name = r.username or r.email
         if not name:
@@ -111,14 +112,24 @@ async def _aggregate_analytics(
         normalized = normalize_kiro_user_id(r.kiro_user_id)
         if normalized != r.kiro_user_id:
             name_map[normalized] = name
+        if r.username:
+            username_map[r.kiro_user_id] = r.username
+            if normalized != r.kiro_user_id:
+                username_map[normalized] = r.username
 
     def _display_name(kiro_uid: str) -> str:
+        name: str | None = None
         if kiro_uid in name_map:
-            return name_map[kiro_uid]
-        normalized = normalize_kiro_user_id(kiro_uid)
-        if normalized in name_map:
-            return name_map[normalized]
-        return email_lookup.get(kiro_uid) or email_lookup.get(normalized) or kiro_uid
+            name = name_map[kiro_uid]
+        else:
+            normalized = normalize_kiro_user_id(kiro_uid)
+            if normalized in name_map:
+                name = name_map[normalized]
+            else:
+                name = email_lookup.get(kiro_uid) or email_lookup.get(normalized) or kiro_uid
+        if name and "@" in name:
+            return name.split("@")[0]
+        return name or kiro_uid
 
     merged: dict[str, dict] = {}
     for r in kiro_rows:
@@ -126,11 +137,18 @@ async def _aggregate_analytics(
         own_in = max(0, r.input_tokens - gw_in)
         own_out = max(0, r.output_tokens - gw_out)
         if own_in > 0 or own_out > 0:
-            merged[r.kiro_user_id] = {
-                "display_name": _display_name(r.kiro_user_id),
-                "input_tokens": own_in,
-                "output_tokens": own_out,
-            }
+            normalized = normalize_kiro_user_id(r.kiro_user_id)
+            username = username_map.get(r.kiro_user_id) or username_map.get(normalized)
+            key = username or r.kiro_user_id
+            if key in merged:
+                merged[key]["input_tokens"] += own_in
+                merged[key]["output_tokens"] += own_out
+            else:
+                merged[key] = {
+                    "display_name": _display_name(r.kiro_user_id),
+                    "input_tokens": own_in,
+                    "output_tokens": own_out,
+                }
 
     gw_user_token_rows = (await session.execute(
         select(
@@ -146,12 +164,16 @@ async def _aggregate_analytics(
     )).all()
 
     for r in gw_user_token_rows:
-        key = f"gw:{r.username}"
-        merged[key] = {
-            "display_name": f"{r.username} [GW]",
-            "input_tokens": r.input_tokens,
-            "output_tokens": r.output_tokens,
-        }
+        key = r.username
+        if key in merged:
+            merged[key]["input_tokens"] += r.input_tokens
+            merged[key]["output_tokens"] += r.output_tokens
+        else:
+            merged[key] = {
+                "display_name": r.username,
+                "input_tokens": r.input_tokens,
+                "output_tokens": r.output_tokens,
+            }
 
     sorted_merged = sorted(merged.items(), key=lambda x: x[1]["input_tokens"] + x[1]["output_tokens"], reverse=True)
     total = sum(v["input_tokens"] + v["output_tokens"] for _, v in sorted_merged) or 1
@@ -209,7 +231,7 @@ async def _aggregate_kiro_credit_usage(
         if username:
             return username
         if email:
-            return email
+            return email.split("@")[0]
         normalized = normalize_kiro_user_id(kiro_uid)
         return normalized or kiro_uid
 
