@@ -63,6 +63,10 @@ manual_api_test.py
 # Cache (e.g. trivy.db from security scans)
 .cache/
 
+# Frontend dependencies (installed inside Docker)
+webui/node_modules
+webui/.next
+
 # Misc
 *.log
 .crush
