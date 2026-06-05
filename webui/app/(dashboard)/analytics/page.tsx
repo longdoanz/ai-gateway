@@ -6,15 +6,15 @@ import { useAnalytics, type AnalyticsRange } from "@/hooks/use-analytics";
 import { useKiroCreditUsage } from "@/hooks/use-kiro-credit-usage";
 import { useGatewayKeyAnalytics } from "@/hooks/use-gateway-key-analytics";
 import { BarChartTokens } from "@/components/charts/bar-chart-credits";
-import { AreaChartUsage } from "@/components/charts/area-chart-usage";
 import { DonutChartShare } from "@/components/charts/donut-chart-share";
 import { KiroCreditUsageTable } from "@/components/charts/kiro-credit-usage-table";
 import { GatewayKeyUsageTable } from "@/components/charts/gateway-key-usage-table";
+import { LineChartUserDaily } from "@/components/charts/line-chart-user-daily";
 
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toLocaleString();
+  return n.toString();
 }
 
 const RANGES: AnalyticsRange[] = ["7d", "30d", "90d"];
@@ -45,40 +45,7 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* Row 1: Bar + Area */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="glass-panel rounded-3xl p-6">
-          <h3 className="text-base font-semibold text-on-surface mb-4">User Token Usage</h3>
-          <div className="h-[280px]">
-            {isLoading ? (
-              <Skeleton className="h-full w-full rounded-xl" />
-            ) : isError ? (
-              <ErrorState />
-            ) : !data?.user_tokens?.length ? (
-              <EmptyState />
-            ) : (
-              <BarChartTokens data={data.user_tokens} />
-            )}
-          </div>
-        </div>
-
-        <div className="glass-panel rounded-3xl p-6">
-          <h3 className="text-base font-semibold text-on-surface mb-4">Daily Token Usage</h3>
-          <div className="h-[280px]">
-            {isLoading ? (
-              <Skeleton className="h-full w-full rounded-xl" />
-            ) : isError ? (
-              <ErrorState />
-            ) : !data?.daily_series?.length ? (
-              <EmptyState />
-            ) : (
-              <AreaChartUsage data={data.daily_series} />
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Row 2: Top Users + Donut */}
+      {/* Row 1: Top Users + Token Usage By Users */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="glass-panel rounded-3xl p-0 overflow-hidden">
           <div className="px-6 py-4 border-b border-outline-variant/30">
@@ -100,7 +67,10 @@ export default function AnalyticsPage() {
                     <span className="w-6 h-6 rounded-full bg-primary-container flex items-center justify-center text-[10px] font-bold text-on-primary-container">
                       {u.rank}
                     </span>
-                    <span className="text-sm font-medium text-on-surface">{u.display_name}</span>
+                    <div>
+                      <div className="text-sm font-medium text-on-surface">{u.username ?? u.display_name}</div>
+                      {u.email && <div className="text-[11px] text-on-surface-variant">{u.email}</div>}
+                    </div>
                   </div>
                   <div className="text-right">
                     <div className="text-sm font-semibold text-primary">{formatTokens(u.input_tokens + u.output_tokens)}</div>
@@ -128,7 +98,39 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* Row 3: Kiro User Credit Usage */}
+      {/* Row 2: User Token Usage — full width */}
+      <div className="glass-panel rounded-3xl p-6">
+        <h3 className="text-base font-semibold text-on-surface mb-4">User Token Usage</h3>
+        <div className="h-[300px]">
+          {isLoading ? (
+            <Skeleton className="h-full w-full rounded-xl" />
+          ) : isError ? (
+            <ErrorState />
+          ) : !data?.user_tokens?.length ? (
+            <EmptyState />
+          ) : (
+            <BarChartTokens data={data.user_tokens} />
+          )}
+        </div>
+      </div>
+
+      {/* Row 3: Daily Token Usage per User — full width */}
+      <div className="glass-panel rounded-3xl p-6">
+        <h3 className="text-base font-semibold text-on-surface mb-4">Daily Token Usage per User</h3>
+        <div className="h-[300px]">
+          {isLoading ? (
+            <Skeleton className="h-full w-full rounded-xl" />
+          ) : isError ? (
+            <ErrorState />
+          ) : !data?.user_daily_series?.length ? (
+            <EmptyState />
+          ) : (
+            <LineChartUserDaily data={data.user_daily_series} />
+          )}
+        </div>
+      </div>
+
+      {/* Row 4: Kiro User Credit Usage */}
       <div className="glass-panel rounded-3xl p-0 overflow-hidden">
         <div className="px-6 py-4 border-b border-outline-variant/30 flex items-center justify-between">
           <h3 className="text-base font-semibold text-on-surface">Kiro User Credit Usage <span className="text-xs font-normal text-on-surface-variant">(credits / tokens)</span></h3>
@@ -151,23 +153,8 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* Row 4: Gateway Key Usage */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="glass-panel rounded-3xl p-6">
-          <h3 className="text-base font-semibold text-on-surface mb-4">Gateway Key Daily Usage</h3>
-          <div className="h-[280px]">
-            {gwLoading ? (
-              <Skeleton className="h-full w-full rounded-xl" />
-            ) : gwError ? (
-              <ErrorState />
-            ) : !gwData?.daily_series?.length ? (
-              <EmptyState />
-            ) : (
-              <AreaChartUsage data={gwData.daily_series} />
-            )}
-          </div>
-        </div>
-
+      {/* Row 5: Gateway Key Usage */}
+      <div className="grid grid-cols-1 gap-6">
         <div className="glass-panel rounded-3xl p-0 overflow-hidden">
           <div className="px-6 py-4 border-b border-outline-variant/30 flex items-center justify-between">
             <h3 className="text-base font-semibold text-on-surface">Gateway Key Users</h3>

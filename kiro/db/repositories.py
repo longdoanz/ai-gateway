@@ -152,7 +152,7 @@ async def get_or_create_api_key(session: AsyncSession, raw_key: str, default_use
 
 
 async def list_api_keys(session: AsyncSession, user_id: int | None = None, limit: int = 50, offset: int = 0) -> list[ApiKey]:
-    stmt = select(ApiKey).where(ApiKey.is_system == False).order_by(ApiKey.id)
+    stmt = select(ApiKey).where(ApiKey.is_system == False, ApiKey.is_deleted == False).order_by(ApiKey.id)
     if user_id is not None:
         stmt = stmt.where(ApiKey.user_id == user_id)
     stmt = stmt.limit(limit).offset(offset)
@@ -175,6 +175,32 @@ async def create_api_key(
     prefix, suffix = mask_key(raw_key)
     key_hash = hash_api_key(raw_key)
     key_encrypted = encrypt_api_key(raw_key)
+
+    # For system keys: reactivate existing (possibly soft-deleted) record if hash matches.
+    # Hash is preserved on soft delete for system keys specifically to allow this.
+    if is_system:
+        existing = await get_api_key_by_hash(session, key_hash)
+        if existing:
+            await session.execute(
+                update(ApiKey).where(ApiKey.id == existing.id).values(
+                    key_encrypted=key_encrypted,
+                    key_prefix=prefix,
+                    key_suffix=suffix,
+                    is_active=True,
+                    is_deleted=False,
+                    is_system=True,
+                    use_proxy=use_proxy,
+                )
+            )
+            await session.commit()
+            await session.refresh(existing)
+            await _cache_key_hash(key_hash, existing.id)
+            try:
+                from kiro.usage.usage_cache import usage_cache
+                usage_cache.upsert_key(existing.id, is_active=True, is_system=True, use_proxy=use_proxy)
+            except Exception:
+                pass
+            return existing
 
     if user_id is not None:
         result = await session.execute(
@@ -209,6 +235,15 @@ async def create_api_key(
             await session.commit()
             await session.refresh(api_key)
             await _cache_key_hash(key_hash, api_key.id)
+
+            try:
+                from kiro.usage.usage_cache import usage_cache
+                usage_cache.upsert_key(api_key.id, is_active=True, is_system=is_system, use_proxy=use_proxy)
+                for dup_id in duplicate_ids:
+                    usage_cache.remove_key(dup_id)
+            except Exception:
+                pass
+
             return api_key
 
     # New key (System Key or User Key without existing)
@@ -226,6 +261,13 @@ async def create_api_key(
     await session.commit()
     await session.refresh(api_key)
     await _cache_key_hash(key_hash, api_key.id)
+
+    try:
+        from kiro.usage.usage_cache import usage_cache
+        usage_cache.upsert_key(api_key.id, is_active=True, is_system=is_system, use_proxy=use_proxy)
+    except Exception:
+        pass
+
     return api_key
 
 
@@ -242,17 +284,21 @@ async def update_api_key(session: AsyncSession, key_id: int, **kwargs) -> None:
 
 
 async def delete_api_key(session: AsyncSession, key_id: int) -> bool:
-    from sqlalchemy import delete
-
-    if await session.get(ApiKey, key_id) is None:
+    import secrets
+    gk = await session.get(ApiKey, key_id)
+    if gk is None:
         return False
 
-    # Delete related usage data first to avoid foreign key constraints
-    await session.execute(delete(KeyUsage).where(KeyUsage.key_id == key_id))
-    await session.execute(delete(DailyUsage).where(DailyUsage.key_id == key_id))
-    await session.execute(delete(FallbackUsage).where(
-        (FallbackUsage.original_key_id == key_id) | (FallbackUsage.fallback_key_id == key_id)
-    ))
+    # Soft delete: deactivate and preserve analytics records.
+    # For user keys: rotate hash so the raw key can never auth again.
+    # For system keys: keep hash intact so the same key can be re-registered later (reactivation).
+    gk.is_active = False
+    gk.is_deleted = True
+    if not gk.is_system:
+        gk.key_hash = secrets.token_hex(32)
+
+    # Nullify the pool-key reference in gateway usage so gateway analytics
+    # don't break if the pool key is gone.
     await session.execute(
         update(GatewayKeyUsage).where(GatewayKeyUsage.key_id == key_id).values(key_id=None)
     )
@@ -260,7 +306,6 @@ async def delete_api_key(session: AsyncSession, key_id: int) -> bool:
         update(GatewayKeyDailyUsage).where(GatewayKeyDailyUsage.key_id == key_id).values(key_id=None)
     )
 
-    await session.execute(delete(ApiKey).where(ApiKey.id == key_id))
     await session.commit()
 
     try:
@@ -440,9 +485,16 @@ async def upsert_kiro_user_mappings(session: AsyncSession, mappings: list[dict])
         stmt = pg_insert(KiroUserMapping).values(
             kiro_user_id=m["kiro_user_id"], email=m.get("email"), username=m.get("username")
         )
+        # Only overwrite fields that are explicitly provided; None means the
+        # column was absent from the import file, so preserve the existing value.
+        update_set: dict = {"imported_at": _utcnow()}
+        if m.get("email") is not None:
+            update_set["email"] = m["email"]
+        if m.get("username") is not None:
+            update_set["username"] = m["username"]
         stmt = stmt.on_conflict_do_update(
             index_elements=["kiro_user_id"],
-            set_={"email": m.get("email"), "username": m.get("username"), "imported_at": _utcnow()},
+            set_=update_set,
         )
         result = await session.execute(stmt)
         if result.rowcount == 1:
@@ -464,41 +516,49 @@ def generate_gateway_key() -> str:
 
 
 async def get_gateway_key_by_hash(session: AsyncSession, key_hash: str) -> GatewayKey | None:
-    result = await session.execute(select(GatewayKey).where(GatewayKey.key_hash == key_hash))
+    result = await session.execute(select(GatewayKey).where(GatewayKey.key_hash == key_hash, GatewayKey.is_active == True))
     return result.scalar_one_or_none()
 
 
 async def get_gateway_key_by_user_id(session: AsyncSession, user_id: int) -> GatewayKey | None:
-    result = await session.execute(select(GatewayKey).where(GatewayKey.user_id == user_id))
+    result = await session.execute(select(GatewayKey).where(GatewayKey.user_id == user_id, GatewayKey.is_active == True))
     return result.scalar_one_or_none()
 
 
 async def create_gateway_key(session: AsyncSession, user_id: int) -> tuple[GatewayKey, str]:
-    """Create a new gateway key. Returns (GatewayKey, raw_key). raw_key shown only once."""
+    """Create or reactivate a gateway key. Returns (GatewayKey, raw_key). raw_key shown only once."""
     raw_key = generate_gateway_key()
-    prefix = raw_key[:10]
-    suffix = raw_key[-4:]
-    gk = GatewayKey(
-        user_id=user_id,
-        key_hash=hash_api_key(raw_key),
-        key_prefix=prefix,
-        key_suffix=suffix,
-    )
-    session.add(gk)
+    result = await session.execute(select(GatewayKey).where(GatewayKey.user_id == user_id))
+    gk = result.scalar_one_or_none()
+    if gk is not None:
+        # Reuse existing record to preserve usage history; just rotate the key material.
+        gk.key_hash = hash_api_key(raw_key)
+        gk.key_prefix = raw_key[:10]
+        gk.key_suffix = raw_key[-4:]
+        gk.is_active = True
+    else:
+        gk = GatewayKey(
+            user_id=user_id,
+            key_hash=hash_api_key(raw_key),
+            key_prefix=raw_key[:10],
+            key_suffix=raw_key[-4:],
+        )
+        session.add(gk)
     await session.commit()
     await session.refresh(gk)
     return gk, raw_key
 
 
 async def delete_gateway_key(session: AsyncSession, user_id: int) -> bool:
-    from sqlalchemy import delete
-    result = await session.execute(
-        select(GatewayKey).where(GatewayKey.user_id == user_id)
-    )
+    """Soft-delete: deactivate the key so usage history is preserved."""
+    import secrets
+    result = await session.execute(select(GatewayKey).where(GatewayKey.user_id == user_id))
     gk = result.scalar_one_or_none()
     if gk is None:
         return False
-    await session.delete(gk)
+    gk.is_active = False
+    # Rotate hash so the old raw key can never authenticate again.
+    gk.key_hash = secrets.token_hex(32)
     await session.commit()
     return True
 

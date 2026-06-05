@@ -281,6 +281,9 @@ def build_api_key_headers(
 async def _resolve_gateway_key(token: str) -> tuple[str, int, int] | None:
     """If token is a gateway key (iziaigw_ prefix), resolve it to a Kiro key.
 
+    Prefers the user's own Kiro keys first; falls back to the shared system
+    key pool only when the user's keys are exhausted or unavailable.
+
     Uses sticky binding via StickyKeyBinder to preserve upstream prompt cache.
 
     Returns (kiro_raw_key, kiro_key_id, gateway_key_id) or None if not a gateway key.
@@ -295,19 +298,50 @@ async def _resolve_gateway_key(token: str) -> tuple[str, int, int] | None:
 
         key_hash = hash_api_key(token)
         from kiro.db.engine import async_session_factory
+
+        user_key_ids: list[int] = []
         async with async_session_factory() as session:
             gk = await get_gateway_key_by_hash(session, key_hash)
             if gk is None or not gk.is_active:
                 return None
+            if gk.user_id is not None:
+                from kiro.db.models import ApiKey as ApiKeyModel
+                from sqlalchemy import select as sa_select
+                result = await session.execute(
+                    sa_select(ApiKeyModel.id).where(
+                        ApiKeyModel.user_id == gk.user_id,
+                        ApiKeyModel.is_active == True,
+                    )
+                )
+                user_key_ids = list(result.scalars().all())
 
-        available = usage_cache.get_available_keys(system_only=True)
-        if not available:
+        gk_id = gk.id
+
+        # Prefer user's own Kiro keys — only require active + not temp-exhausted,
+        # not quota ratio, since the key may not have synced limits yet.
+        if user_key_ids:
+            user_available = [kid for kid in user_key_ids if usage_cache.is_key_usable(kid)]
+            if user_available:
+                best_key_id, raw_kiro_key = await sticky_binder.pick_and_decrypt(gk_id, user_available)
+                logger.info(f"Gateway key {gk_id} resolved to user's own key {best_key_id}")
+                return raw_kiro_key, best_key_id, gk_id
+
+        # Fall back to shared system key pool
+        system_available = usage_cache.get_available_keys(system_only=True)
+        if system_available:
+            best_key_id, raw_kiro_key = await sticky_binder.pick_and_decrypt(gk_id, system_available)
+            logger.info(f"Gateway key {gk_id} resolved to system key {best_key_id} (user keys exhausted or absent)")
+            return raw_kiro_key, best_key_id, gk_id
+
+        # Last resort: any available user key in the pool
+        all_available = usage_cache.get_available_keys()
+        if not all_available:
             logger.warning("Gateway key used but no Kiro keys available in pool")
             return None
 
-        best_key_id, raw_kiro_key = await sticky_binder.pick_and_decrypt(gk.id, available)
-        logger.info(f"Gateway key {gk.id} resolved to system key {best_key_id}")
-        return raw_kiro_key, best_key_id, gk.id
+        best_key_id, raw_kiro_key = await sticky_binder.pick_and_decrypt(gk_id, all_available)
+        logger.info(f"Gateway key {gk_id} resolved to user key {best_key_id} (no system keys, using pool fallback)")
+        return raw_kiro_key, best_key_id, gk_id
     except Exception as e:
         logger.debug(f"Gateway key resolution failed: {e}")
         return None
@@ -752,6 +786,19 @@ class ApiKeyModeClient:
                         status_code=401,
                         detail="Invalid Kiro API key (received 403 from Kiro API)"
                     )
+
+                if response.status_code == 402:
+                    logger.warning(f"ApiKeyModeClient: 402 monthly limit on key {self.key_id}, attempting key switch (attempt {attempt + 1}/{max_retries})")
+                    if self.key_id is not None and is_db_configured():
+                        try:
+                            from kiro.usage.usage_cache import usage_cache
+                            usage_cache.mark_quota_exhausted(self.key_id)
+                        except Exception:
+                            pass
+                    switched = await self._try_switch_key_on_429()
+                    if not switched:
+                        return response  # no fallback available, propagate 402
+                    continue  # retry immediately with new key
 
                 if response.status_code == 429:
                     delay = BASE_RETRY_DELAY * (2 ** attempt)

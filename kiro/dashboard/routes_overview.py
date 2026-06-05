@@ -79,29 +79,72 @@ async def get_overview(
     )
     total_used, total_limit = usage_result.one()
 
-    # Active users: distinct kiro users who consumed credits this month
-    active_kiro_users = (await session.execute(
-        select(func.count(func.distinct(ApiKey.kiro_user_id)))
-        .join(KeyUsage, KeyUsage.key_id == ApiKey.id)
-        .where(KeyUsage.month == current_month, KeyUsage.current_usage > 0)
-    )).scalar_one()
-    active_gw_users = (await session.execute(
-        select(func.count(func.distinct(GatewayKeyUsage.gateway_key_id)))
-        .where(GatewayKeyUsage.month == current_month, GatewayKeyUsage.current_usage > 0)
-    )).scalar_one()
-    active_users = active_kiro_users + active_gw_users
+    from kiro.db.repositories import normalize_kiro_user_id
+
+    def _dedup_key(email: str | None, username: str | None, kiro_user_id: str | None = None) -> str | None:
+        # Email is the most reliable cross-system identifier — use it as-is (not stripped).
+        # Fall back to username, then normalized kiro_user_id.
+        if email:
+            return email.lower()
+        if username:
+            return username.lower()
+        if kiro_user_id:
+            return normalize_kiro_user_id(kiro_user_id).lower() or kiro_user_id.lower()
+        return None
+
     active_keys = (await session.execute(select(func.count()).where(ApiKey.is_active == True))).scalar_one()
 
-    # Total Kiro users with at least one active API key + gateway key users
-    total_kiro_users = (await session.execute(
-        select(func.count(func.distinct(KiroUserMapping.kiro_user_id)))
+    # Active users this month: union keyed by email (or username/id) across both systems
+    active_kiro_rows = (await session.execute(
+        select(KiroUserMapping.kiro_user_id, KiroUserMapping.username, KiroUserMapping.email)
+        .join(ApiKey, ApiKey.kiro_user_id == KiroUserMapping.kiro_user_id)
+        .join(KeyUsage, KeyUsage.key_id == ApiKey.id)
+        .where(KeyUsage.month == current_month, KeyUsage.current_usage > 0)
+        .distinct()
+    )).all()
+    active_kiro_keys = {
+        k for r in active_kiro_rows
+        if (k := _dedup_key(r.email, r.username, r.kiro_user_id))
+    }
+
+    active_gw_rows = (await session.execute(
+        select(User.username, User.email)
+        .join(GatewayKey, GatewayKey.user_id == User.id)
+        .join(GatewayKeyUsage, GatewayKeyUsage.gateway_key_id == GatewayKey.id)
+        .where(GatewayKeyUsage.month == current_month, GatewayKeyUsage.current_usage > 0)
+        .distinct()
+    )).all()
+    active_gw_keys = {
+        k for r in active_gw_rows
+        if (k := _dedup_key(r.email, r.username))
+    }
+
+    active_users = len(active_kiro_keys | active_gw_keys)
+
+    # Total users: union keyed by email (or username/id) across both systems
+    total_kiro_rows = (await session.execute(
+        select(KiroUserMapping.kiro_user_id, KiroUserMapping.username, KiroUserMapping.email)
         .join(ApiKey, ApiKey.kiro_user_id == KiroUserMapping.kiro_user_id)
         .where(ApiKey.is_active == True)
-    )).scalar_one()
-    total_gw_users = (await session.execute(
-        select(func.count()).select_from(GatewayKey).where(GatewayKey.is_active == True)
-    )).scalar_one()
-    total_users = total_kiro_users + total_gw_users
+        .distinct()
+    )).all()
+    total_kiro_keys = {
+        k for r in total_kiro_rows
+        if (k := _dedup_key(r.email, r.username, r.kiro_user_id))
+    }
+
+    total_gw_rows = (await session.execute(
+        select(User.username, User.email)
+        .join(GatewayKey, GatewayKey.user_id == User.id)
+        .where(GatewayKey.is_active == True)
+        .distinct()
+    )).all()
+    total_gw_keys = {
+        k for r in total_gw_rows
+        if (k := _dedup_key(r.email, r.username))
+    }
+
+    total_users = len(total_kiro_keys | total_gw_keys)
 
     # Date range: for weekly/monthly we go back further to have meaningful data
     today = datetime.now(timezone.utc).date()
@@ -197,13 +240,8 @@ async def get_overview(
         active_keys=active_keys,
         daily_usage=daily_usage,
         credit_trend=credit_trend,
-        total_gateway_users=(await session.execute(
-            select(func.count()).select_from(GatewayKey).where(GatewayKey.is_active == True)
-        )).scalar_one(),
-        active_gateway_users=(await session.execute(
-            select(func.count(func.distinct(GatewayKeyUsage.gateway_key_id)))
-            .where(GatewayKeyUsage.month == current_month, GatewayKeyUsage.current_usage > 0)
-        )).scalar_one(),
+        total_gateway_users=len(total_gw_keys),
+        active_gateway_users=len(active_gw_keys),
         gateway_input_tokens=int(gw_input_total),
         gateway_output_tokens=int(gw_output_total),
     )

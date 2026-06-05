@@ -224,6 +224,54 @@ class TestApiKeyModeClientRequestWithRetry:
         assert mock_http.request.call_count == 2
 
     @pytest.mark.asyncio
+    async def test_402_switches_key_and_retries(self):
+        client = ApiKeyModeClient("tok", key_id=1)
+        mock_http = AsyncMock()
+        mock_http.is_closed = False
+        mock_http.request = AsyncMock(side_effect=[
+            self._make_response(402),
+            self._make_response(200),
+        ])
+        client.client = mock_http
+
+        with patch("kiro.api_key_mode.is_db_configured", return_value=True), \
+             patch("kiro.api_key_mode.ApiKeyModeClient._try_switch_key_on_429", new_callable=AsyncMock, return_value=True):
+            resp = await client.request_with_retry("POST", "http://example.com", {})
+        assert resp.status_code == 200
+        assert mock_http.request.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_402_marks_quota_exhausted(self):
+        client = ApiKeyModeClient("tok", key_id=5)
+        mock_http = AsyncMock()
+        mock_http.is_closed = False
+        mock_http.request = AsyncMock(return_value=self._make_response(402))
+
+        client.client = mock_http
+        mock_cache = MagicMock()
+
+        with patch("kiro.api_key_mode.is_db_configured", return_value=True), \
+             patch("kiro.api_key_mode.ApiKeyModeClient._try_switch_key_on_429", new_callable=AsyncMock, return_value=False), \
+             patch("kiro.usage.usage_cache.usage_cache", mock_cache):
+            resp = await client.request_with_retry("POST", "http://example.com", {})
+        assert resp.status_code == 402
+        mock_cache.mark_quota_exhausted.assert_called_once_with(5)
+
+    @pytest.mark.asyncio
+    async def test_402_propagates_when_no_fallback(self):
+        client = ApiKeyModeClient("tok", key_id=1)
+        mock_http = AsyncMock()
+        mock_http.is_closed = False
+        mock_http.request = AsyncMock(return_value=self._make_response(402))
+        client.client = mock_http
+
+        with patch("kiro.api_key_mode.is_db_configured", return_value=False), \
+             patch("kiro.api_key_mode.ApiKeyModeClient._try_switch_key_on_429", new_callable=AsyncMock, return_value=False):
+            resp = await client.request_with_retry("POST", "http://example.com", {})
+        assert resp.status_code == 402
+        assert mock_http.request.call_count == 1
+
+    @pytest.mark.asyncio
     async def test_timeout_raises_504_after_retries(self):
         client = ApiKeyModeClient("tok")
         mock_http = AsyncMock()
@@ -355,6 +403,7 @@ class TestResolveGatewayKey:
         mock_gk = MagicMock()
         mock_gk.is_active = True
         mock_gk.id = 7
+        mock_gk.user_id = None  # no user-owned keys; test exercises pool fallback
 
         mock_entry_low = MagicMock()
         mock_entry_low.usage_limit = 1000

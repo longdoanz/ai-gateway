@@ -5,7 +5,7 @@ import type { GatewayKeyUserUsage } from "@/lib/types";
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toLocaleString();
+  return n.toString();
 }
 
 export function GatewayKeyUsageTable({ data }: { data: GatewayKeyUserUsage[] }) {
@@ -22,7 +22,7 @@ export function GatewayKeyUsageTable({ data }: { data: GatewayKeyUserUsage[] }) 
         <tbody>
           {data.map((user) => (
             <tr
-              key={user.gateway_key_id}
+              key={user.user_id}
               className="border-b border-outline-variant/10 hover:bg-surface-container transition-colors"
             >
               <td className="px-4 py-3 font-medium text-on-surface">{user.username}</td>

@@ -75,6 +75,12 @@ function AddSystemKeyDialog() {
   );
 }
 
+function fmtTokens(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
+  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
+  return n.toString();
+}
+
 function SystemKeysSection() {
   const { data: keys, isLoading } = useSystemKeys();
   const updateKey = useUpdateSystemKey();
@@ -105,7 +111,8 @@ function SystemKeysSection() {
           <thead>
             <tr className="border-b border-outline-variant/30">
               <th className="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Key</th>
-              <th className="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider text-right">Usage (month)</th>
+              <th className="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider text-right">Credits (month)</th>
+              <th className="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider text-right">Tokens (30d)</th>
               <th className="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Last Used</th>
               <th className="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider text-center">Proxy</th>
               <th className="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider text-center">Status</th>
@@ -120,6 +127,15 @@ function SystemKeysSection() {
                 </td>
                 <td className="py-3 px-4 text-right text-sm tabular-nums text-on-surface">
                   {key.current_usage.toLocaleString()}
+                  {key.usage_limit > 0 && (
+                    <span className="text-on-surface-variant"> / {key.usage_limit.toLocaleString()}</span>
+                  )}
+                </td>
+                <td className="py-3 px-4 text-right text-xs tabular-nums text-on-surface-variant whitespace-nowrap">
+                  <span className="text-sky-700">{fmtTokens(key.input_tokens ?? 0)}</span>
+                  {" in / "}
+                  <span className="text-emerald-700">{fmtTokens(key.output_tokens ?? 0)}</span>
+                  {" out"}
                 </td>
                 <td className="py-3 px-4 text-xs text-on-surface-variant whitespace-nowrap">
                   {key.last_used_at
@@ -163,7 +179,7 @@ function SystemKeysSection() {
             ))}
             {keys?.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-8 text-center text-sm text-on-surface-variant italic">
+                <td colSpan={7} className="py-8 text-center text-sm text-on-surface-variant italic">
                   No system keys registered yet.
                 </td>
               </tr>

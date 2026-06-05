@@ -6,7 +6,7 @@ import type { TokenShare } from "@/lib/types";
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toLocaleString();
+  return n.toString();
 }
 
 const COLORS = [
@@ -27,10 +27,21 @@ export function DonutChartShare({ data }: Props) {
     );
   }
 
-  const chartData = data.map((d) => ({
-    ...d,
-    total_tokens: d.input_tokens + d.output_tokens,
-  }));
+  const top10 = data.slice(0, 10);
+  const rest = data.slice(10);
+  const othersTokens = rest.reduce((s, d) => s + d.input_tokens + d.output_tokens, 0);
+  const othersPct = rest.reduce((s, d) => s + d.pct, 0);
+
+  const chartData = [
+    ...top10.map((d) => ({
+      ...d,
+      total_tokens: d.input_tokens + d.output_tokens,
+      name: d.username ?? d.display_name,
+    })),
+    ...(othersTokens > 0
+      ? [{ total_tokens: othersTokens, name: "Others", pct: Math.round(othersPct * 10) / 10 }]
+      : []),
+  ];
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -38,7 +49,7 @@ export function DonutChartShare({ data }: Props) {
         <Pie
           data={chartData}
           dataKey="total_tokens"
-          nameKey="display_name"
+          nameKey="name"
           cx="38%"
           cy="50%"
           innerRadius="55%"
@@ -57,10 +68,11 @@ export function DonutChartShare({ data }: Props) {
             borderRadius: "12px",
             boxShadow: "0 8px 30px rgba(0,0,0,0.05)",
           }}
-          formatter={(value, name, props) => [
-            `${formatTokens(Number(value))} (${props.payload.pct}%)`,
-            name,
-          ]}
+          formatter={(value, name, props) => {
+            const item = props.payload as TokenShare & { name: string };
+            const label = String(name);
+            return [`${formatTokens(Number(value))} (${item.pct}%)`, label];
+          }}
         />
         <Legend
           layout="vertical"

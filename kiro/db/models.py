@@ -51,6 +51,7 @@ class ApiKey(Base):
     key_suffix: Mapped[str] = mapped_column(String(10), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_system: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     use_proxy: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 

@@ -40,7 +40,7 @@ class UsageCache:
 
         current_month = datetime.now(timezone.utc).strftime("%Y-%m")
 
-        keys_result = await session.execute(select(ApiKey))
+        keys_result = await session.execute(select(ApiKey).where(ApiKey.is_deleted == False))
         keys = {k.id: k for k in keys_result.scalars().all()}
 
         usage_result = await session.execute(select(KeyUsage).where(KeyUsage.month == current_month))
@@ -83,6 +83,18 @@ class UsageCache:
                     if next_reset_at is not None:
                         entry.next_reset_at = next_reset_at
 
+    def is_key_usable(self, key_id: int) -> bool:
+        """Check if a key can be used: active and not temporarily exhausted.
+
+        Unlike get_available_keys(), skips the quota-ratio filter so that a
+        user's own key is always reachable even before its quota is synced.
+        """
+        entry = self._cache.get(key_id)
+        if entry is None:
+            return False
+        self._maybe_reset(entry)
+        return entry.is_active and entry.quota_exhausted_until is None
+
     def get_available_keys(self, exclude_key_id: int | None = None, system_only: bool = False) -> list[int]:
         available = []
         for key_id, entry in self._cache.items():
@@ -109,6 +121,22 @@ class UsageCache:
         if entry:
             entry.quota_exhausted_until = time.time() + cooldown_seconds
             logger.warning(f"UsageCache: key {key_id} marked quota-exhausted for {cooldown_seconds}s")
+
+    def upsert_key(self, key_id: int, is_active: bool, is_system: bool, use_proxy: bool) -> None:
+        entry = self._cache.get(key_id)
+        if entry:
+            entry.is_active = is_active
+            entry.is_system = is_system
+            entry.use_proxy = use_proxy
+        else:
+            self._cache[key_id] = UsageEntry(
+                key_id=key_id,
+                current_usage=0,
+                usage_limit=0,
+                is_active=is_active,
+                is_system=is_system,
+                use_proxy=use_proxy,
+            )
 
     def set_key_active(self, key_id: int, is_active: bool) -> None:
         entry = self._cache.get(key_id)

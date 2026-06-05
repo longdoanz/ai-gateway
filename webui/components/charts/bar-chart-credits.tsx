@@ -6,7 +6,7 @@ import type { UserTokenUsage } from "@/lib/types";
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toLocaleString();
+  return n.toString();
 }
 
 interface Props {
@@ -22,15 +22,25 @@ export function BarChartTokens({ data }: Props) {
     );
   }
 
+  const chartData = data.map((d) => ({
+    ...d,
+    label: d.username ?? d.display_name,
+  }));
+
+  const needsRotation = chartData.length > 6;
+
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+      <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: needsRotation ? 60 : 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#e4e1ee" vertical={false} />
         <XAxis
-          dataKey="display_name"
+          dataKey="label"
           tick={{ fontSize: 12, fill: "#464555" }}
           tickLine={false}
           axisLine={false}
+          angle={needsRotation ? -35 : 0}
+          textAnchor={needsRotation ? "end" : "middle"}
+          interval={0}
         />
         <YAxis
           tick={{ fontSize: 12, fill: "#464555" }}
@@ -46,6 +56,7 @@ export function BarChartTokens({ data }: Props) {
             borderRadius: "12px",
             boxShadow: "0 8px 30px rgba(0,0,0,0.05)",
           }}
+          labelFormatter={(label) => label}
           formatter={(value, name) => [formatTokens(Number(value ?? 0)), name === "input_tokens" ? "Input" : "Output"]}
         />
         <Legend formatter={(value) => (value === "input_tokens" ? "Input Tokens" : "Output Tokens")} />

@@ -75,6 +75,9 @@ export interface ApiKeyResponse {
   use_proxy: boolean;
   created_at: string;
   current_usage: number;
+  usage_limit: number;
+  input_tokens: number;
+  output_tokens: number;
   last_used_at: string | null;
 }
 
@@ -184,6 +187,8 @@ export interface DailySeries {
 export interface UserTokenUsage {
   kiro_user_id: string;
   display_name: string;
+  username: string | null;
+  email: string | null;
   input_tokens: number;
   output_tokens: number;
 }
@@ -192,6 +197,8 @@ export interface TopUser {
   rank: number;
   kiro_user_id: string;
   display_name: string;
+  username: string | null;
+  email: string | null;
   input_tokens: number;
   output_tokens: number;
   share_pct: number;
@@ -200,9 +207,18 @@ export interface TopUser {
 export interface TokenShare {
   kiro_user_id: string;
   display_name: string;
+  username: string | null;
+  email: string | null;
   input_tokens: number;
   output_tokens: number;
   pct: number;
+}
+
+export interface UserDailySeries {
+  display_name: string;
+  username: string | null;
+  email: string | null;
+  daily: DailySeries[];
 }
 
 export interface AnalyticsResponse {
@@ -211,6 +227,7 @@ export interface AnalyticsResponse {
   user_tokens: UserTokenUsage[];
   top_users: TopUser[];
   token_share: TokenShare[];
+  user_daily_series: UserDailySeries[];
 }
 
 // --- Kiro User Credit Usage ---
@@ -257,7 +274,6 @@ export interface GatewayKeyDailySeries {
 }
 
 export interface GatewayKeyUserUsage {
-  gateway_key_id: number;
   user_id: number;
   username: string;
   input_tokens: number;

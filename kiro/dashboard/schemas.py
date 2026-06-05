@@ -76,6 +76,9 @@ class ApiKeyResponse(BaseModel):
     use_proxy: bool = False
     created_at: datetime
     current_usage: int = 0
+    usage_limit: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
     last_used_at: datetime | None = None
 
     model_config = {"from_attributes": True}
@@ -207,6 +210,8 @@ class DailySeries(BaseModel):
 class UserTokenUsage(BaseModel):
     kiro_user_id: str
     display_name: str
+    email: str | None = None
+    username: str | None = None
     input_tokens: int
     output_tokens: int
 
@@ -215,6 +220,8 @@ class TopUser(BaseModel):
     rank: int
     kiro_user_id: str
     display_name: str
+    email: str | None = None
+    username: str | None = None
     input_tokens: int
     output_tokens: int
     share_pct: float
@@ -223,9 +230,18 @@ class TopUser(BaseModel):
 class TokenShare(BaseModel):
     kiro_user_id: str
     display_name: str
+    email: str | None = None
+    username: str | None = None
     input_tokens: int
     output_tokens: int
     pct: float
+
+
+class UserDailySeries(BaseModel):
+    display_name: str
+    email: str | None = None
+    username: str | None = None
+    daily: list[DailySeries]
 
 
 class AnalyticsResponse(BaseModel):
@@ -234,6 +250,7 @@ class AnalyticsResponse(BaseModel):
     user_tokens: list[UserTokenUsage]
     top_users: list[TopUser]
     token_share: list[TokenShare]
+    user_daily_series: list[UserDailySeries] = []
 
 
 # --- Kiro User Credit Usage ---
@@ -282,7 +299,6 @@ class GatewayKeyDailySeries(BaseModel):
 
 
 class GatewayKeyUserUsage(BaseModel):
-    gateway_key_id: int
     user_id: int
     username: str
     input_tokens: int

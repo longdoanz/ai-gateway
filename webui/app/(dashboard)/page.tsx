@@ -99,7 +99,7 @@ export default function DashboardPage() {
         <KpiCard
           title="Total Users"
           value={String(data.total_users ?? 0)}
-          subtitle="Kiro users with active keys"
+          subtitle="unique users with active keys"
           icon={Users}
         />
         <KpiCard

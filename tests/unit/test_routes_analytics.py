@@ -66,41 +66,55 @@ async def test_aggregate_analytics_zero_fills_missing_dates():
 
     session = AsyncMock()
 
-    # daily_rows query returns only 1 of 7 days
+    def _empty():
+        r = MagicMock()
+        r.all.return_value = []
+        return r
+
+    # 1. daily_rows — only 1 of 7 days has data
     daily_result = MagicMock()
     daily_result.all.return_value = [
         MagicMock(date="2026-04-27", input_tokens=80, output_tokens=20),
     ]
 
-    # gw_daily_rows query (gateway daily usage to subtract)
-    gw_daily_result = MagicMock()
-    gw_daily_result.all.return_value = []
+    # 2. gw_system_daily_rows (key_id IS NULL)
+    gw_system_daily_result = _empty()
 
-    # kiro_rows query returns 1 kiro user
-    kiro_result = MagicMock()
-    kiro_result.all.return_value = [
-        MagicMock(kiro_user_id="kiro-alice", input_tokens=80, output_tokens=20),
-    ]
-
-    # gw_user_rows query (gateway per-user usage to subtract)
-    gw_user_result = MagicMock()
-    gw_user_result.all.return_value = []
-
-    # build_kiro_email_lookup query
-    email_result = MagicMock()
-    email_result.all.return_value = []
-
-    # mapping_rows query
+    # 3. mapping_rows (KiroUserMapping)
     mapping_result = MagicMock()
     mapping_result.all.return_value = [
         MagicMock(kiro_user_id="kiro-alice", username="alice", email="alice@test.com"),
     ]
 
-    # gw_user_token_rows query (gateway key user tokens for merged view)
-    gw_user_token_result = MagicMock()
-    gw_user_token_result.all.return_value = []
+    # 4. build_kiro_email_lookup
+    email_result = _empty()
 
-    session.execute = AsyncMock(side_effect=[daily_result, gw_daily_result, kiro_result, gw_user_result, email_result, mapping_result, gw_user_token_result])
+    # 5. kiro_rows (ApiKey + DailyUsage totals per kiro_user_id)
+    kiro_result = MagicMock()
+    kiro_result.all.return_value = [
+        MagicMock(kiro_user_id="kiro-alice", input_tokens=80, output_tokens=20),
+    ]
+
+    # 6. gw_pool_user_rows (pool-key gateway usage per kiro_user_id)
+    gw_pool_user_result = _empty()
+
+    # 7. gw_user_token_rows (gateway key users)
+    gw_user_token_result = _empty()
+
+    # 8. kiro_daily_rows (per kiro_user_id per date)
+    kiro_daily_result = _empty()
+
+    # 9. gw_pool_daily_rows (pool-key gateway usage per kiro_user_id per date)
+    gw_pool_daily_result = _empty()
+
+    # 10. gw_daily_rows (gateway key users per date)
+    gw_daily_result = _empty()
+
+    session.execute = AsyncMock(side_effect=[
+        daily_result, gw_system_daily_result, mapping_result, _empty(), email_result,
+        kiro_result, gw_pool_user_result, gw_user_token_result,
+        kiro_daily_result, gw_pool_daily_result, gw_daily_result,
+    ])
 
     from datetime import date
     with patch("kiro.dashboard.routes_analytics.dt") as mock_dt:

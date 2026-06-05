@@ -12,7 +12,7 @@ function remainingColor(pct: number): string {
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toLocaleString();
+  return n.toString();
 }
 
 function displayName(user: KiroUserCreditUsage): string {

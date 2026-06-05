@@ -1,34 +1,41 @@
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from kiro.dashboard.deps import require_admin
 from kiro.dashboard.schemas import ApiKeyResponse, SystemKeyCreate, SystemKeyUpdate
 from kiro.db.engine import get_session
-from kiro.db.models import ApiKey
+from kiro.db.models import ApiKey, DailyUsage
 from kiro.db.repositories import (
     create_api_key,
     delete_api_key,
-    get_api_key_by_hash,
-    hash_api_key,
     update_api_key,
 )
 
 router = APIRouter(prefix="/system-keys", tags=["system-keys"])
 
 
-def _build_key_response(key: ApiKey) -> ApiKeyResponse:
+def _build_key_response(
+    key: ApiKey,
+    token_map: dict[int, tuple[int, int]] | None = None,
+) -> ApiKeyResponse:
     current_month = datetime.now(timezone.utc).strftime("%Y-%m")
     current_usage = 0
+    usage_limit = 0
     last_used_at = None
     for u in key.usages:
         if u.last_used_at and (last_used_at is None or u.last_used_at > last_used_at):
             last_used_at = u.last_used_at
         if u.month == current_month:
             current_usage = u.current_usage
+            usage_limit = u.usage_limit
+    input_tokens, output_tokens = (token_map or {}).get(key.id, (0, 0))
     data = ApiKeyResponse.model_validate(key)
     data.current_usage = current_usage
+    data.usage_limit = usage_limit
+    data.input_tokens = input_tokens
+    data.output_tokens = output_tokens
     data.last_used_at = last_used_at
     return data
 
@@ -40,10 +47,31 @@ async def get_system_keys(
     _=Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ):
-    stmt = select(ApiKey).where(ApiKey.is_system == True).order_by(ApiKey.id).limit(limit).offset(offset)
+    stmt = select(ApiKey).where(ApiKey.is_system == True, ApiKey.is_deleted == False).order_by(ApiKey.id).limit(limit).offset(offset)
     result = await session.execute(stmt)
-    keys = result.scalars().all()
-    return [_build_key_response(k) for k in keys]
+    keys = list(result.scalars().all())
+
+    # Batch-fetch 30-day token totals for all returned keys
+    from datetime import timedelta, timezone as tz
+    from datetime import datetime as dt
+    today = dt.now(tz.utc).date()
+    start_str = (today - timedelta(days=29)).isoformat()
+    end_str = today.isoformat()
+    key_ids = [k.id for k in keys]
+    token_map: dict[int, tuple[int, int]] = {}
+    if key_ids:
+        token_rows = (await session.execute(
+            select(
+                DailyUsage.key_id,
+                func.sum(DailyUsage.input_tokens).label("input_tokens"),
+                func.sum(DailyUsage.output_tokens).label("output_tokens"),
+            )
+            .where(DailyUsage.key_id.in_(key_ids), DailyUsage.date >= start_str, DailyUsage.date <= end_str)
+            .group_by(DailyUsage.key_id)
+        )).all()
+        token_map = {r.key_id: (r.input_tokens, r.output_tokens) for r in token_rows}
+
+    return [_build_key_response(k, token_map) for k in keys]
 
 
 @router.post("", response_model=ApiKeyResponse, status_code=status.HTTP_201_CREATED)
@@ -52,15 +80,12 @@ async def register_system_key(
     _=Depends(require_admin),
     session: AsyncSession = Depends(get_session)
 ):
-    existing = await get_api_key_by_hash(session, hash_api_key(body.raw_key))
-    if existing:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This API key is already registered")
-
+    # create_api_key handles reactivation of soft-deleted system keys automatically
     return await create_api_key(
-        session, 
-        user_id=None, 
-        raw_key=body.raw_key, 
-        is_system=True, 
+        session,
+        user_id=None,
+        raw_key=body.raw_key,
+        is_system=True,
         use_proxy=body.use_proxy
     )
 
@@ -72,13 +97,13 @@ async def update_system_key(
     _=Depends(require_admin), 
     session: AsyncSession = Depends(get_session)
 ):
-    stmt = select(ApiKey).where(ApiKey.id == key_id, ApiKey.is_system == True)
+    stmt = select(ApiKey).where(ApiKey.id == key_id, ApiKey.is_system == True, ApiKey.is_deleted == False)
     result = await session.execute(stmt)
     key = result.scalar_one_or_none()
-    
+
     if key is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="System key not found")
-    
+
     update_data = {}
     if body.is_active is not None:
         update_data["is_active"] = body.is_active
@@ -93,10 +118,12 @@ async def update_system_key(
             from kiro.usage.usage_cache import usage_cache
             entry = usage_cache.get(key_id)
             if entry:
-                if body.is_active is not None:
-                    entry.is_active = body.is_active
-                if body.use_proxy is not None:
-                    entry.use_proxy = body.use_proxy
+                usage_cache.upsert_key(
+                    key_id,
+                    is_active=body.is_active if body.is_active is not None else entry.is_active,
+                    is_system=entry.is_system,
+                    use_proxy=body.use_proxy if body.use_proxy is not None else entry.use_proxy,
+                )
         except Exception:
             pass
             
@@ -162,10 +189,10 @@ async def delete_system_key(
     _=Depends(require_admin), 
     session: AsyncSession = Depends(get_session)
 ):
-    stmt = select(ApiKey).where(ApiKey.id == key_id, ApiKey.is_system == True)
+    stmt = select(ApiKey).where(ApiKey.id == key_id, ApiKey.is_system == True, ApiKey.is_deleted == False)
     result = await session.execute(stmt)
     key = result.scalar_one_or_none()
-    
+
     if key is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="System key not found")
 
