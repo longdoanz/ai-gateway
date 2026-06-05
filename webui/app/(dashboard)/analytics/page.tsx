@@ -69,7 +69,6 @@ export default function AnalyticsPage() {
                     </span>
                     <div>
                       <div className="text-sm font-medium text-on-surface">{u.username ?? u.display_name}</div>
-                      {u.email && <div className="text-[11px] text-on-surface-variant">{u.email}</div>}
                     </div>
                   </div>
                   <div className="text-right">

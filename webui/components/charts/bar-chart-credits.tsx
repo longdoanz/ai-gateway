@@ -24,7 +24,7 @@ export function BarChartTokens({ data }: Props) {
 
   const chartData = data.map((d) => ({
     ...d,
-    label: d.username ?? d.display_name,
+    label: (() => { const n = d.username ?? d.display_name ?? ""; return n.includes("@") ? n.split("@")[0] : n; })(),
   }));
 
   const needsRotation = chartData.length > 6;
