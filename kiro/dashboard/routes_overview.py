@@ -169,21 +169,9 @@ async def get_overview(
         .order_by(DailyUsageModel.date)
     )).all()
 
-    gw_daily_rows = (await session.execute(
-        select(
-            GatewayKeyDailyUsage.date,
-            func.sum(GatewayKeyDailyUsage.input_tokens).label("input_tokens"),
-            func.sum(GatewayKeyDailyUsage.output_tokens).label("output_tokens"),
-        )
-        .where(GatewayKeyDailyUsage.date >= start_str, GatewayKeyDailyUsage.date <= end_str)
-        .group_by(GatewayKeyDailyUsage.date)
-    )).all()
-    gw_daily_map = {row.date: (row.input_tokens, row.output_tokens) for row in gw_daily_rows}
-
-    daily_map: dict[str, tuple[int, int]] = {}
-    for row in daily_rows:
-        gw_in, gw_out = gw_daily_map.get(row.date, (0, 0))
-        daily_map[row.date] = (max(0, row.input_tokens - gw_in), max(0, row.output_tokens - gw_out))
+    daily_map: dict[str, tuple[int, int]] = {
+        row.date: (row.input_tokens, row.output_tokens) for row in daily_rows
+    }
 
     if granularity == Granularity.weekly:
         daily_usage = _aggregate_weekly(daily_map, start_date, today)
