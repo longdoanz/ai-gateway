@@ -657,6 +657,10 @@ async def messages(
                 )
         
         # All attempts exhausted
+        if is_nine_router_enabled():
+            logger.warning("All Kiro accounts exhausted (max attempts reached), falling back to 9router")
+            return await forward_to_nine_router(request, await request.body())
+
         if len(all_accounts) == 1:
             # Single account - return its original error
             # last_error_status and last_error_message are guaranteed to be set

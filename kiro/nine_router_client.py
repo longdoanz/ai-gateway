@@ -85,55 +85,67 @@ async def forward_to_nine_router(
     headers = _build_headers(original_request)
     logger.info(f"9router fallback: forwarding {original_request.method} {target_path}")
 
+    # Open client manually (not as context manager) so the connection stays alive
+    # while FastAPI streams the response back to the caller.
+    client = httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0))
     try:
-        # Use a fresh client per request — same pattern as Kiro streaming
-        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)) as client:
-            async with client.stream(
+        response = await client.send(
+            client.build_request(
                 method=original_request.method,
                 url=target_url,
                 headers=headers,
                 content=body,
-            ) as response:
-                upstream_headers = {
-                    k: v for k, v in response.headers.items()
-                    if k.lower() not in _HOP_BY_HOP
-                }
-
-                if response.status_code != 200:
-                    error_body = await response.aread()
-                    logger.warning(f"9router fallback returned {response.status_code}: {error_body[:200]}")
-                    return JSONResponse(
-                        status_code=response.status_code,
-                        content={"error": {"message": error_body.decode("utf-8", errors="replace"), "type": "nine_router_error"}},
-                    )
-
-                # Stream back — collect all chunks to avoid closing the upstream connection early
-                async def _stream_chunks() -> AsyncIterator[bytes]:
-                    async for chunk in response.aiter_bytes():
-                        yield chunk
-
-                return StreamingResponse(
-                    _stream_chunks(),
-                    status_code=response.status_code,
-                    headers=upstream_headers,
-                    media_type=response.headers.get("content-type", "text/event-stream"),
-                )
-
+            ),
+            stream=True,
+        )
     except httpx.ConnectError as exc:
+        await client.aclose()
         logger.error(f"9router fallback: connection failed to {NINE_ROUTER_URL}: {exc}")
         return JSONResponse(
             status_code=503,
             content={"error": {"message": f"9router fallback unavailable: {exc}", "type": "service_unavailable"}},
         )
     except httpx.TimeoutException as exc:
+        await client.aclose()
         logger.error(f"9router fallback: timeout: {exc}")
         return JSONResponse(
             status_code=504,
             content={"error": {"message": "9router fallback timed out.", "type": "timeout"}},
         )
     except Exception as exc:
+        await client.aclose()
         logger.error(f"9router fallback: unexpected error: {exc}")
         return JSONResponse(
             status_code=502,
             content={"error": {"message": f"9router fallback error: {exc}", "type": "bad_gateway"}},
         )
+
+    upstream_headers = {
+        k: v for k, v in response.headers.items()
+        if k.lower() not in _HOP_BY_HOP
+    }
+
+    if response.status_code != 200:
+        error_body = await response.aread()
+        await response.aclose()
+        await client.aclose()
+        logger.warning(f"9router fallback returned {response.status_code}: {error_body[:200]}")
+        return JSONResponse(
+            status_code=response.status_code,
+            content={"error": {"message": error_body.decode("utf-8", errors="replace"), "type": "nine_router_error"}},
+        )
+
+    async def _stream_and_close() -> AsyncIterator[bytes]:
+        try:
+            async for chunk in response.aiter_bytes():
+                yield chunk
+        finally:
+            await response.aclose()
+            await client.aclose()
+
+    return StreamingResponse(
+        _stream_and_close(),
+        status_code=response.status_code,
+        headers=upstream_headers,
+        media_type=response.headers.get("content-type", "text/event-stream"),
+    )

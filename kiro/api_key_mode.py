@@ -1013,6 +1013,12 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
         response = await http_client.request_with_retry("POST", url, kiro_payload, stream=True)
 
         if response.status_code != 200:
+            if response.status_code == 402:
+                from kiro.nine_router_client import forward_to_nine_router, is_nine_router_enabled
+                if is_nine_router_enabled():
+                    await http_client.close()
+                    logger.warning("[API_KEY_MODE/OpenAI] All keys quota-exhausted, falling back to 9router")
+                    return await forward_to_nine_router(request, await request.body())
             error_text = await _read_error_response(response, http_client)
             return JSONResponse(
                 status_code=response.status_code,
@@ -1160,6 +1166,12 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
         response = await http_client.request_with_retry("POST", url, kiro_payload, stream=True)
 
         if response.status_code != 200:
+            if response.status_code == 402:
+                from kiro.nine_router_client import forward_to_nine_router, is_nine_router_enabled
+                if is_nine_router_enabled():
+                    await http_client.close()
+                    logger.warning("[API_KEY_MODE/Anthropic] All keys quota-exhausted, falling back to 9router")
+                    return await forward_to_nine_router(request, await request.body())
             error_text = await _read_error_response(response, http_client)
             return JSONResponse(
                 status_code=response.status_code,
