@@ -66,8 +66,8 @@ services:
 
   ninerouter:
     build:
-      context: ./9router
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Dockerfile.ninerouter
     image: ninerouter:local
     container_name: ninerouter
     ports:

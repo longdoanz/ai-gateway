@@ -81,6 +81,7 @@ function NineRouterButton() {
 }
 
 
+function GatewayKeyDialog() {
   const { user } = useAuth();
   const { data: gatewayKey, isLoading } = useGatewayKey();
   const createKey = useCreateGatewayKey();

@@ -64,8 +64,8 @@ services:
 
   ninerouter:
     build:
-      context: ../9router
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: Dockerfile.ninerouter
     image: ninerouter:prod
     container_name: ninerouter-prod
     # No ports exposed — only reachable via gateway proxy at /9router/
