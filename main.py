@@ -87,6 +87,8 @@ from kiro.model_resolver import ModelResolver
 from kiro.account_manager import AccountManager
 from kiro.routes_openai import router as openai_router
 from kiro.routes_anthropic import router as anthropic_router
+from kiro.oidc_provider import router as oidc_router
+from kiro.routes_nine_router import router as nine_router_proxy_router
 from kiro.exceptions import validation_exception_handler
 from kiro.debug_middleware import DebugLoggerMiddleware
 from kiro.usage.scheduler import is_db_configured, startup as usage_startup, shutdown as usage_shutdown
@@ -599,6 +601,12 @@ app.include_router(openai_router)
 
 # Anthropic-compatible API: /v1/messages
 app.include_router(anthropic_router)
+
+# OIDC Provider: /.well-known/openid-configuration, /oauth/authorize, /oauth/token, /oauth/jwks
+app.include_router(oidc_router)
+
+# 9router reverse proxy: /9router/{path} (admin-only)
+app.include_router(nine_router_proxy_router)
 
 
 # --- Uvicorn log config ---

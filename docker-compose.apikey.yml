@@ -41,6 +41,30 @@ services:
           cpus: '0.5'
           memory: 256M
 
+  ninerouter:
+    image: decolua/9router:latest
+    container_name: ninerouter
+    # No ports exposed — only reachable via ai-gateway proxy at /9router/
+    environment:
+      - BASE_URL=http://localhost:18000/9router
+      - OIDC_ISSUER_URL=http://kiro-gateway-apikey:18000
+      - OIDC_CLIENT_ID=${NINE_ROUTER_OIDC_CLIENT_ID:-9router}
+      - OIDC_CLIENT_SECRET=${NINE_ROUTER_OIDC_CLIENT_SECRET}
+      - OIDC_SCOPES=openid profile email
+      - AUTH_MODE=oidc
+      - REQUIRE_API_KEY=${NINE_ROUTER_REQUIRE_API_KEY:-false}
+      - API_KEY_SECRET=${NINE_ROUTER_API_KEY_SECRET:-}
+    volumes:
+      - ninerouter_data:/app/data
+    depends_on:
+      - kiro-gateway-apikey
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+
   webui:
     build:
       context: ./webui
@@ -51,6 +75,7 @@ services:
       - "3001:3000"
     environment:
       - API_URL=http://kiro-gateway-apikey:18000
+      - NEXT_PUBLIC_NINE_ROUTER_ENABLED=${NINE_ROUTER_ENABLED:-true}
     depends_on:
       - kiro-gateway-apikey
     restart: unless-stopped
@@ -59,6 +84,9 @@ services:
         limits:
           cpus: "1"
           memory: 512M
+
+volumes:
+  ninerouter_data:
 
 networks:
   default:

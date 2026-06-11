@@ -55,6 +55,7 @@ from kiro.utils import generate_conversation_id
 from kiro.tokenizer import estimate_request_tokens
 from kiro.config import WEB_SEARCH_ENABLED
 from kiro.mcp_tools import handle_native_web_search
+from kiro.nine_router_client import forward_to_nine_router, is_nine_router_enabled
 
 # Import debug_logger
 try:
@@ -361,9 +362,14 @@ async def messages(
             )
             
             if account is None:
-                # All accounts unavailable
+                # All Kiro accounts exhausted — try 9router fallback if configured
+                if is_nine_router_enabled():
+                    logger.warning("All Kiro accounts exhausted, falling back to 9router")
+                    body = await request.body()
+                    return await forward_to_nine_router(request, body)
+
+                # No fallback available
                 if len(all_accounts) == 1:
-                    # Single account - return original error with original status code
                     return JSONResponse(
                         status_code=last_error_status or 503,
                         content={
@@ -375,7 +381,6 @@ async def messages(
                         }
                     )
                 else:
-                    # Multiple accounts - generic error with context
                     detail = "No available accounts for this model."
                     if last_error_message:
                         detail += f" Last error: {last_error_message}"

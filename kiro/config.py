@@ -547,6 +547,23 @@ ACCOUNTS_CONFIG_FILE: str = os.getenv("ACCOUNTS_CONFIG_FILE", "credentials.json"
 # Path to runtime state file
 ACCOUNTS_STATE_FILE: str = os.getenv("ACCOUNTS_STATE_FILE", "state.json")
 
+# ===========================================
+# 9Router Fallback
+# ===========================================
+
+# URL of the 9router service (internal Docker network)
+# When set, all-accounts-exhausted errors fall back to 9router instead of returning 503
+NINE_ROUTER_URL: str = os.getenv("NINE_ROUTER_URL", "")
+
+# API key for 9router's /v1/* endpoints (REQUIRE_API_KEY=true in 9router)
+NINE_ROUTER_API_KEY: str = os.getenv("NINE_ROUTER_API_KEY", "")
+
+# OIDC client secret shared between ai-gateway OIDC provider and 9router
+OIDC_CLIENT_SECRET: str = os.getenv("OIDC_CLIENT_SECRET", "")
+
+# OIDC issuer URL (this gateway's public base URL)
+OIDC_ISSUER_URL: str = os.getenv("OIDC_ISSUER_URL", "http://localhost:18000")
+
 # ==================================================================================================
 # Circuit Breaker Settings
 # ==================================================================================================

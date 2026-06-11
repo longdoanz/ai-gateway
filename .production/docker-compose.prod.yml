@@ -1,0 +1,120 @@
+services:
+  migrate:
+    build:
+      context: ..
+      dockerfile: Dockerfile.apikey
+    image: gateway-prod:latest
+    container_name: gateway-migrate
+    user: "1000:1000"
+    env_file:
+      - .env_prod
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+  gateway-prod:
+    build:
+      context: ..
+      dockerfile: Dockerfile.apikey
+    image: gateway-prod:latest
+    container_name: gateway-prod
+    user: "1000:1000"
+    ports:
+      - "19000:19000"
+    environment:
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=19000
+      - PROXY_API_KEY=${PROXY_API_KEY:-super-secret-password-123}
+      - KIRO_REGION=${KIRO_REGION:-us-east-1}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - DEBUG_MODE=${DEBUG_MODE:-off}
+      - VPN_PROXY_URL=${VPN_PROXY_URL:-}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changemepwdh3re}
+    env_file:
+      - .env_prod
+    volumes:
+      - ./debug_logs:/app/debug_logs
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:19000/health', timeout=5)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 256M
+
+  ninerouter:
+    image: decolua/9router:latest
+    container_name: ninerouter-prod
+    # No ports exposed — only reachable via gateway proxy at /9router/
+    environment:
+      - BASE_URL=https://aigateway.izisolution.vn/9router
+      - OIDC_ISSUER_URL=http://gateway-prod:19000
+      - OIDC_CLIENT_ID=${NINE_ROUTER_OIDC_CLIENT_ID:-9router}
+      - OIDC_CLIENT_SECRET=${NINE_ROUTER_OIDC_CLIENT_SECRET}
+      - OIDC_SCOPES=openid profile email
+      - AUTH_MODE=oidc
+      - REQUIRE_API_KEY=${NINE_ROUTER_REQUIRE_API_KEY:-false}
+      - API_KEY_SECRET=${NINE_ROUTER_API_KEY_SECRET:-}
+    env_file:
+      - .env_prod
+    volumes:
+      - ninerouter_data:/app/data
+    depends_on:
+      - gateway-prod
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+
+  webui:
+    build:
+      context: ../webui
+      dockerfile: Dockerfile
+      args:
+        - API_URL=http://gateway-prod:19000
+        - NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
+        - NEXT_BASE_PATH=/webui
+        - NEXT_PUBLIC_NINE_ROUTER_ENABLED=${NINE_ROUTER_ENABLED:-true}
+    ports:
+      - "19001:3000"
+    environment:
+      - API_URL=http://gateway-prod:19000
+      - NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
+      - NEXT_BASE_PATH=/webui
+      - NEXT_PUBLIC_NINE_ROUTER_ENABLED=${NINE_ROUTER_ENABLED:-true}
+    env_file:
+      - .env_prod
+    depends_on:
+      - gateway-prod
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+
+volumes:
+  ninerouter_data:
+
+networks:
+  default:
+    name: gateway-prod-network
+    external: true
