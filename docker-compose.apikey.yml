@@ -65,7 +65,10 @@ services:
           memory: 256M
 
   ninerouter:
-    image: decolua/9router:latest
+    build:
+      context: ./9router
+      dockerfile: Dockerfile
+    image: ninerouter:local
     container_name: ninerouter
     ports:
       - "20128:20128"

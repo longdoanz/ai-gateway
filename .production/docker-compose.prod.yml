@@ -63,7 +63,10 @@ services:
           memory: 256M
 
   ninerouter:
-    image: decolua/9router:latest
+    build:
+      context: ../9router
+      dockerfile: Dockerfile
+    image: ninerouter:prod
     container_name: ninerouter-prod
     # No ports exposed — only reachable via gateway proxy at /9router/
     environment:
