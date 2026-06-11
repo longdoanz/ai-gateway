@@ -1,4 +1,20 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres-gateway
+    environment:
+      - POSTGRES_USER=aigw
+      - POSTGRES_PASSWORD=aigw_secret
+      - POSTGRES_DB=ai-gateway
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aigw -d ai-gateway"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   kiro-gateway-apikey:
     build:
       context: .
@@ -16,7 +32,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - DEBUG_MODE=${DEBUG_MODE:-off}
       - VPN_PROXY_URL=${VPN_PROXY_URL:-}
-      - DATABASE_URL=postgresql+asyncpg://aigw:aigw_secret@postgres-18:5432/ai-gateway
+      - DATABASE_URL=postgresql+asyncpg://aigw:aigw_secret@postgres-gateway:5432/ai-gateway
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - JWT_SECRET=${JWT_SECRET}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
@@ -24,11 +40,14 @@ services:
       - NINE_ROUTER_URL=${NINE_ROUTER_URL:-http://ninerouter:20128}
       - NINE_ROUTER_API_KEY=${NINE_ROUTER_API_KEY:-}
       - OIDC_CLIENT_SECRET=${NINE_ROUTER_OIDC_CLIENT_SECRET}
-      - OIDC_ISSUER_URL=${OIDC_ISSUER_URL:-http://kiro-gateway-apikey:18000}
+      - OIDC_ISSUER_URL=${OIDC_ISSUER_URL:-http://localhost:18000}
     env_file:
       - .env
     volumes:
       - ./debug_logs:/app/debug_logs
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:18000/health', timeout=5)"]
@@ -48,7 +67,8 @@ services:
   ninerouter:
     image: decolua/9router:latest
     container_name: ninerouter
-    # No ports exposed — only reachable via ai-gateway proxy at /9router/
+    ports:
+      - "20128:20128"
     environment:
       - BASE_URL=http://localhost:18000/9router
       - OIDC_ISSUER_URL=http://kiro-gateway-apikey:18000
@@ -91,8 +111,9 @@ services:
 
 volumes:
   ninerouter_data:
+  postgres_data:
 
 networks:
   default:
     name: kiro-gateway-network
-    external: true
+    driver: bridge
