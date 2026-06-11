@@ -35,6 +35,10 @@ services:
       - VPN_PROXY_URL=${VPN_PROXY_URL:-}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changemepwdh3re}
+      - NINE_ROUTER_URL=${NINE_ROUTER_URL:-http://ninerouter-prod:20128}
+      - NINE_ROUTER_API_KEY=${NINE_ROUTER_API_KEY:-}
+      - OIDC_CLIENT_SECRET=${NINE_ROUTER_OIDC_CLIENT_SECRET}
+      - OIDC_ISSUER_URL=${OIDC_ISSUER_URL:-http://gateway-prod:19000}
     env_file:
       - .env_prod
     volumes:
