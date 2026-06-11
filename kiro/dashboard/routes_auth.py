@@ -2,13 +2,13 @@ import secrets
 import time
 from collections import defaultdict
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from google.auth.exceptions import GoogleAuthError
 
-from kiro.config import GOOGLE_CLIENT_ID, GOOGLE_ALLOWED_DOMAIN, GOOGLE_ALLOWED_EMAILS
+from kiro.config import GOOGLE_CLIENT_ID, GOOGLE_ALLOWED_DOMAIN, GOOGLE_ALLOWED_EMAILS, JWT_ACCESS_EXPIRY
 from kiro.dashboard.jwt_auth import create_access_token, create_refresh_token, decode_token
 from kiro.dashboard.schemas import GoogleLoginRequest, LoginRequest, RefreshRequest, TokenResponse
 from kiro.db.engine import get_session
@@ -17,6 +17,23 @@ from kiro.db.repositories import create_user, get_user_by_email, get_user_by_goo
 _login_attempts: dict[str, list[float]] = defaultdict(list)
 MAX_LOGIN_ATTEMPTS = 5
 LOGIN_WINDOW_SECONDS = 300  # 5 minutes
+
+GW_COOKIE = "gw_token"
+
+
+def _set_auth_cookie(response: Response, request: Request, access_token: str) -> None:
+    """Set the httponly gateway session cookie so browser-initiated requests (popups,
+    iframes) are authenticated without needing a JS-injected Authorization header."""
+    secure = request.headers.get("x-forwarded-proto", request.url.scheme) == "https"
+    response.set_cookie(
+        key=GW_COOKIE,
+        value=access_token,
+        httponly=True,
+        samesite="lax",
+        secure=secure,
+        max_age=JWT_ACCESS_EXPIRY,
+        path="/",
+    )
 
 
 def _check_rate_limit(key: str) -> None:
@@ -36,35 +53,39 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(body: LoginRequest, request: Request, session: AsyncSession = Depends(get_session)):
+async def login(body: LoginRequest, request: Request, response: Response, session: AsyncSession = Depends(get_session)):
     client_ip = request.client.host if request.client else "unknown"
     _check_rate_limit(f"ip:{client_ip}")
     _check_rate_limit(f"user:{body.username}")
     user = await get_user_by_username(session, body.username)
     if user is None or not user.is_active or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    return TokenResponse(
-        access_token=create_access_token(user.id, user.role, user.username, user.can_create_gateway_key),
-        refresh_token=create_refresh_token(user.id),
-    )
+    access_token = create_access_token(user.id, user.role, user.username, user.can_create_gateway_key)
+    _set_auth_cookie(response, request, access_token)
+    return TokenResponse(access_token=access_token, refresh_token=create_refresh_token(user.id))
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh(body: RefreshRequest, session: AsyncSession = Depends(get_session)):
+async def refresh(body: RefreshRequest, request: Request, response: Response, session: AsyncSession = Depends(get_session)):
     payload = decode_token(body.refresh_token)
     if payload is None or payload.get("type") != "refresh":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
     user = await get_user_by_id(session, int(payload["sub"]))
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
-    return TokenResponse(
-        access_token=create_access_token(user.id, user.role, user.username, user.can_create_gateway_key),
-        refresh_token=create_refresh_token(user.id),
-    )
+    access_token = create_access_token(user.id, user.role, user.username, user.can_create_gateway_key)
+    _set_auth_cookie(response, request, access_token)
+    return TokenResponse(access_token=access_token, refresh_token=create_refresh_token(user.id))
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(response: Response):
+    response.delete_cookie(key=GW_COOKIE, path="/", samesite="lax")
+    return None
 
 
 @router.post("/google", response_model=TokenResponse)
-async def google_login(body: GoogleLoginRequest, session: AsyncSession = Depends(get_session)):
+async def google_login(body: GoogleLoginRequest, request: Request, response: Response, session: AsyncSession = Depends(get_session)):
     if not GOOGLE_CLIENT_ID:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Google OAuth not configured")
     try:
@@ -119,7 +140,6 @@ async def google_login(body: GoogleLoginRequest, session: AsyncSession = Depends
     elif not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account is disabled")
 
-    return TokenResponse(
-        access_token=create_access_token(user.id, user.role, user.username, user.can_create_gateway_key),
-        refresh_token=create_refresh_token(user.id),
-    )
+    access_token = create_access_token(user.id, user.role, user.username, user.can_create_gateway_key)
+    _set_auth_cookie(response, request, access_token)
+    return TokenResponse(access_token=access_token, refresh_token=create_refresh_token(user.id))

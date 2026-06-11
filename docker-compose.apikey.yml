@@ -41,7 +41,10 @@ services:
       - NINE_ROUTER_API_KEY=${NINE_ROUTER_API_KEY:-}
       - NINE_ROUTER_PASSWORD=${NINE_ROUTER_PASSWORD:-123456}
       - OIDC_CLIENT_SECRET=${NINE_ROUTER_OIDC_CLIENT_SECRET}
-      - OIDC_ISSUER_URL=${OIDC_ISSUER_URL:-http://localhost:18000}
+      # Internal URL for JWT iss claim, token endpoint, and jwks (server-to-server)
+      - OIDC_ISSUER_URL=${OIDC_ISSUER_URL:-http://kiro-gateway-apikey:18000}
+      # Public URL returned as authorization_endpoint in OIDC discovery (browser redirect)
+      - OIDC_PUBLIC_URL=${OIDC_PUBLIC_URL:-http://localhost:3002}
     env_file:
       - .env
     volumes:
@@ -74,7 +77,9 @@ services:
     ports:
       - "20128:20128"
     environment:
-      - BASE_URL=http://localhost:18000/9router
+      # BASE_URL must match the public origin the browser uses (same origin as webui)
+      # so OIDC state cookies are set and read on the same domain
+      - BASE_URL=http://localhost:3002/9router
       - OIDC_ISSUER_URL=http://kiro-gateway-apikey:18000
       - OIDC_CLIENT_ID=${NINE_ROUTER_OIDC_CLIENT_ID:-9router}
       - OIDC_CLIENT_SECRET=${NINE_ROUTER_OIDC_CLIENT_SECRET}
@@ -100,6 +105,7 @@ services:
       dockerfile: Dockerfile
       args:
         - API_URL=http://kiro-gateway-apikey:18000
+        - NEXT_PUBLIC_NINE_ROUTER_ENABLED=${NINE_ROUTER_ENABLED:-true}
     ports:
       - "3002:3000"
     environment:

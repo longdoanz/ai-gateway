@@ -46,13 +46,21 @@ _HOP_BY_HOP = frozenset({
 })
 
 
-async def _get_session_token(client: httpx.AsyncClient) -> str:
-    """Return a valid 9router auth_token, refreshing via auto-login if needed."""
+async def _get_session_token(client: httpx.AsyncClient) -> Optional[str]:
+    """Return a valid 9router auth_token, refreshing via auto-login if needed.
+
+    Returns None when 9router runs in OIDC mode (no local password login) or is
+    unreachable — the proxy then forwards the request without injecting a cookie
+    and lets 9router's own auth (OIDC) handle access control.
+    """
     global _session_token, _session_expires
 
     async with _session_lock:
         if _session_token and time.monotonic() < _session_expires:
             return _session_token
+
+        if not NINE_ROUTER_PASSWORD:
+            return None
 
         login_url = f"{NINE_ROUTER_URL.rstrip('/')}/api/auth/login"
         try:
@@ -63,22 +71,17 @@ async def _get_session_token(client: httpx.AsyncClient) -> str:
             )
             resp.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"9router auto-login failed ({exc.response.status_code}): {exc.response.text}",
-            )
+            # 9router may not support password login in OIDC mode — don't abort
+            logger.warning(f"9router auto-login failed ({exc.response.status_code}): {exc.response.text}")
+            return None
         except httpx.RequestError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Cannot reach 9router for auto-login: {exc}",
-            )
+            logger.warning(f"Cannot reach 9router for auto-login: {exc}")
+            return None
 
         token = resp.cookies.get("auth_token")
         if not token:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="9router auto-login did not return auth_token cookie",
-            )
+            logger.warning("9router auto-login did not return auth_token cookie")
+            return None
 
         _session_token = token
         _session_expires = time.monotonic() + _SESSION_TTL
@@ -86,7 +89,7 @@ async def _get_session_token(client: httpx.AsyncClient) -> str:
         return _session_token
 
 
-def _build_headers(request: Request, session_token: str) -> dict[str, str]:
+def _build_headers(request: Request, session_token: Optional[str]) -> dict[str, str]:
     headers = {
         k: v
         for k, v in request.headers.items()
@@ -97,15 +100,16 @@ def _build_headers(request: Request, session_token: str) -> dict[str, str]:
     headers["X-Forwarded-Host"] = request.headers.get("host", "localhost")
     headers["X-Forwarded-Prefix"] = "/9router"
 
-    # Inject or replace the 9router session cookie
-    existing = headers.get("cookie", "")
-    cookies = {
-        p.split("=", 1)[0].strip(): p.split("=", 1)[1].strip()
-        for p in existing.split(";")
-        if "=" in p
-    }
-    cookies["auth_token"] = session_token
-    headers["cookie"] = "; ".join(f"{k}={v}" for k, v in cookies.items())
+    # Inject the 9router session cookie only when auto-login succeeded
+    if session_token:
+        existing = headers.get("cookie", "")
+        cookies = {
+            p.split("=", 1)[0].strip(): p.split("=", 1)[1].strip()
+            for p in existing.split(";")
+            if "=" in p
+        }
+        cookies["auth_token"] = session_token
+        headers["cookie"] = "; ".join(f"{k}={v}" for k, v in cookies.items())
     return headers
 
 
@@ -146,55 +150,63 @@ async def nine_router_proxy(
             timeout=httpx.Timeout(connect=10.0, read=60.0, write=30.0, pool=10.0),
             follow_redirects=False,
         ) as client:
-            session_token = await _get_session_token(client)
-            headers = _build_headers(request, session_token)
+            for attempt in range(2):
+                session_token = await _get_session_token(client)
+                headers = _build_headers(request, session_token)
 
-            async with client.stream(
-                method=request.method,
-                url=target_url,
-                headers=headers,
-                content=body,
-            ) as upstream:
-                resp_headers = {
-                    k: v
-                    for k, v in upstream.headers.items()
-                    if k.lower() not in _HOP_BY_HOP
-                }
+                async with client.stream(
+                    method=request.method,
+                    url=target_url,
+                    headers=headers,
+                    content=body,
+                ) as upstream:
+                    # If 9router rejects the injected session, invalidate and retry once
+                    if upstream.status_code in (401, 403) and attempt == 0 and session_token and path != "api/auth/login":
+                        global _session_token, _session_expires
+                        _session_token = None
+                        _session_expires = 0.0
+                        logger.warning("9router: session rejected, invalidating cache and retrying")
+                        await upstream.aread()
+                        continue
 
-                if "location" in resp_headers:
-                    resp_headers["location"] = _rewrite_location(resp_headers["location"])
+                    # Use multi_items() — items() collapses duplicate keys via ", " join,
+                    # which breaks Set-Cookie (each cookie must be its own header).
+                    all_headers = list(upstream.headers.multi_items())
+                    set_cookies = [v for k, v in all_headers if k.lower() == "set-cookie"]
+                    resp_headers = {
+                        k: v
+                        for k, v in all_headers
+                        if k.lower() not in _HOP_BY_HOP and k.lower() != "set-cookie"
+                    }
+                    if "location" in resp_headers:
+                        resp_headers["location"] = _rewrite_location(resp_headers["location"])
 
-                # If 9router returns 401/403, invalidate cached session and retry once
-                if upstream.status_code in (401, 403) and path != "api/auth/login":
-                    global _session_token, _session_expires
-                    _session_token = None
-                    _session_expires = 0.0
-                    logger.warning("9router: session rejected, retrying after re-login")
-                    # consume body to release connection
-                    await upstream.aread()
+                    content_type = upstream.headers.get("content-type", "")
+                    is_streaming = "text/event-stream" in content_type
 
-                content_type = upstream.headers.get("content-type", "")
-                is_streaming = "text/event-stream" in content_type
+                    if is_streaming:
+                        async def _stream():
+                            async for chunk in upstream.aiter_bytes():
+                                yield chunk
 
-                if is_streaming:
-                    async def _stream():
-                        async for chunk in upstream.aiter_bytes():
-                            yield chunk
+                        resp = StreamingResponse(
+                            _stream(),
+                            status_code=upstream.status_code,
+                            headers=resp_headers,
+                            media_type=content_type,
+                        )
+                    else:
+                        body_bytes = await upstream.aread()
+                        resp = Response(
+                            content=body_bytes,
+                            status_code=upstream.status_code,
+                            headers=resp_headers,
+                            media_type=content_type or None,
+                        )
 
-                    return StreamingResponse(
-                        _stream(),
-                        status_code=upstream.status_code,
-                        headers=resp_headers,
-                        media_type=content_type,
-                    )
-                else:
-                    body_bytes = await upstream.aread()
-                    return Response(
-                        content=body_bytes,
-                        status_code=upstream.status_code,
-                        headers=resp_headers,
-                        media_type=content_type or None,
-                    )
+                    for cookie_val in set_cookies:
+                        resp.headers.append("set-cookie", cookie_val)
+                    return resp
 
     except httpx.ConnectError as exc:
         logger.error(f"9router proxy: connection failed: {exc}")

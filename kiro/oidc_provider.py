@@ -32,7 +32,7 @@ from urllib.parse import urlencode
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
+from fastapi import APIRouter, Cookie, Depends, Form, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from jose import jwt
 from loguru import logger
@@ -84,16 +84,39 @@ def _load_clients() -> dict[str, dict]:
 
     # Default: single 9router client
     secret = os.getenv("OIDC_CLIENT_SECRET", "")
-    redirect = os.getenv("OIDC_REDIRECT_URI", "http://localhost:20128/api/auth/oidc/callback")
     if not secret:
         logger.warning("OIDC_CLIENT_SECRET not set — OIDC SSO will not work until configured")
+    # Support comma-separated list of redirect URIs; also support "*" prefix to match any origin.
+    # Default "*" accepts any origin with the /9router/api/auth/oidc/callback path — safe because
+    # the gateway itself serves /9router/ via its own proxy, so the redirect always comes home.
+    redirect_env = os.getenv("OIDC_REDIRECT_URI", "*/9router/api/auth/oidc/callback")
+    redirect_uris = [r.strip() for r in redirect_env.split(",") if r.strip()]
     return {
         "9router": {
             "client_id": "9router",
             "client_secret": secret,
-            "redirect_uris": [redirect],
+            "redirect_uris": redirect_uris,
         }
     }
+
+
+def _redirect_uri_allowed(redirect_uri: str, registered: list[str]) -> bool:
+    """Check redirect_uri against registered list.
+
+    A registered entry starting with '*' is a path-only wildcard — it matches
+    any origin as long as the path (everything after the first '/') matches.
+    Example: "*/9router/api/auth/oidc/callback" matches any scheme+host.
+    """
+    from urllib.parse import urlparse
+    incoming_path = urlparse(redirect_uri).path
+    for entry in registered:
+        if entry == redirect_uri:
+            return True
+        if entry.startswith("*"):
+            # wildcard host: compare path only
+            if incoming_path == entry[1:]:
+                return True
+    return False
 
 
 _CLIENTS: dict[str, dict] = _load_clients()
@@ -217,11 +240,18 @@ router = APIRouter(tags=["oidc"])
 
 @router.get("/.well-known/openid-configuration")
 async def oidc_discovery() -> JSONResponse:
-    """Standard OIDC discovery document."""
+    """Standard OIDC discovery document.
+
+    OIDC_ISSUER_URL  — internal URL used for the iss claim, token endpoint, and jwks
+                       (server-to-server; may be an internal Docker hostname).
+    OIDC_PUBLIC_URL  — public URL used only for authorization_endpoint (browser redirect).
+                       Defaults to OIDC_ISSUER_URL when not set.
+    """
     issuer = _get_issuer()
+    public_url = os.getenv("OIDC_PUBLIC_URL", "").rstrip("/") or issuer
     return JSONResponse({
         "issuer": issuer,
-        "authorization_endpoint": f"{issuer}/oauth/authorize",
+        "authorization_endpoint": f"{public_url}/oauth/authorize",
         "token_endpoint": f"{issuer}/oauth/token",
         "jwks_uri": f"{issuer}/oauth/jwks",
         "response_types_supported": ["code"],
@@ -249,8 +279,10 @@ async def authorize(
     state: Optional[str] = Query(None),
     nonce: Optional[str] = Query(None),
     prompt: Optional[str] = Query(None),
-    # Frontend passes the gateway JWT here for silent SSO
+    # Frontend passes the gateway JWT here for silent SSO (JS-initiated flow)
     _gateway_token: Optional[str] = Query(None),
+    # Browser-initiated flow (9router OIDC start → redirect) sends httponly cookie
+    gw_token: Optional[str] = Cookie(default=None),
 ) -> RedirectResponse:
     """
     OIDC Authorization endpoint.
@@ -269,7 +301,7 @@ async def authorize(
     if client is None:
         raise HTTPException(status_code=400, detail=f"Unknown client_id: {client_id}")
 
-    if redirect_uri not in client["redirect_uris"]:
+    if not _redirect_uri_allowed(redirect_uri, client["redirect_uris"]):
         raise HTTPException(status_code=400, detail="redirect_uri not registered for this client")
 
     def _error_redirect(error: str) -> RedirectResponse:
@@ -278,12 +310,14 @@ async def authorize(
             params["state"] = state
         return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
 
-    # Resolve user from token — prefer query param (frontend SSO click), fall back to header
+    # Resolve user — query param (JS-initiated), then Bearer header, then httponly cookie
     token: Optional[str] = _gateway_token
     if not token:
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
             token = auth_header[7:]
+    if not token:
+        token = gw_token  # browser redirect from 9router's /api/auth/oidc/start
 
     user: Optional[User] = None
     if token:

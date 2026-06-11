@@ -38,7 +38,10 @@ services:
       - NINE_ROUTER_URL=${NINE_ROUTER_URL:-http://ninerouter-prod:20128}
       - NINE_ROUTER_API_KEY=${NINE_ROUTER_API_KEY:-}
       - OIDC_CLIENT_SECRET=${NINE_ROUTER_OIDC_CLIENT_SECRET}
+      # Internal URL for JWT iss claim, token endpoint, and jwks (server-to-server)
       - OIDC_ISSUER_URL=${OIDC_ISSUER_URL:-http://gateway-prod:19000}
+      # Public URL for authorization_endpoint in OIDC discovery (browser redirect via nginx)
+      - OIDC_PUBLIC_URL=${OIDC_PUBLIC_URL:-https://aigateway.izisolution.vn}
     env_file:
       - .env_prod
     volumes:

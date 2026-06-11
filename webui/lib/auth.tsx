@@ -86,6 +86,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     clearTokens();
     setUser(null);
+    // Clear the httponly gateway cookie used by the 9router proxy
+    apiClient.post("/auth/logout").catch(() => {});
   }, []);
 
   const value = useMemo(

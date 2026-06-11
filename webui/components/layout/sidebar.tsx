@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, BarChart3, UserCog, Settings, LogOut, ChevronUp, Copy, Check, KeyRound, Trash2, ExternalLink } from "lucide-react";
@@ -23,59 +23,22 @@ const NINE_ROUTER_ENABLED = process.env.NEXT_PUBLIC_NINE_ROUTER_ENABLED === "tru
 
 function NineRouterButton() {
   const { user } = useAuth();
-  const [loading, setLoading] = useState(false);
 
   if (!NINE_ROUTER_ENABLED || user?.role !== "admin") return null;
 
-  async function handleClick() {
-    setLoading(true);
-    try {
-      // Build OIDC authorization URL with prompt=none and current JWT
-      const accessToken = localStorage.getItem("access_token") || sessionStorage.getItem("access_token") || "";
-      const redirectUri = encodeURIComponent(`${window.location.origin}/9router/api/auth/oidc/callback`);
-      const state = crypto.randomUUID();
-      const nonce = crypto.randomUUID();
-
-      // Generate PKCE pair
-      const verifierBytes = crypto.getRandomValues(new Uint8Array(32));
-      const verifier = btoa(String.fromCharCode(...verifierBytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
-      const challengeBytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
-      const challenge = btoa(String.fromCharCode(...new Uint8Array(challengeBytes))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
-
-      // Store PKCE verifier for 9router to pick up (9router uses cookies, but since we control
-      // the redirect we use the gateway proxy path which shares the same origin)
-      sessionStorage.setItem("oidc_pkce_verifier", verifier);
-
-      const params = new URLSearchParams({
-        client_id: "9router",
-        redirect_uri: `${window.location.origin}/9router/api/auth/oidc/callback`,
-        response_type: "code",
-        scope: "openid profile email",
-        state,
-        nonce,
-        code_challenge: challenge,
-        code_challenge_method: "S256",
-        prompt: "none",
-        _gateway_token: accessToken,
-      });
-
-      window.open(`/api/oauth/authorize?${params}`, "_blank", "noopener");
-    } catch {
-      // Fallback: open 9router directly (user will see its own login)
-      window.open("/9router/", "_blank", "noopener");
-    } finally {
-      setLoading(false);
-    }
+  function handleClick() {
+    // Let 9router initiate the OIDC flow — it sets its own state/nonce/PKCE cookies.
+    // The gateway's /oauth/authorize endpoint authenticates via the gw_token httponly cookie.
+    window.open("/9router/api/auth/oidc/start", "_blank", "noopener");
   }
 
   return (
     <button
       onClick={handleClick}
-      disabled={loading}
-      className="flex items-center gap-3 w-full px-4 py-3 rounded-xl transition-all duration-200 font-medium text-on-surface-variant hover:bg-white/60 hover:text-primary hover:-translate-y-[1px] active:scale-95 disabled:opacity-60"
+      className="flex items-center gap-3 w-full px-4 py-3 rounded-xl transition-all duration-200 font-medium text-on-surface-variant hover:bg-white/60 hover:text-primary hover:-translate-y-[1px] active:scale-95"
     >
       <ExternalLink className="w-5 h-5" />
-      <span>{loading ? "Opening..." : "9Router Admin"}</span>
+      <span>9Router Admin</span>
     </button>
   );
 }

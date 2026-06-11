@@ -1,4 +1,6 @@
-from fastapi import Depends, HTTPException, status
+from typing import Optional
+
+from fastapi import Cookie, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -7,14 +9,19 @@ from kiro.db.engine import get_session
 from kiro.db.models import User
 from kiro.db.repositories import get_user_by_id
 
-security = HTTPBearer()
+# auto_error=False so browser requests (no Authorization header) fall through to cookie auth
+security = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    gw_token: Optional[str] = Cookie(default=None),
     session: AsyncSession = Depends(get_session),
 ) -> User:
-    payload = decode_token(credentials.credentials)
+    token = credentials.credentials if credentials else gw_token
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    payload = decode_token(token)
     if payload is None or payload.get("type") != "access":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
     user = await get_user_by_id(session, int(payload["sub"]))
