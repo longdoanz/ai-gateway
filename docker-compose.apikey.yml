@@ -39,6 +39,7 @@ services:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changemepwd}
       - NINE_ROUTER_URL=${NINE_ROUTER_URL:-http://ninerouter:20128}
       - NINE_ROUTER_API_KEY=${NINE_ROUTER_API_KEY:-}
+      - NINE_ROUTER_PASSWORD=${NINE_ROUTER_PASSWORD:-123456}
       - OIDC_CLIENT_SECRET=${NINE_ROUTER_OIDC_CLIENT_SECRET}
       - OIDC_ISSUER_URL=${OIDC_ISSUER_URL:-http://localhost:18000}
     env_file:
@@ -79,6 +80,7 @@ services:
       - OIDC_CLIENT_SECRET=${NINE_ROUTER_OIDC_CLIENT_SECRET}
       - OIDC_SCOPES=openid profile email
       - AUTH_MODE=oidc
+      - INITIAL_PASSWORD=${NINE_ROUTER_PASSWORD:-123456}
       - REQUIRE_API_KEY=${NINE_ROUTER_REQUIRE_API_KEY:-false}
       - API_KEY_SECRET=${NINE_ROUTER_API_KEY_SECRET:-}
     volumes:
@@ -99,7 +101,7 @@ services:
       args:
         - API_URL=http://kiro-gateway-apikey:18000
     ports:
-      - "3001:3000"
+      - "3002:3000"
     environment:
       - API_URL=http://kiro-gateway-apikey:18000
       - NEXT_PUBLIC_NINE_ROUTER_ENABLED=${NINE_ROUTER_ENABLED:-true}

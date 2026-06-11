@@ -558,6 +558,9 @@ NINE_ROUTER_URL: str = os.getenv("NINE_ROUTER_URL", "")
 # API key for 9router's /v1/* endpoints (REQUIRE_API_KEY=true in 9router)
 NINE_ROUTER_API_KEY: str = os.getenv("NINE_ROUTER_API_KEY", "")
 
+# Password used by the proxy to auto-login to 9router on behalf of admins
+NINE_ROUTER_PASSWORD: str = os.getenv("NINE_ROUTER_PASSWORD", "123456")
+
 # OIDC client secret shared between ai-gateway OIDC provider and 9router
 OIDC_CLIENT_SECRET: str = os.getenv("OIDC_CLIENT_SECRET", "")
 
