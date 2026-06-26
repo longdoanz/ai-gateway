@@ -9,7 +9,7 @@ Tests cover:
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.datastructures import Headers
@@ -35,7 +35,6 @@ def _mock_request(
 
 
 def _mock_stream_response(status_code: int = 200, chunks: list[bytes] | None = None, headers: dict | None = None):
-    """Build an async context-manager mock that streams chunks."""
     chunks = chunks or [b"data: chunk1\n\n", b"data: [DONE]\n\n"]
     resp = MagicMock()
     resp.status_code = status_code
@@ -46,16 +45,17 @@ def _mock_stream_response(status_code: int = 200, chunks: list[bytes] | None = N
             yield c
 
     resp.aiter_bytes = _aiter
+    resp.aread = AsyncMock(return_value=b"error body")
+    resp.aclose = AsyncMock()
+    return resp
 
-    async def _aread():
-        return b"error body"
 
-    resp.aread = _aread
-
-    cm = MagicMock()
-    cm.__aenter__ = AsyncMock(return_value=resp)
-    cm.__aexit__ = AsyncMock(return_value=False)
-    return cm
+def _mock_client(response=None, send_side_effect=None):
+    client = MagicMock()
+    client.build_request = MagicMock(side_effect=lambda **kwargs: kwargs)
+    client.send = AsyncMock(side_effect=send_side_effect) if send_side_effect else AsyncMock(return_value=response)
+    client.aclose = AsyncMock()
+    return client
 
 
 # ---------------------------------------------------------------------------
@@ -91,16 +91,12 @@ class TestForwardToNineRouter:
     @pytest.mark.asyncio
     async def test_streams_response_on_success(self):
         import kiro.nine_router_client as mod
-        stream_cm = _mock_stream_response(200)
-
-        mock_client = MagicMock()
-        mock_client.stream = MagicMock(return_value=stream_cm)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
+        resp_mock = _mock_stream_response(200)
+        client = _mock_client(response=resp_mock)
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=mock_client),
+            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             req = _mock_request()
             resp = await mod.forward_to_nine_router(req, b"{}")
@@ -110,68 +106,45 @@ class TestForwardToNineRouter:
     @pytest.mark.asyncio
     async def test_adds_api_key_header_when_configured(self):
         import kiro.nine_router_client as mod
-        stream_cm = _mock_stream_response(200)
-
-        captured_headers = {}
-
-        mock_client = MagicMock()
-
-        def _capture_stream(**kwargs):
-            captured_headers.update(kwargs.get("headers", {}))
-            return stream_cm
-
-        mock_client.stream = MagicMock(side_effect=_capture_stream)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
+        resp_mock = _mock_stream_response(200)
+        client = _mock_client(response=resp_mock)
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
             patch.object(mod, "NINE_ROUTER_API_KEY", "secret-key"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=mock_client),
+            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             req = _mock_request()
             await mod.forward_to_nine_router(req, b"{}")
-            assert captured_headers.get("Authorization") == "Bearer secret-key"
+            sent_headers = client.build_request.call_args.kwargs["headers"]
+            assert sent_headers.get("Authorization") == "Bearer secret-key"
 
     @pytest.mark.asyncio
     async def test_strips_original_authorization_header(self):
         import kiro.nine_router_client as mod
-        stream_cm = _mock_stream_response(200)
-        captured_headers = {}
-
-        mock_client = MagicMock()
-
-        def _capture_stream(**kwargs):
-            captured_headers.update(kwargs.get("headers", {}))
-            return stream_cm
-
-        mock_client.stream = MagicMock(side_effect=_capture_stream)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
+        resp_mock = _mock_stream_response(200)
+        client = _mock_client(response=resp_mock)
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
             patch.object(mod, "NINE_ROUTER_API_KEY", ""),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=mock_client),
+            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             req = _mock_request(headers={"authorization": "Bearer gateway-user-token"})
             await mod.forward_to_nine_router(req, b"{}")
-            assert "Authorization" not in captured_headers
-            assert "authorization" not in captured_headers
+            sent_headers = client.build_request.call_args.kwargs["headers"]
+            assert "Authorization" not in sent_headers
+            assert "authorization" not in sent_headers
 
     @pytest.mark.asyncio
     async def test_non_200_upstream_returns_json_error(self):
         import kiro.nine_router_client as mod
-        stream_cm = _mock_stream_response(429)
-
-        mock_client = MagicMock()
-        mock_client.stream = MagicMock(return_value=stream_cm)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
+        resp_mock = _mock_stream_response(429)
+        client = _mock_client(response=resp_mock)
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=mock_client),
+            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             req = _mock_request()
             resp = await mod.forward_to_nine_router(req, b"{}")
@@ -183,14 +156,11 @@ class TestForwardToNineRouter:
         import kiro.nine_router_client as mod
         import httpx
 
-        mock_client = MagicMock()
-        mock_client.stream = MagicMock(side_effect=httpx.ConnectError("refused"))
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
+        client = _mock_client(send_side_effect=httpx.ConnectError("refused"))
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=mock_client),
+            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             req = _mock_request()
             resp = await mod.forward_to_nine_router(req, b"{}")
@@ -202,14 +172,11 @@ class TestForwardToNineRouter:
         import kiro.nine_router_client as mod
         import httpx
 
-        mock_client = MagicMock()
-        mock_client.stream = MagicMock(side_effect=httpx.TimeoutException("timed out"))
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
+        client = _mock_client(send_side_effect=httpx.TimeoutException("timed out"))
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=mock_client),
+            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             req = _mock_request()
             resp = await mod.forward_to_nine_router(req, b"{}")
@@ -219,47 +186,29 @@ class TestForwardToNineRouter:
     @pytest.mark.asyncio
     async def test_correct_target_url_built(self):
         import kiro.nine_router_client as mod
-        stream_cm = _mock_stream_response(200)
-        captured_url = {}
-
-        mock_client = MagicMock()
-
-        def _capture(**kwargs):
-            captured_url["url"] = kwargs.get("url", "")
-            return stream_cm
-
-        mock_client.stream = MagicMock(side_effect=_capture)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
+        resp_mock = _mock_stream_response(200)
+        client = _mock_client(response=resp_mock)
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=mock_client),
+            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             req = _mock_request(path="/v1/chat/completions")
             await mod.forward_to_nine_router(req, b"{}")
-            assert captured_url["url"] == "http://ninerouter:20128/v1/chat/completions"
+            built_url = client.build_request.call_args.kwargs["url"]
+            assert built_url == "http://ninerouter:20128/v1/chat/completions"
 
     @pytest.mark.asyncio
     async def test_query_string_forwarded(self):
         import kiro.nine_router_client as mod
-        stream_cm = _mock_stream_response(200)
-        captured_url = {}
-
-        mock_client = MagicMock()
-
-        def _capture(**kwargs):
-            captured_url["url"] = kwargs.get("url", "")
-            return stream_cm
-
-        mock_client.stream = MagicMock(side_effect=_capture)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
+        resp_mock = _mock_stream_response(200)
+        client = _mock_client(response=resp_mock)
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=mock_client),
+            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             req = _mock_request(path="/v1/models", query="foo=bar")
             await mod.forward_to_nine_router(req, b"")
-            assert "foo=bar" in captured_url["url"]
+            built_url = client.build_request.call_args.kwargs["url"]
+            assert "foo=bar" in built_url

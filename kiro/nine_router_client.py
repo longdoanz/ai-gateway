@@ -35,6 +35,9 @@ _HOP_BY_HOP = frozenset({
     "trailers",
     "upgrade",
     "authorization",  # replaced with 9router's own key
+    # httpx auto-decompresses response bodies; forwarding content-encoding
+    # would make the client decode an already-decoded body.
+    "content-encoding",
 })
 
 
@@ -52,6 +55,9 @@ def _build_headers(original_request: Request) -> dict[str, str]:
     }
     if NINE_ROUTER_API_KEY:
         headers["Authorization"] = f"Bearer {NINE_ROUTER_API_KEY}"
+    # Avoid compressed upstream bodies — httpx decompresses them and the
+    # content-encoding header is stripped from the proxied response.
+    headers["accept-encoding"] = "identity"
     return headers
 
 

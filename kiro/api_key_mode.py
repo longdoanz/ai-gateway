@@ -336,7 +336,7 @@ async def _resolve_gateway_key(token: str) -> tuple[str, int, int] | None:
         # Last resort: any available user key in the pool
         all_available = usage_cache.get_available_keys()
         if not all_available:
-            logger.warning("Gateway key used but no Kiro keys available in pool")
+            logger.info("Gateway key used but no Kiro keys available in pool")
             return None
 
         best_key_id, raw_kiro_key = await sticky_binder.pick_and_decrypt(gk_id, all_available)
@@ -983,10 +983,19 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
     from kiro.cache import ModelInfoCache
 
     token = get_api_key_from_request(request)
-    resolved = await _resolve_token_and_keys(
-        token,
-        error_detail_for_gw_fail={"error": {"message": "Gateway key is invalid, inactive, or no API keys are available in the pool. Please try again later.", "type": "service_unavailable", "code": 503}},
-    )
+    _is_gateway_key = token.startswith("iziaigw_")
+    try:
+        resolved = await _resolve_token_and_keys(
+            token,
+            error_detail_for_gw_fail={"error": {"message": "Gateway key is invalid, inactive, or no API keys are available in the pool. Please try again later.", "type": "service_unavailable", "code": 503}},
+        )
+    except HTTPException as e:
+        if e.status_code == 503 and _is_gateway_key:
+            from kiro.nine_router_client import forward_to_nine_router, is_nine_router_enabled
+            if is_nine_router_enabled():
+                logger.info("[API_KEY_MODE/OpenAI] Gateway key pool empty, falling back to 9router")
+                return await forward_to_nine_router(request, await request.body())
+        raise
     token, key_id, original_key_id, gateway_key_id = resolved.token, resolved.key_id, resolved.original_key_id, resolved.gateway_key_id
 
     auth_adapter = ApiKeyAuthAdapter(token)
@@ -1126,16 +1135,25 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
             },
         )
 
-    resolved = await _resolve_token_and_keys(
-        raw_token,
-        error_detail_for_gw_fail={
-            "type": "error",
-            "error": {
-                "type": "service_unavailable",
-                "message": "Gateway key is invalid, inactive, or no API keys are available in the pool. Please try again later.",
+    _is_gateway_key = raw_token.startswith("iziaigw_")
+    try:
+        resolved = await _resolve_token_and_keys(
+            raw_token,
+            error_detail_for_gw_fail={
+                "type": "error",
+                "error": {
+                    "type": "service_unavailable",
+                    "message": "Gateway key is invalid, inactive, or no API keys are available in the pool. Please try again later.",
+                },
             },
-        },
-    )
+        )
+    except HTTPException as e:
+        if e.status_code == 503 and _is_gateway_key:
+            from kiro.nine_router_client import forward_to_nine_router, is_nine_router_enabled
+            if is_nine_router_enabled():
+                logger.info("[API_KEY_MODE/Anthropic] Gateway key pool empty, falling back to 9router")
+                return await forward_to_nine_router(request, await request.body())
+        raise
     raw_token, key_id, original_key_id, gateway_key_id = resolved.token, resolved.key_id, resolved.original_key_id, resolved.gateway_key_id
 
     auth_adapter = ApiKeyAuthAdapter(raw_token)

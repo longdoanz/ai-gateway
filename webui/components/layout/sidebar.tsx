@@ -20,16 +20,20 @@ const navItems = [
 ];
 
 const NINE_ROUTER_ENABLED = process.env.NEXT_PUBLIC_NINE_ROUTER_ENABLED === "true";
+// 9router runs on its own subdomain (it owns the origin root: /api, /_next, /manifest).
+// Trailing slash trimmed so we can append the OIDC start path.
+const NINE_ROUTER_URL = (process.env.NEXT_PUBLIC_NINE_ROUTER_URL || "").replace(/\/+$/, "");
 
 function NineRouterButton() {
   const { user } = useAuth();
 
-  if (!NINE_ROUTER_ENABLED || user?.role !== "admin") return null;
+  if (!NINE_ROUTER_ENABLED || !NINE_ROUTER_URL || user?.role !== "admin") return null;
 
   function handleClick() {
     // Let 9router initiate the OIDC flow — it sets its own state/nonce/PKCE cookies.
-    // The gateway's /oauth/authorize endpoint authenticates via the gw_token httponly cookie.
-    window.open("/9router/api/auth/oidc/start", "_blank", "noopener");
+    // The gateway's /oauth/authorize endpoint (on the main domain) authenticates via
+    // the gw_token httponly cookie, then redirects back to 9router's callback.
+    window.open(`${NINE_ROUTER_URL}/api/auth/oidc/start`, "_blank", "noopener");
   }
 
   return (

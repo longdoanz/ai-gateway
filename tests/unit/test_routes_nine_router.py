@@ -17,7 +17,6 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from starlette.datastructures import Headers
 
 from kiro.db.models import User
 
@@ -44,43 +43,30 @@ def _make_regular_user(user_id: int = 2) -> User:
     return user
 
 
-def _make_app(nine_router_url: str = "http://ninerouter:20128", api_key: str = "") -> tuple:
-    """Build a FastAPI app with nine_router router, overriding config values."""
-    import importlib
-    import kiro.routes_nine_router as mod
-    importlib.reload(mod)
-
-    app = FastAPI()
-
-    with (
-        patch.object(mod, "NINE_ROUTER_URL", nine_router_url),
-        patch.object(mod, "NINE_ROUTER_API_KEY", api_key),
-    ):
-        app.include_router(mod.router)
-
-    return app, mod
-
-
 def _mock_stream_response(
     status_code: int = 200,
     body: bytes = b'{"ok": true}',
     content_type: str = "application/json",
     headers: dict | None = None,
 ):
+    header_items = list((headers or {"content-type": content_type}).items())
     resp = MagicMock()
     resp.status_code = status_code
     resp.headers = MagicMock()
-    resp.headers.get = MagicMock(return_value=content_type)
-    resp.headers.items = MagicMock(return_value=(headers or {"content-type": content_type}).items())
+    resp.headers.get = MagicMock(side_effect=lambda key, default=None: dict(header_items).get(key, default))
+    resp.headers.multi_items = MagicMock(return_value=header_items)
     resp.aread = AsyncMock(return_value=body)
 
     async def _aiter():
         yield body
 
     resp.aiter_bytes = _aiter
+    return resp
 
+
+def _make_stream_cm(response):
     cm = MagicMock()
-    cm.__aenter__ = AsyncMock(return_value=resp)
+    cm.__aenter__ = AsyncMock(return_value=response)
     cm.__aexit__ = AsyncMock(return_value=False)
     return cm
 
@@ -90,6 +76,7 @@ def _make_client_mock(stream_cm):
     client.stream = MagicMock(return_value=stream_cm)
     client.__aenter__ = AsyncMock(return_value=client)
     client.__aexit__ = AsyncMock(return_value=False)
+    client.post = AsyncMock()
     return client
 
 
@@ -99,7 +86,6 @@ def _make_client_mock(stream_cm):
 
 class TestAccessControl:
     def test_no_auth_returns_403_or_401(self):
-        """Unauthenticated request must be rejected."""
         import kiro.routes_nine_router as mod
         app = FastAPI()
         app.include_router(mod.router)
@@ -110,8 +96,6 @@ class TestAccessControl:
     def test_non_admin_returns_403(self):
         import kiro.routes_nine_router as mod
         app = FastAPI()
-
-        regular_user = _make_regular_user()
 
         async def _fake_require_admin():
             from fastapi import HTTPException
@@ -125,8 +109,8 @@ class TestAccessControl:
 
     def test_admin_passes_through(self):
         import kiro.routes_nine_router as mod
-        stream_cm = _mock_stream_response()
-        mock_client = _make_client_mock(stream_cm)
+        upstream = _mock_stream_response()
+        mock_client = _make_client_mock(_make_stream_cm(upstream))
 
         app = FastAPI()
         admin = _make_admin_user()
@@ -135,6 +119,7 @@ class TestAccessControl:
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
+            patch.object(mod, "NINE_ROUTER_PASSWORD", ""),
             patch("kiro.routes_nine_router.httpx.AsyncClient", return_value=mock_client),
         ):
             client = TestClient(app)
@@ -167,17 +152,16 @@ class TestNotConfigured:
 class TestHeaderHandling:
     def test_strips_authorization_header(self):
         import kiro.routes_nine_router as mod
+        upstream = _mock_stream_response()
+        stream_cm = _make_stream_cm(upstream)
         captured = {}
-        stream_cm = _mock_stream_response()
-        mock_client = MagicMock()
+        mock_client = _make_client_mock(stream_cm)
 
         def _capture(**kwargs):
             captured["headers"] = kwargs.get("headers", {})
             return stream_cm
 
         mock_client.stream = MagicMock(side_effect=_capture)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         app = FastAPI()
         admin = _make_admin_user()
@@ -187,6 +171,7 @@ class TestHeaderHandling:
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
             patch.object(mod, "NINE_ROUTER_API_KEY", ""),
+            patch.object(mod, "NINE_ROUTER_PASSWORD", ""),
             patch("kiro.routes_nine_router.httpx.AsyncClient", return_value=mock_client),
         ):
             client = TestClient(app)
@@ -195,17 +180,16 @@ class TestHeaderHandling:
 
     def test_adds_nine_router_api_key(self):
         import kiro.routes_nine_router as mod
+        upstream = _mock_stream_response()
+        stream_cm = _make_stream_cm(upstream)
         captured = {}
-        stream_cm = _mock_stream_response()
-        mock_client = MagicMock()
+        mock_client = _make_client_mock(stream_cm)
 
         def _capture(**kwargs):
             captured["headers"] = kwargs.get("headers", {})
             return stream_cm
 
         mock_client.stream = MagicMock(side_effect=_capture)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         app = FastAPI()
         admin = _make_admin_user()
@@ -215,6 +199,7 @@ class TestHeaderHandling:
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
             patch.object(mod, "NINE_ROUTER_API_KEY", "nr-secret"),
+            patch.object(mod, "NINE_ROUTER_PASSWORD", ""),
             patch("kiro.routes_nine_router.httpx.AsyncClient", return_value=mock_client),
         ):
             client = TestClient(app)
@@ -223,24 +208,16 @@ class TestHeaderHandling:
 
     def test_rewrites_redirect_location(self):
         import kiro.routes_nine_router as mod
-        resp_mock = MagicMock()
-        resp_mock.status_code = 302
-        resp_mock.headers = MagicMock()
-        resp_mock.headers.get = MagicMock(return_value="application/json")
-        resp_mock.headers.items = MagicMock(return_value={
-            "location": "http://ninerouter:20128/dashboard",
-            "content-type": "text/html",
-        }.items())
-        resp_mock.aread = AsyncMock(return_value=b"")
-
-        async def _aiter():
-            yield b""
-
-        resp_mock.aiter_bytes = _aiter
-        stream_cm = MagicMock()
-        stream_cm.__aenter__ = AsyncMock(return_value=resp_mock)
-        stream_cm.__aexit__ = AsyncMock(return_value=False)
-        mock_client = _make_client_mock(stream_cm)
+        upstream = _mock_stream_response(
+            status_code=302,
+            body=b"",
+            content_type="text/html",
+            headers={
+                "location": "http://ninerouter:20128/dashboard",
+                "content-type": "text/html",
+            },
+        )
+        mock_client = _make_client_mock(_make_stream_cm(upstream))
 
         app = FastAPI()
         admin = _make_admin_user()
@@ -249,6 +226,7 @@ class TestHeaderHandling:
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
+            patch.object(mod, "NINE_ROUTER_PASSWORD", ""),
             patch("kiro.routes_nine_router.httpx.AsyncClient", return_value=mock_client),
         ):
             client = TestClient(app, follow_redirects=False)
@@ -265,10 +243,8 @@ class TestErrorHandling:
         import kiro.routes_nine_router as mod
         import httpx
 
-        mock_client = MagicMock()
+        mock_client = _make_client_mock(MagicMock())
         mock_client.stream = MagicMock(side_effect=httpx.ConnectError("refused"))
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         app = FastAPI()
         admin = _make_admin_user()
@@ -277,6 +253,7 @@ class TestErrorHandling:
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
+            patch.object(mod, "NINE_ROUTER_PASSWORD", ""),
             patch("kiro.routes_nine_router.httpx.AsyncClient", return_value=mock_client),
         ):
             client = TestClient(app, raise_server_exceptions=False)
@@ -287,10 +264,8 @@ class TestErrorHandling:
         import kiro.routes_nine_router as mod
         import httpx
 
-        mock_client = MagicMock()
+        mock_client = _make_client_mock(MagicMock())
         mock_client.stream = MagicMock(side_effect=httpx.TimeoutException("timed out"))
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         app = FastAPI()
         admin = _make_admin_user()
@@ -299,6 +274,7 @@ class TestErrorHandling:
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
+            patch.object(mod, "NINE_ROUTER_PASSWORD", ""),
             patch("kiro.routes_nine_router.httpx.AsyncClient", return_value=mock_client),
         ):
             client = TestClient(app, raise_server_exceptions=False)

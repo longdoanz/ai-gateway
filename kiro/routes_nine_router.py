@@ -43,6 +43,10 @@ _HOP_BY_HOP = frozenset({
     "trailers",
     "upgrade",
     "authorization",
+    # httpx auto-decompresses response bodies, so forwarding the upstream
+    # content-encoding header would tell the browser to decode an
+    # already-decoded body -> ERR_CONTENT_DECODING_FAILED.
+    "content-encoding",
 })
 
 
@@ -99,6 +103,9 @@ def _build_headers(request: Request, session_token: Optional[str]) -> dict[str, 
         headers["Authorization"] = f"Bearer {NINE_ROUTER_API_KEY}"
     headers["X-Forwarded-Host"] = request.headers.get("host", "localhost")
     headers["X-Forwarded-Prefix"] = "/9router"
+    # Ask upstream for an uncompressed body — httpx would decompress it anyway,
+    # and the content-encoding header is stripped from the proxied response.
+    headers["accept-encoding"] = "identity"
 
     # Inject the 9router session cookie only when auto-login succeeded
     if session_token:
