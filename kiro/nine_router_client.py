@@ -155,9 +155,25 @@ async def forward_to_nine_router(
     headers = _build_headers(original_request)
     logger.info(f"9router fallback: forwarding {original_request.method} {target_path}")
 
-    # Open client manually (not as context manager) so the connection stays alive
-    # while FastAPI streams the response back to the caller.
-    client = httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0))
+    # Reuse the application-wide pooled client (connection pooling + keep-alive)
+    # so a burst of fallbacks does not open one TCP connection — and one file
+    # descriptor — per request. Only fall back to a private client when the
+    # shared one is unavailable (e.g. called outside the app lifespan / tests),
+    # in which case we own it and must close it.
+    shared_client = getattr(getattr(original_request, "app", None), "state", None)
+    shared_client = getattr(shared_client, "http_client", None)
+    if shared_client is not None:
+        client = shared_client
+        owns_client = False
+    else:
+        client = httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0))
+        owns_client = True
+
+    async def _maybe_close_client() -> None:
+        # Never close the shared pooled client — only a private one we created.
+        if owns_client:
+            await client.aclose()
+
     try:
         response = await client.send(
             client.build_request(
@@ -169,21 +185,21 @@ async def forward_to_nine_router(
             stream=True,
         )
     except httpx.ConnectError as exc:
-        await client.aclose()
+        await _maybe_close_client()
         logger.error(f"9router fallback: connection failed to {NINE_ROUTER_URL}: {exc}")
         return JSONResponse(
             status_code=503,
             content={"error": {"message": f"9router fallback unavailable: {exc}", "type": "service_unavailable"}},
         )
     except httpx.TimeoutException as exc:
-        await client.aclose()
+        await _maybe_close_client()
         logger.error(f"9router fallback: timeout: {exc}")
         return JSONResponse(
             status_code=504,
             content={"error": {"message": "9router fallback timed out.", "type": "timeout"}},
         )
     except Exception as exc:
-        await client.aclose()
+        await _maybe_close_client()
         logger.error(f"9router fallback: unexpected error: {exc}")
         return JSONResponse(
             status_code=502,
@@ -198,7 +214,7 @@ async def forward_to_nine_router(
     if response.status_code != 200:
         error_body = await response.aread()
         await response.aclose()
-        await client.aclose()
+        await _maybe_close_client()
         logger.warning(f"9router fallback returned {response.status_code}: {error_body[:200]}")
         return JSONResponse(
             status_code=response.status_code,
@@ -223,8 +239,10 @@ async def forward_to_nine_router(
                         if text:
                             _accumulate_usage_from_chunk(text, token_counts, model_box)
         finally:
+            # aclose() returns the connection to the shared pool; the client itself
+            # is only closed when we privately own it.
             await response.aclose()
-            await client.aclose()
+            await _maybe_close_client()
             if on_usage is not None:
                 try:
                     await asyncio.shield(

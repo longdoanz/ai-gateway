@@ -24,6 +24,7 @@ def _mock_request(
     path: str = "/v1/chat/completions",
     query: str = "",
     headers: dict | None = None,
+    shared_http_client=None,
 ) -> MagicMock:
     req = MagicMock(spec=Request)
     req.method = method
@@ -31,6 +32,8 @@ def _mock_request(
     req.url.query = query
     req.headers = Headers(headers or {"content-type": "application/json"})
     req.body = AsyncMock(return_value=b'{"model":"gpt-4","messages":[]}')
+    # Simulate app.state.http_client — None triggers private-client fallback
+    req.app.state.http_client = shared_http_client
     return req
 
 
@@ -212,6 +215,43 @@ class TestForwardToNineRouter:
             await mod.forward_to_nine_router(req, b"")
             built_url = client.build_request.call_args.kwargs["url"]
             assert "foo=bar" in built_url
+
+    @pytest.mark.asyncio
+    async def test_shared_client_reused_and_not_closed(self):
+        """When app.state.http_client exists, it's used directly and never closed."""
+        import kiro.nine_router_client as mod
+        resp_mock = _mock_stream_response(200)
+        shared = _mock_client(response=resp_mock)
+
+        with patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"):
+            req = _mock_request(shared_http_client=shared)
+            resp = await mod.forward_to_nine_router(req, b"{}")
+            assert isinstance(resp, StreamingResponse)
+            # Drain stream to trigger finally block
+            async for _ in resp.body_iterator:
+                pass
+            # Connection returned to pool (response closed), but client NOT closed
+            resp_mock.aclose.assert_awaited()
+            shared.aclose.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_private_client_closed_after_stream(self):
+        """When no shared client, a private client is created and closed after stream."""
+        import kiro.nine_router_client as mod
+        resp_mock = _mock_stream_response(200)
+        private = _mock_client(response=resp_mock)
+
+        with (
+            patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
+            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=private),
+        ):
+            req = _mock_request()  # shared_http_client=None (default)
+            resp = await mod.forward_to_nine_router(req, b"{}")
+            async for _ in resp.body_iterator:
+                pass
+            # Both response and private client are closed
+            resp_mock.aclose.assert_awaited()
+            private.aclose.assert_awaited()
 
 
 # ---------------------------------------------------------------------------
