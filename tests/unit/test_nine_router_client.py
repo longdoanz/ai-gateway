@@ -212,3 +212,113 @@ class TestForwardToNineRouter:
             await mod.forward_to_nine_router(req, b"")
             built_url = client.build_request.call_args.kwargs["url"]
             assert "foo=bar" in built_url
+
+
+# ---------------------------------------------------------------------------
+# on_usage callback (usage recording for the fallback path)
+# ---------------------------------------------------------------------------
+
+async def _drain(streaming_response) -> list[bytes]:
+    """Iterate a StreamingResponse body to completion, returning the chunks."""
+    chunks = []
+    async for chunk in streaming_response.body_iterator:
+        chunks.append(chunk)
+    return chunks
+
+
+class TestOnUsageCallback:
+    @pytest.mark.asyncio
+    async def test_callback_fired_with_openai_usage(self):
+        import kiro.nine_router_client as mod
+        chunks = [
+            b'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n',
+            b'data: {"model":"gpt-4o","usage":{"prompt_tokens":12,"completion_tokens":7}}\n\n',
+            b"data: [DONE]\n\n",
+        ]
+        resp_mock = _mock_stream_response(200, chunks=chunks)
+        client = _mock_client(response=resp_mock)
+        seen = {}
+
+        async def on_usage(it, ot, model):
+            seen["input"], seen["output"], seen["model"] = it, ot, model
+
+        with (
+            patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
+            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+        ):
+            req = _mock_request()
+            resp = await mod.forward_to_nine_router(req, b"{}", on_usage=on_usage)
+            body = await _drain(resp)
+
+        assert body == chunks  # stream passed through unchanged
+        assert seen == {"input": 12, "output": 7, "model": "gpt-4o"}
+
+    @pytest.mark.asyncio
+    async def test_callback_fired_with_anthropic_usage(self):
+        import kiro.nine_router_client as mod
+        chunks = [
+            b'event: message_start\ndata: {"type":"message_start","message":{"model":"claude-opus-4-8","usage":{"input_tokens":30}}}\n\n',
+            b'event: message_delta\ndata: {"type":"message_delta","usage":{"output_tokens":15}}\n\n',
+        ]
+        resp_mock = _mock_stream_response(200, chunks=chunks)
+        client = _mock_client(response=resp_mock)
+        seen = {}
+
+        async def on_usage(it, ot, model):
+            seen["input"], seen["output"], seen["model"] = it, ot, model
+
+        with (
+            patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
+            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+        ):
+            req = _mock_request(path="/v1/messages")
+            resp = await mod.forward_to_nine_router(req, b"{}", on_usage=on_usage)
+            await _drain(resp)
+
+        assert seen == {"input": 30, "output": 15, "model": "claude-opus-4-8"}
+
+    @pytest.mark.asyncio
+    async def test_callback_fired_with_zeroes_when_no_usage(self):
+        import kiro.nine_router_client as mod
+        chunks = [b"data: chunk1\n\n", b"data: [DONE]\n\n"]
+        resp_mock = _mock_stream_response(200, chunks=chunks)
+        client = _mock_client(response=resp_mock)
+        seen = {}
+
+        async def on_usage(it, ot, model):
+            seen["input"], seen["output"], seen["model"] = it, ot, model
+
+        with (
+            patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
+            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+        ):
+            req = _mock_request()
+            resp = await mod.forward_to_nine_router(req, b"{}", on_usage=on_usage)
+            await _drain(resp)
+
+        assert seen == {"input": 0, "output": 0, "model": "unknown"}
+
+    @pytest.mark.asyncio
+    async def test_callback_exception_does_not_break_stream(self):
+        import kiro.nine_router_client as mod
+        chunks = [
+            b'data: {"model":"gpt-4o","usage":{"prompt_tokens":1,"completion_tokens":1}}\n\n',
+            b"data: [DONE]\n\n",
+        ]
+        resp_mock = _mock_stream_response(200, chunks=chunks)
+        client = _mock_client(response=resp_mock)
+
+        async def on_usage(it, ot, model):
+            raise RuntimeError("tracking blew up")
+
+        with (
+            patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
+            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+        ):
+            req = _mock_request()
+            resp = await mod.forward_to_nine_router(req, b"{}", on_usage=on_usage)
+            body = await _drain(resp)  # must not raise
+
+        assert body == chunks
+        resp_mock.aclose.assert_awaited()
+        client.aclose.assert_awaited()

@@ -13,7 +13,7 @@ Usage:
 """
 
 import asyncio
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator, Awaitable, Callable, Optional
 
 import httpx
 from fastapi import Request
@@ -46,6 +46,64 @@ def is_nine_router_enabled() -> bool:
     return bool(NINE_ROUTER_URL)
 
 
+# Callback signature: (input_tokens, output_tokens, model) -> awaitable
+OnUsage = Callable[[int, int, str], Awaitable[None]]
+
+
+def _accumulate_usage_from_chunk(chunk: str, token_counts: dict, model_box: list) -> None:
+    """
+    Parse usage/model fields from an SSE chunk (or whole JSON body) and update
+    token_counts / model_box in place.
+
+    Mirrors api_key_mode._accumulate_tokens_from_chunk: tolerant of partial /
+    malformed JSON, handles both OpenAI (prompt_tokens/completion_tokens) and
+    Anthropic (input_tokens/output_tokens, nested under "message").
+    """
+    import json
+
+    def _scan(parsed: dict) -> None:
+        usage = parsed.get("usage")
+        if isinstance(usage, dict):
+            it = usage.get("input_tokens") or usage.get("prompt_tokens")
+            ot = usage.get("output_tokens") or usage.get("completion_tokens")
+            if it is not None and int(it) > 0:
+                token_counts["input"] = int(it)
+            if ot is not None and int(ot) > 0:
+                token_counts["output"] = int(ot)
+        msg = parsed.get("message")
+        if isinstance(msg, dict):
+            if model_box[0] is None and msg.get("model"):
+                model_box[0] = msg.get("model")
+            msg_usage = msg.get("usage")
+            if isinstance(msg_usage, dict):
+                it = msg_usage.get("input_tokens")
+                ot = msg_usage.get("output_tokens")
+                if it is not None and int(it) > 0:
+                    token_counts["input"] = int(it)
+                if ot is not None and int(ot) > 0:
+                    token_counts["output"] = int(ot)
+        if model_box[0] is None and parsed.get("model"):
+            model_box[0] = parsed.get("model")
+
+    try:
+        # SSE: one or more "data: {...}" lines. Non-streaming: a single JSON body.
+        if "data: " in chunk:
+            for line in chunk.splitlines():
+                line = line.strip()
+                if line.startswith("data: ") and line != "data: [DONE]":
+                    try:
+                        _scan(json.loads(line[6:]))
+                    except (json.JSONDecodeError, ValueError, TypeError):
+                        pass
+        else:
+            try:
+                _scan(json.loads(chunk))
+            except (json.JSONDecodeError, ValueError, TypeError):
+                pass
+    except Exception:
+        pass
+
+
 def _build_headers(original_request: Request) -> dict[str, str]:
     """Build forwarding headers, replacing auth with 9router API key."""
     headers = {
@@ -65,6 +123,7 @@ async def forward_to_nine_router(
     original_request: Request,
     body: bytes,
     path: Optional[str] = None,
+    on_usage: Optional[OnUsage] = None,
 ) -> StreamingResponse | JSONResponse:
     """
     Forward an OpenAI-compatible request to 9router and stream the response back.
@@ -73,6 +132,11 @@ async def forward_to_nine_router(
         original_request: The incoming FastAPI request (for headers and method).
         body: Raw request body bytes.
         path: Override path (default: same as original request path).
+        on_usage: Optional async callback invoked once after the response is fully
+                  consumed, with (input_tokens, output_tokens, model).  This is
+                  *best-effort* — the proxy layer does not delay the client; if the
+                  stream is exhausted or an error occurs the callback is still fired
+                  with whatever token counts were accumulated (possibly zeroes).
 
     Returns:
         StreamingResponse for streaming requests, JSONResponse for non-streaming.
@@ -142,12 +206,32 @@ async def forward_to_nine_router(
         )
 
     async def _stream_and_close() -> AsyncIterator[bytes]:
+        token_counts = {"input": 0, "output": 0}
+        model_box: list = [None]
         try:
             async for chunk in response.aiter_bytes():
                 yield chunk
+                if on_usage is not None and chunk:
+                    # Cheap byte-level gate before the UTF-8 decode on the hot path.
+                    # OpenAI repeats "model" in every SSE delta, so once we have the
+                    # model we only look for "usage" (final chunk) to avoid decoding
+                    # every chunk.
+                    want_model = model_box[0] is None
+                    has_usage = b'"usage"' in chunk
+                    if has_usage or (want_model and b'"model"' in chunk):
+                        text = chunk.decode("utf-8", errors="ignore")
+                        if text:
+                            _accumulate_usage_from_chunk(text, token_counts, model_box)
         finally:
             await response.aclose()
             await client.aclose()
+            if on_usage is not None:
+                try:
+                    await asyncio.shield(
+                        on_usage(token_counts["input"], token_counts["output"], model_box[0] or "unknown")
+                    )
+                except Exception as exc:  # never let tracking break the stream
+                    logger.debug(f"9router usage callback failed: {exc}")
 
     return StreamingResponse(
         _stream_and_close(),

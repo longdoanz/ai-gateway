@@ -367,6 +367,27 @@ async def _track_gateway_key_usage(gateway_key_id: int, input_tokens: int = 0, o
         logger.debug(f"Gateway key usage tracking failed: {e}")
 
 
+def _make_nine_router_usage_cb(gateway_key_id: int | None):
+    """
+    Build an on_usage callback for the 9router proxy fallback.
+
+    When a request falls back to 9router the Kiro key pool served nothing, so we
+    do NOT touch per-Kiro-key usage. We only record gateway-key usage (request
+    count + daily tokens) so the gateway-key dashboard still reflects the traffic.
+    Returns None when there is nothing to track (no gateway key / no DB).
+    """
+    if gateway_key_id is None or not is_db_configured():
+        return None
+
+    async def _cb(input_tokens: int, output_tokens: int, model: str) -> None:
+        # key_id=None: usage is attributed to the gateway key only, not a Kiro key.
+        await _track_gateway_key_usage(
+            gateway_key_id, input_tokens, output_tokens, model=model, key_id=None
+        )
+
+    return _cb
+
+
 async def _resolve_key_id(token: str) -> int | None:
     """Look up an existing key_id for token. Does NOT create new keys."""
     if not is_db_configured():
@@ -1027,7 +1048,10 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
                 if is_nine_router_enabled():
                     await http_client.close()
                     logger.warning("[API_KEY_MODE/OpenAI] All keys quota-exhausted, falling back to 9router")
-                    return await forward_to_nine_router(request, await request.body())
+                    return await forward_to_nine_router(
+                        request, await request.body(),
+                        on_usage=_make_nine_router_usage_cb(gateway_key_id),
+                    )
             error_text = await _read_error_response(response, http_client)
             return JSONResponse(
                 status_code=response.status_code,
@@ -1189,7 +1213,10 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
                 if is_nine_router_enabled():
                     await http_client.close()
                     logger.warning("[API_KEY_MODE/Anthropic] All keys quota-exhausted, falling back to 9router")
-                    return await forward_to_nine_router(request, await request.body())
+                    return await forward_to_nine_router(
+                        request, await request.body(),
+                        on_usage=_make_nine_router_usage_cb(gateway_key_id),
+                    )
             error_text = await _read_error_response(response, http_client)
             return JSONResponse(
                 status_code=response.status_code,
