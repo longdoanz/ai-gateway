@@ -367,6 +367,29 @@ async def _track_gateway_key_usage(gateway_key_id: int, input_tokens: int = 0, o
         logger.debug(f"Gateway key usage tracking failed: {e}")
 
 
+async def _resolve_gateway_key_id_only(token: str) -> int | None:
+    """Look up just the gateway_key_id for an iziaigw_ token, without resolving a Kiro key.
+
+    Used by the 503 fallback path (pool empty) so 9router usage can still be
+    attributed to the gateway key. Returns None when not a gateway key, DB is
+    unconfigured, the key is unknown/inactive, or on any error.
+    """
+    if not token.startswith("iziaigw_") or not is_db_configured():
+        return None
+    try:
+        from kiro.db.engine import async_session_factory
+        from kiro.db.repositories import get_gateway_key_by_hash, hash_api_key
+        key_hash = hash_api_key(token)
+        async with async_session_factory() as session:
+            gk = await get_gateway_key_by_hash(session, key_hash)
+        if gk is None or not gk.is_active:
+            return None
+        return gk.id
+    except Exception as e:
+        logger.debug(f"Gateway key id resolution failed: {e}")
+        return None
+
+
 def _make_nine_router_usage_cb(gateway_key_id: int | None):
     """
     Build an on_usage callback for the 9router proxy fallback.
@@ -1015,7 +1038,11 @@ async def handle_chat_openai(request: Request, request_data: Any) -> Any:
             from kiro.nine_router_client import forward_to_nine_router, is_nine_router_enabled
             if is_nine_router_enabled():
                 logger.info("[API_KEY_MODE/OpenAI] Gateway key pool empty, falling back to 9router")
-                return await forward_to_nine_router(request, await request.body())
+                gw_id = await _resolve_gateway_key_id_only(token)
+                return await forward_to_nine_router(
+                    request, await request.body(),
+                    on_usage=_make_nine_router_usage_cb(gw_id),
+                )
         raise
     token, key_id, original_key_id, gateway_key_id = resolved.token, resolved.key_id, resolved.original_key_id, resolved.gateway_key_id
 
@@ -1176,7 +1203,11 @@ async def handle_chat_anthropic(request: Request, request_data: Any, anthropic_v
             from kiro.nine_router_client import forward_to_nine_router, is_nine_router_enabled
             if is_nine_router_enabled():
                 logger.info("[API_KEY_MODE/Anthropic] Gateway key pool empty, falling back to 9router")
-                return await forward_to_nine_router(request, await request.body())
+                gw_id = await _resolve_gateway_key_id_only(raw_token)
+                return await forward_to_nine_router(
+                    request, await request.body(),
+                    on_usage=_make_nine_router_usage_cb(gw_id),
+                )
         raise
     raw_token, key_id, original_key_id, gateway_key_id = resolved.token, resolved.key_id, resolved.original_key_id, resolved.gateway_key_id
 
