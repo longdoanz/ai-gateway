@@ -13,6 +13,7 @@ Usage:
 """
 
 import asyncio
+import json
 from typing import AsyncIterator, Awaitable, Callable, Optional
 
 import httpx
@@ -21,6 +22,46 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from loguru import logger
 
 from kiro.config import NINE_ROUTER_API_KEY, NINE_ROUTER_URL
+
+# ---------------------------------------------------------------------------
+# 9router model override — config cached in-process, refreshed on DB update
+# ---------------------------------------------------------------------------
+_nine_router_override_cache: tuple[bool, str] | None = None  # (enabled, model)
+
+
+def invalidate_nine_router_override_cache() -> None:
+    global _nine_router_override_cache
+    _nine_router_override_cache = None
+
+
+async def _get_nine_router_override() -> tuple[bool, str]:
+    """Return (enabled, override_model) from DB config (cached)."""
+    global _nine_router_override_cache
+    if _nine_router_override_cache is not None:
+        return _nine_router_override_cache
+    try:
+        from kiro.db.engine import async_session_factory
+        from kiro.db.repositories import get_config
+        async with async_session_factory() as session:
+            enabled_raw = await get_config(session, "enable_nine_router_model_override") or "false"
+            model_raw = await get_config(session, "nine_router_model_override") or "auto"
+        result = (enabled_raw.lower() == "true", model_raw)
+    except Exception:
+        result = (False, "auto")
+    _nine_router_override_cache = result
+    return result
+
+
+def _rewrite_model_in_body(body: bytes, override_model: str) -> bytes:
+    """Replace the 'model' field in a JSON request body. Returns original body on any error."""
+    try:
+        parsed = json.loads(body)
+        if isinstance(parsed, dict) and "model" in parsed:
+            parsed["model"] = override_model
+            return json.dumps(parsed).encode()
+    except Exception:
+        pass
+    return body
 
 # Headers that must not be forwarded upstream
 _HOP_BY_HOP = frozenset({
@@ -151,6 +192,19 @@ async def forward_to_nine_router(
     target_url = f"{NINE_ROUTER_URL.rstrip('/')}{target_path}"
     if original_request.url.query:
         target_url += f"?{original_request.url.query}"
+
+    # Apply model override if configured in dashboard settings
+    override_enabled, override_model = await _get_nine_router_override()
+    if override_enabled and override_model:
+        original_model = None
+        try:
+            parsed = json.loads(body)
+            original_model = parsed.get("model")
+        except Exception:
+            pass
+        body = _rewrite_model_in_body(body, override_model)
+        if original_model and original_model != override_model:
+            logger.info(f"9router model override: {original_model!r} → {override_model!r}")
 
     headers = _build_headers(original_request)
     logger.info(f"9router fallback: forwarding {original_request.method} {target_path}")

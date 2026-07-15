@@ -439,6 +439,8 @@ export default function SettingsPage() {
   const [overrideRules, setOverrideRules] = useState<ModelOverrideRule[]>([]);
   const [defaultModel, setDefaultModel] = useState("auto");
   const [enableUsageSharing, setEnableUsageSharing] = useState(false);
+  const [enableNineRouterModelOverride, setEnableNineRouterModelOverride] = useState(false);
+  const [nineRouterModelOverride, setNineRouterModelOverride] = useState("auto");
   const [dirty, setDirty] = useState(false);
 
   const modelIds = (modelsData?.models ?? []).map((m) => m.id);
@@ -449,6 +451,8 @@ export default function SettingsPage() {
       setOverrideRules(config.model_override_rules ?? []);
       setDefaultModel(config.model_override_default ?? "auto");
       setEnableUsageSharing(config.enable_usage_sharing);
+      setEnableNineRouterModelOverride(config.enable_nine_router_model_override ?? false);
+      setNineRouterModelOverride(config.nine_router_model_override ?? "auto");
       setDirty(false);
     }
   }, [config]);
@@ -466,6 +470,8 @@ export default function SettingsPage() {
       model_override_rules: overrideRules,
       model_override_default: defaultModel,
       enable_usage_sharing: enableUsageSharing,
+      enable_nine_router_model_override: enableNineRouterModelOverride,
+      nine_router_model_override: nineRouterModelOverride,
     });
     setDirty(false);
   }
@@ -521,6 +527,38 @@ export default function SettingsPage() {
             onCheckedChange={handleChange(setEnableUsageSharing)}
           />
         </div>
+      </div>
+
+      {/* 9Router Model Override Section */}
+      <div className="glass-panel rounded-3xl p-8 md:p-10 group relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+        <div className="flex items-start justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-on-surface">9Router Model Override</h3>
+            <p className="text-sm text-on-surface-variant mt-1 max-w-lg">
+              When enabled, requests forwarded to 9router will use the specified model instead of the
+              original requested model.
+            </p>
+          </div>
+          <Switch
+            checked={enableNineRouterModelOverride}
+            onCheckedChange={handleChange(setEnableNineRouterModelOverride)}
+          />
+        </div>
+        {enableNineRouterModelOverride && (
+          <div className="mt-6 space-y-2">
+            <Label>Override Model</Label>
+            <p className="text-xs text-on-surface-variant">
+              All requests to 9router will use this model regardless of what the client requested.
+            </p>
+            <ModelSelect
+              value={nineRouterModelOverride}
+              onChange={handleChange(setNineRouterModelOverride)}
+              modelIds={modelIds}
+              placeholder="Select model..."
+            />
+          </div>
+        )}
       </div>
 
       <SystemKeysSection />
