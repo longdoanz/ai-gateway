@@ -376,7 +376,10 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
                 if is_nine_router_enabled():
                     logger.warning("All Kiro accounts exhausted, falling back to 9router")
                     body = await request.body()
-                    return await forward_to_nine_router(request, body)
+                    from kiro.api_key_mode import get_api_key_from_request, _resolve_gateway_key_id_only, _make_nine_router_usage_cb
+                    _raw_token = get_api_key_from_request(request)
+                    _gw_id = await _resolve_gateway_key_id_only(_raw_token)
+                    return await forward_to_nine_router(request, body, on_usage=_make_nine_router_usage_cb(_gw_id))
 
                 # No fallback available
                 if len(all_accounts) == 1:
@@ -622,7 +625,10 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
         # All attempts exhausted
         if is_nine_router_enabled():
             logger.warning("All Kiro accounts exhausted (max attempts reached), falling back to 9router")
-            return await forward_to_nine_router(request, await request.body())
+            from kiro.api_key_mode import get_api_key_from_request, _resolve_gateway_key_id_only, _make_nine_router_usage_cb
+            _raw_token = get_api_key_from_request(request)
+            _gw_id = await _resolve_gateway_key_id_only(_raw_token)
+            return await forward_to_nine_router(request, await request.body(), on_usage=_make_nine_router_usage_cb(_gw_id))
 
         if len(all_accounts) == 1:
             # Single account - return its original error
