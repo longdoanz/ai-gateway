@@ -1,9 +1,13 @@
 import hashlib
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+# Throttle last_used_at DB writes: at most once per 10 minutes per gateway key.
+_LAST_USED_THROTTLE = timedelta(minutes=10)
+_last_used_written: dict[int, datetime] = {}  # gateway_key_id -> last written ts
 
 from cryptography.fernet import Fernet
 import bcrypt
@@ -564,12 +568,26 @@ async def delete_gateway_key(session: AsyncSession, user_id: int) -> bool:
 
 
 async def increment_gateway_key_usage(session: AsyncSession, gateway_key_id: int, month: str, amount: int = 1, key_id: int | None = None) -> None:
-    stmt = pg_insert(GatewayKeyUsage).values(
-        gateway_key_id=gateway_key_id, month=month, current_usage=amount, last_used_at=_utcnow(), key_id=key_id
+    now = _utcnow()
+    # Throttle last_used_at writes: only refresh it at most once per
+    # _LAST_USED_THROTTLE for a given gateway key. The counter still
+    # increments on every call; only the timestamp column is gated.
+    last_written = _last_used_written.get(gateway_key_id)
+    write_last_used = last_written is None or (now - last_written) >= _LAST_USED_THROTTLE
+
+    insert_values = dict(
+        gateway_key_id=gateway_key_id, month=month, current_usage=amount, key_id=key_id
     )
+    update_set: dict = {"current_usage": GatewayKeyUsage.current_usage + amount}
+    if write_last_used:
+        insert_values["last_used_at"] = now
+        update_set["last_used_at"] = now
+        _last_used_written[gateway_key_id] = now
+
+    stmt = pg_insert(GatewayKeyUsage).values(**insert_values)
     stmt = stmt.on_conflict_do_update(
         constraint="uq_gw_key_usage_gwkey_month_poolkey",
-        set_={"current_usage": GatewayKeyUsage.current_usage + amount, "last_used_at": _utcnow()},
+        set_=update_set,
     )
     await session.execute(stmt)
     await session.commit()

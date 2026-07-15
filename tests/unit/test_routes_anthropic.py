@@ -347,26 +347,30 @@ class TestMessagesValidation:
         print(f"Status: {response.status_code}")
         assert response.status_code == 422
     
-    def test_validates_invalid_role(self, test_client, valid_proxy_api_key):
+    def test_accepts_system_role_in_messages(self, test_client, valid_proxy_api_key):
         """
-        What it does: Verifies invalid message role is rejected.
-        Purpose: Anthropic model strictly validates role (only 'user' or 'assistant').
+        What it does: Verifies system role in messages array is accepted (regression test).
+        Purpose: Claude Code sends system prompts as messages with role='system'.
+        The role field is now str, allowing downstream normalize_message_roles() to handle it.
         """
-        print("Action: POST /v1/messages with invalid role...")
+        print("Action: POST /v1/messages with system role in messages...")
         response = test_client.post(
             "/v1/messages",
             headers={"x-api-key": valid_proxy_api_key},
             json={
                 "model": "claude-sonnet-4-5",
                 "max_tokens": 1024,
-                "messages": [{"role": "invalid_role", "content": "Hello"}]
+                "messages": [
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": "Hello"}
+                ]
             }
         )
-        
+
         print(f"Status: {response.status_code}")
-        # Anthropic model strictly validates role - only 'user' or 'assistant' allowed
-        assert response.status_code == 422
-    
+        # Should pass Pydantic validation (not 422), at least one message is user/assistant
+        assert response.status_code != 422
+
     def test_accepts_valid_request_format(self, test_client, valid_proxy_api_key):
         """
         What it does: Verifies valid request format passes validation.

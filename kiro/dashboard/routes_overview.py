@@ -92,7 +92,15 @@ async def get_overview(
             return normalize_kiro_user_id(kiro_user_id).lower() or kiro_user_id.lower()
         return None
 
-    active_keys = (await session.execute(select(func.count()).where(ApiKey.is_active == True))).scalar_one()
+    active_keys = (await session.execute(
+        select(func.count(ApiKey.id))
+        .select_from(ApiKey)
+        .outerjoin(User, ApiKey.user_id == User.id)
+        .outerjoin(KiroUserMapping, ApiKey.kiro_user_id == KiroUserMapping.kiro_user_id)
+        .where(ApiKey.is_active == True)
+        .where((ApiKey.user_id.is_(None)) | (User.is_active == True))
+        .where((ApiKey.kiro_user_id.is_(None)) | (KiroUserMapping.is_active == True))
+    )).scalar_one()
 
     # Active users this month: union keyed by email (or username/id) across both systems
     active_kiro_rows = (await session.execute(
@@ -100,6 +108,7 @@ async def get_overview(
         .join(ApiKey, ApiKey.kiro_user_id == KiroUserMapping.kiro_user_id)
         .join(KeyUsage, KeyUsage.key_id == ApiKey.id)
         .where(KeyUsage.month == current_month, KeyUsage.current_usage > 0)
+        .where(KiroUserMapping.is_active == True)
         .distinct()
     )).all()
     active_kiro_keys = {
@@ -112,6 +121,7 @@ async def get_overview(
         .join(GatewayKey, GatewayKey.user_id == User.id)
         .join(GatewayKeyUsage, GatewayKeyUsage.gateway_key_id == GatewayKey.id)
         .where(GatewayKeyUsage.month == current_month, GatewayKeyUsage.current_usage > 0)
+        .where(User.is_active == True)
         .distinct()
     )).all()
     active_gw_keys = {
@@ -126,6 +136,7 @@ async def get_overview(
         select(KiroUserMapping.kiro_user_id, KiroUserMapping.username, KiroUserMapping.email)
         .join(ApiKey, ApiKey.kiro_user_id == KiroUserMapping.kiro_user_id)
         .where(ApiKey.is_active == True)
+        .where(KiroUserMapping.is_active == True)
         .distinct()
     )).all()
     total_kiro_keys = {
@@ -137,6 +148,7 @@ async def get_overview(
         select(User.username, User.email)
         .join(GatewayKey, GatewayKey.user_id == User.id)
         .where(GatewayKey.is_active == True)
+        .where(User.is_active == True)
         .distinct()
     )).all()
     total_gw_keys = {

@@ -278,6 +278,7 @@ export interface GatewayKeyUserUsage {
   username: string;
   input_tokens: number;
   output_tokens: number;
+  last_active_at: string | null;
 }
 
 export interface GatewayKeyAnalyticsResponse {

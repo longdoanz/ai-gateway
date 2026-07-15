@@ -303,6 +303,7 @@ class GatewayKeyUserUsage(BaseModel):
     username: str
     input_tokens: int
     output_tokens: int
+    last_active_at: datetime | None = None
 
 
 class GatewayKeyAnalyticsResponse(BaseModel):

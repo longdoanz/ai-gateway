@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { LineChart, Line, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import type { ComponentProps } from "react";
 import type { UserDailySeries } from "@/lib/types";
 
 function formatTokens(n: number): string {
@@ -43,6 +44,77 @@ export function LineChartUserDaily({ data }: Props) {
     setHighlighted((prev) => (prev === key ? null : key));
   };
 
+  const renderTooltip = (props: {
+    active?: boolean;
+    payload?: Array<{ dataKey?: string | number; value?: number; color?: string }>;
+    label?: string;
+  }) => {
+    const { active, payload, label } = props;
+    if (!active || !payload?.length) return null;
+
+    let rows = payload
+      .map((entry) => {
+        const key = String(entry.dataKey);
+        const idx = dataKeys.indexOf(key);
+        return {
+          key,
+          name: userLabels[idx] ?? key,
+          color: entry.color,
+          value: Number(entry.value ?? 0),
+        };
+      })
+      .filter((r) => (highlighted ? r.key === highlighted : r.value > 0))
+      .sort((a, b) => b.value - a.value);
+
+    if (!rows.length) return null;
+
+    return (
+      <div
+        style={{
+          background: "rgba(255,255,255,0.85)",
+          backdropFilter: "blur(16px)",
+          border: "1px solid rgba(255,255,255,0.9)",
+          borderRadius: "12px",
+          boxShadow: "0 8px 30px rgba(0,0,0,0.05)",
+          padding: "8px 12px",
+          fontSize: 11,
+        }}
+      >
+        <div style={{ fontWeight: 600, marginBottom: 6, color: "#464555" }}>{label}</div>
+        <div style={{ maxHeight: 220, overflowY: "auto", paddingRight: 4 }}>
+          {rows.map((r) => (
+            <div
+              key={r.key}
+              style={{ display: "flex", alignItems: "center", gap: 8, padding: "1px 0" }}
+            >
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  background: r.color,
+                  flexShrink: 0,
+                }}
+              />
+              <span
+                style={{
+                  color: "#464555",
+                  flex: 1,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {r.name}
+              </span>
+              <span style={{ fontWeight: 600, color: "#1a1a2e" }}>{formatTokens(r.value)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
@@ -60,20 +132,7 @@ export function LineChartUserDaily({ data }: Props) {
           tickFormatter={(v) => formatTokens(v)}
           width={48}
         />
-        <Tooltip
-          contentStyle={{
-            background: "rgba(255,255,255,0.85)",
-            backdropFilter: "blur(16px)",
-            border: "1px solid rgba(255,255,255,0.9)",
-            borderRadius: "12px",
-            boxShadow: "0 8px 30px rgba(0,0,0,0.05)",
-          }}
-          formatter={(value, name) => {
-            const idx = dataKeys.indexOf(String(name));
-            const label = userLabels[idx] ?? String(name);
-            return [formatTokens(Number(value ?? 0)), label];
-          }}
-        />
+        <Tooltip cursor={{ stroke: "#c9c5d6", strokeWidth: 1 }} content={renderTooltip as unknown as ComponentProps<typeof Tooltip>["content"]} />
         <Legend
           wrapperStyle={{ fontSize: 11, cursor: "pointer" }}
           onClick={handleLegendClick}

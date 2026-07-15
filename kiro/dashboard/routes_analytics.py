@@ -12,7 +12,7 @@ from kiro.dashboard.schemas import (
     GatewayKeyDailySeries, GatewayKeyUserUsage, GatewayKeyAnalyticsResponse,
 )
 from kiro.db.engine import get_session
-from kiro.db.models import ApiKey, DailyUsage, FallbackUsage, GatewayKey, GatewayKeyDailyUsage, KeyUsage, KiroUserMapping, User
+from kiro.db.models import ApiKey, DailyUsage, FallbackUsage, GatewayKey, GatewayKeyDailyUsage, GatewayKeyUsage, KeyUsage, KiroUserMapping, User
 
 router = APIRouter(prefix="/overview", tags=["analytics"])
 
@@ -508,33 +508,60 @@ async def get_gateway_key_analytics(
     total_input = sum(ds.input_tokens for ds in daily_series)
     total_output = sum(ds.output_tokens for ds in daily_series)
 
+    # Token usage within the selected period, per gateway key.
+    usage_subq = (
+        select(
+            GatewayKeyDailyUsage.gateway_key_id.label("gateway_key_id"),
+            func.sum(GatewayKeyDailyUsage.input_tokens).label("input_tokens"),
+            func.sum(GatewayKeyDailyUsage.output_tokens).label("output_tokens"),
+        )
+        .where(GatewayKeyDailyUsage.date >= start_str, GatewayKeyDailyUsage.date <= end_str)
+        .group_by(GatewayKeyDailyUsage.gateway_key_id)
+        .subquery()
+    )
+
+    # Last active timestamp is all-time (not period-bound), refreshed at most
+    # once per 10 minutes per key (see increment_gateway_key_usage).
+    last_used_subq = (
+        select(
+            GatewayKeyUsage.gateway_key_id.label("gateway_key_id"),
+            func.max(GatewayKeyUsage.last_used_at).label("last_active_at"),
+        )
+        .group_by(GatewayKeyUsage.gateway_key_id)
+        .subquery()
+    )
+
+    # All gateway-key users, with their period usage (0 if none) and last active.
     user_rows = (await session.execute(
         select(
             GatewayKey.user_id,
             User.username,
-            func.sum(GatewayKeyDailyUsage.input_tokens).label("input_tokens"),
-            func.sum(GatewayKeyDailyUsage.output_tokens).label("output_tokens"),
+            func.coalesce(usage_subq.c.input_tokens, 0).label("input_tokens"),
+            func.coalesce(usage_subq.c.output_tokens, 0).label("output_tokens"),
+            last_used_subq.c.last_active_at,
         )
-        .join(GatewayKeyDailyUsage, GatewayKeyDailyUsage.gateway_key_id == GatewayKey.id)
         .join(User, User.id == GatewayKey.user_id)
-        .where(GatewayKeyDailyUsage.date >= start_str, GatewayKeyDailyUsage.date <= end_str)
-        .group_by(GatewayKey.user_id, User.username)
-        .order_by(func.sum(GatewayKeyDailyUsage.input_tokens + GatewayKeyDailyUsage.output_tokens).desc())
+        .outerjoin(usage_subq, usage_subq.c.gateway_key_id == GatewayKey.id)
+        .outerjoin(last_used_subq, last_used_subq.c.gateway_key_id == GatewayKey.id)
+        .order_by(
+            func.coalesce(usage_subq.c.input_tokens + usage_subq.c.output_tokens, 0).desc(),
+            last_used_subq.c.last_active_at.desc().nullslast(),
+        )
     )).all()
 
     user_usages = [
         GatewayKeyUserUsage(
             user_id=r.user_id,
             username=r.username, input_tokens=r.input_tokens, output_tokens=r.output_tokens,
+            last_active_at=r.last_active_at,
         )
         for r in user_rows
     ]
 
-    total_gw_users = (await session.execute(
-        select(func.count(func.distinct(GatewayKey.user_id))).select_from(GatewayKey)
-    )).scalar_one()
+    total_gw_users = len(user_usages)
 
-    active_gw_users = len(user_usages)
+    # Active = users with token usage within the selected period.
+    active_gw_users = sum(1 for u in user_usages if u.input_tokens or u.output_tokens)
 
     return GatewayKeyAnalyticsResponse(
         time_range=range_key, total_input_tokens=total_input, total_output_tokens=total_output,
