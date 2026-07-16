@@ -148,7 +148,8 @@ export interface SystemConfigResponse {
   model_override_default: string;
   enable_usage_sharing: boolean;
   enable_nine_router_model_override: boolean;
-  nine_router_model_override: string;
+  nine_router_model_override_rules: ModelOverrideRule[];
+  nine_router_model_override_default: string;
 }
 
 export interface SystemConfigUpdate {
@@ -157,7 +158,8 @@ export interface SystemConfigUpdate {
   model_override_default?: string;
   enable_usage_sharing?: boolean;
   enable_nine_router_model_override?: boolean;
-  nine_router_model_override?: string;
+  nine_router_model_override_rules?: ModelOverrideRule[];
+  nine_router_model_override_default?: string;
 }
 
 // --- Models ---

@@ -155,7 +155,8 @@ class SystemConfigResponse(BaseModel):
     model_override_default: str = "auto"
     enable_usage_sharing: bool = False
     enable_nine_router_model_override: bool = False
-    nine_router_model_override: str = "auto"
+    nine_router_model_override_rules: list[ModelOverrideRule] = []
+    nine_router_model_override_default: str = "auto"
 
 
 class SystemConfigUpdate(BaseModel):
@@ -164,7 +165,8 @@ class SystemConfigUpdate(BaseModel):
     model_override_default: str | None = None
     enable_usage_sharing: bool | None = None
     enable_nine_router_model_override: bool | None = None
-    nine_router_model_override: str | None = None
+    nine_router_model_override_rules: list[ModelOverrideRule] | None = None
+    nine_router_model_override_default: str | None = None
 
 
 # --- Models ---

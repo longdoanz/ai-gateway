@@ -24,9 +24,9 @@ from loguru import logger
 from kiro.config import NINE_ROUTER_API_KEY, NINE_ROUTER_URL
 
 # ---------------------------------------------------------------------------
-# 9router model override — config cached in-process, refreshed on DB update
+# 9router model override — own config (toggle, rules, default), cached in-process
 # ---------------------------------------------------------------------------
-_nine_router_override_cache: tuple[bool, str] | None = None  # (enabled, model)
+_nine_router_override_cache: tuple[bool, list[dict], str] | None = None  # (enabled, rules, default_model)
 
 
 def invalidate_nine_router_override_cache() -> None:
@@ -34,8 +34,8 @@ def invalidate_nine_router_override_cache() -> None:
     _nine_router_override_cache = None
 
 
-async def _get_nine_router_override() -> tuple[bool, str]:
-    """Return (enabled, override_model) from DB config (cached)."""
+async def _get_nine_router_override() -> tuple[bool, list[dict], str]:
+    """Return (enabled, rules, default_model) from DB config (cached)."""
     global _nine_router_override_cache
     if _nine_router_override_cache is not None:
         return _nine_router_override_cache
@@ -44,10 +44,14 @@ async def _get_nine_router_override() -> tuple[bool, str]:
         from kiro.db.repositories import get_config
         async with async_session_factory() as session:
             enabled_raw = await get_config(session, "enable_nine_router_model_override") or "false"
-            model_raw = await get_config(session, "nine_router_model_override") or "auto"
-        result = (enabled_raw.lower() == "true", model_raw)
+            rules_raw = await get_config(session, "nine_router_model_override_rules") or "[]"
+            default_raw = await get_config(session, "nine_router_model_override_default") or "auto"
+        import json as _json
+        rules = _json.loads(rules_raw) if isinstance(rules_raw, str) else rules_raw
+        rules = rules if isinstance(rules, list) else []
+        result = (enabled_raw.lower() == "true", rules, default_raw)
     except Exception:
-        result = (False, "auto")
+        result = (False, [], "auto")
     _nine_router_override_cache = result
     return result
 
@@ -193,18 +197,21 @@ async def forward_to_nine_router(
     if original_request.url.query:
         target_url += f"?{original_request.url.query}"
 
-    # Apply model override if configured in dashboard settings
-    override_enabled, override_model = await _get_nine_router_override()
-    if override_enabled and override_model:
+    # Apply 9router's own model override (independent of Global Model Enforcement)
+    enabled, rules, default_model = await _get_nine_router_override()
+    if enabled:
         original_model = None
         try:
             parsed = json.loads(body)
             original_model = parsed.get("model")
         except Exception:
             pass
-        body = _rewrite_model_in_body(body, override_model)
-        if original_model and original_model != override_model:
-            logger.info(f"9router model override: {original_model!r} → {override_model!r}")
+        if original_model:
+            from kiro.model_override import OverrideConfig, resolve_model
+            config = OverrideConfig(enabled=True, rules=rules, default_model=default_model)
+            new_model = resolve_model(original_model, config)
+            body = _rewrite_model_in_body(body, new_model)
+            logger.info(f"9router model override: {original_model!r} → {new_model!r}")
 
     headers = _build_headers(original_request)
     logger.info(f"9router fallback: forwarding {original_request.method} {target_path}")

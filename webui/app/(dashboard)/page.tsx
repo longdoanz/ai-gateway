@@ -37,28 +37,41 @@ function KpiCard({
 function BudgetCard({ used, limit }: { used: number; limit: number }) {
   const pct = limit > 0 ? Math.round((used / limit) * 100) : 0;
   const remaining = limit - used;
+  const isOver = remaining < 0;
 
   return (
-    <div className="glass-panel-elevated rounded-3xl p-6 relative overflow-hidden group border-primary/20">
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-50" />
+    <div className={`glass-panel-elevated rounded-3xl p-6 relative overflow-hidden group ${isOver ? "border-red-500/30" : "border-primary/20"}`}>
+      <div className={`absolute inset-0 bg-gradient-to-br ${isOver ? "from-red-500/5" : "from-primary/5"} to-transparent opacity-50`} />
       <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-        <Wallet className="w-16 h-16 text-primary" />
+        <Wallet className={`w-16 h-16 ${isOver ? "text-red-500" : "text-primary"}`} />
       </div>
-      <h3 className="text-sm font-medium text-primary mb-1 relative z-10">Remaining Budget</h3>
+      <div className="flex items-center gap-2 relative z-10">
+        <h3 className={`text-sm font-medium mb-1 ${isOver ? "text-red-400" : "text-primary"}`}>Remaining Budget</h3>
+        {isOver && (
+          <span className="text-xs font-medium bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full mb-1">
+            Over budget
+          </span>
+        )}
+      </div>
       <div className="flex items-end gap-3 mt-4 relative z-10">
-        <span className="text-4xl font-bold text-on-surface tracking-tight font-mono">
-          {formatCredits(remaining)}
+        <span className={`text-4xl font-bold tracking-tight font-mono ${isOver ? "text-red-400" : "text-on-surface"}`}>
+          {formatCredits(Math.max(0, remaining))}
         </span>
         <span className="text-sm text-on-surface-variant mb-1">Credits</span>
       </div>
+      {isOver && (
+        <p className="text-xs text-red-400/80 mt-1 relative z-10">
+          {formatCredits(Math.abs(remaining))} credits over limit
+        </p>
+      )}
       <div className="mt-4 relative z-10">
         <div className="flex justify-between text-xs mb-1 text-on-surface-variant">
           <span>Usage</span>
-          <span>{pct}%</span>
+          <span className={pct > 100 ? "text-red-400" : ""}>{pct}%</span>
         </div>
         <div className="w-full bg-surface-container-high rounded-full h-1.5 overflow-hidden">
           <div
-            className="bg-primary h-1.5 rounded-full shadow-[0_0_8px_rgba(14,165,233,0.4)]"
+            className={`h-1.5 rounded-full ${isOver ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]" : "bg-primary shadow-[0_0_8px_rgba(14,165,233,0.4)]"}`}
             style={{ width: `${Math.min(pct, 100)}%` }}
           />
         </div>
