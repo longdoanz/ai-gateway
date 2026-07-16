@@ -185,6 +185,26 @@ async def get_overview(
         row.date: (row.input_tokens, row.output_tokens) for row in daily_rows
     }
 
+    # Merge system-level gateway usage (9router fallback / system keys that bypass
+    # the Kiro key pool) into daily_map, so Token Usage Trend reflects all traffic.
+    # Pool-key gateway usage is already captured in DailyUsage via _track_usage_background.
+    gw_system_daily_rows = (await session.execute(
+        select(
+            GatewayKeyDailyUsage.date,
+            func.sum(GatewayKeyDailyUsage.input_tokens).label("input_tokens"),
+            func.sum(GatewayKeyDailyUsage.output_tokens).label("output_tokens"),
+        )
+        .where(
+            GatewayKeyDailyUsage.date >= start_str,
+            GatewayKeyDailyUsage.date <= end_str,
+            GatewayKeyDailyUsage.key_id.is_(None),
+        )
+        .group_by(GatewayKeyDailyUsage.date)
+    )).all()
+    for row in gw_system_daily_rows:
+        prev_in, prev_out = daily_map.get(row.date, (0, 0))
+        daily_map[row.date] = (prev_in + row.input_tokens, prev_out + row.output_tokens)
+
     if granularity == Granularity.weekly:
         daily_usage = _aggregate_weekly(daily_map, start_date, today)
     elif granularity == Granularity.monthly:
@@ -200,17 +220,7 @@ async def get_overview(
             for i in range(days_in_range)
         ]
 
-    # Gateway token totals for this month
-    gw_token_result = await session.execute(
-        select(
-            func.coalesce(func.sum(GatewayKeyDailyUsage.input_tokens), 0),
-            func.coalesce(func.sum(GatewayKeyDailyUsage.output_tokens), 0),
-        )
-        .where(GatewayKeyDailyUsage.date >= today.replace(day=1).isoformat(), GatewayKeyDailyUsage.date <= end_str)
-    )
-    gw_input_total, gw_output_total = gw_token_result.one()
-
-    # Own token totals for this month
+    # Own token totals for this month (excludes 9router / system-level gateway usage)
     own_token_result = await session.execute(
         select(
             func.coalesce(func.sum(DailyUsageModel.input_tokens), 0),
@@ -219,6 +229,34 @@ async def get_overview(
         .where(DailyUsageModel.date >= today.replace(day=1).isoformat(), DailyUsageModel.date <= end_str)
     )
     total_input, total_output = own_token_result.one()
+
+    # Merge system-level gateway usage (9router fallback, key_id IS NULL) into KPI
+    # totals. Pool-key gateway rows are already in DailyUsage via _track_usage_background.
+    gw_sys_token_result = await session.execute(
+        select(
+            func.coalesce(func.sum(GatewayKeyDailyUsage.input_tokens), 0),
+            func.coalesce(func.sum(GatewayKeyDailyUsage.output_tokens), 0),
+        )
+        .where(
+            GatewayKeyDailyUsage.date >= today.replace(day=1).isoformat(),
+            GatewayKeyDailyUsage.date <= end_str,
+            GatewayKeyDailyUsage.key_id.is_(None),
+        )
+    )
+    gw_sys_input, gw_sys_output = gw_sys_token_result.one()
+    total_input += gw_sys_input
+    total_output += gw_sys_output
+
+    # Full gateway token totals (all rows) — kept for gateway_input/output_tokens
+    # response fields shown on gateway-analytics page.
+    gw_token_result = await session.execute(
+        select(
+            func.coalesce(func.sum(GatewayKeyDailyUsage.input_tokens), 0),
+            func.coalesce(func.sum(GatewayKeyDailyUsage.output_tokens), 0),
+        )
+        .where(GatewayKeyDailyUsage.date >= today.replace(day=1).isoformat(), GatewayKeyDailyUsage.date <= end_str)
+    )
+    gw_input_total, gw_output_total = gw_token_result.one()
 
     # Credit trend: daily deltas from snapshots
     snapshot_start = (start_date - timedelta(days=1)).isoformat()
