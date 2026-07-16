@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Save, RefreshCw, Trash2, Plus, Key, ArrowRight } from "lucide-react";
+import { Save, RefreshCw, Trash2, Plus, Key, ArrowRight, Pencil, List } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -301,21 +301,60 @@ interface ModelSelectProps {
   onChange: (v: string) => void;
   modelIds: string[];
   placeholder?: string;
+  /** When true, the user can switch from the dropdown to a free-text input to type any value. */
+  allowFreeText?: boolean;
 }
 
-function ModelSelect({ value, onChange, modelIds, placeholder = "Select model..." }: ModelSelectProps) {
+function ModelSelect({ value, onChange, modelIds, placeholder = "Select model...", allowFreeText = false }: ModelSelectProps) {
+  const [freeText, setFreeText] = useState(allowFreeText ? !modelIds.includes(value) && value !== "" : false);
+
+  if (allowFreeText && freeText) {
+    return (
+      <div className="flex items-center gap-1">
+        <Input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="font-mono text-xs h-8 min-w-[200px]"
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          onClick={() => setFreeText(false)}
+          title="Switch to dropdown"
+        >
+          <List className="w-3 h-3" />
+        </Button>
+      </div>
+    );
+  }
+
   return (
-    <Select value={value} onValueChange={(v) => onChange(v ?? "auto")}>
-      <SelectTrigger className="font-mono text-xs h-8 min-w-[200px]">
-        <SelectValue placeholder={placeholder} />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="auto">auto</SelectItem>
-        {modelIds.map((id) => (
-          <SelectItem key={id} value={id}>{id}</SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <div className="flex items-center gap-1">
+      <Select value={value} onValueChange={(v) => onChange(v ?? "auto")}>
+        <SelectTrigger className="font-mono text-xs h-8 min-w-[200px]">
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="auto">auto</SelectItem>
+          {modelIds.map((id) => (
+            <SelectItem key={id} value={id}>{id}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {allowFreeText && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          onClick={() => setFreeText(true)}
+          title="Type a custom value"
+        >
+          <Pencil className="w-3 h-3" />
+        </Button>
+      )}
+    </div>
   );
 }
 
@@ -399,13 +438,14 @@ function ModelOverrideSection({
             ) : (
               <div className="space-y-2 mt-2">
                 {rules.map((rule, i) => (
-                  <div key={`${rule.from}-${rule.to}-${i}`} className="flex items-center gap-2">
+                  <div key={i} className="flex items-center gap-2">
                     <span className="text-xs text-on-surface-variant w-5 text-right shrink-0">{i + 1}.</span>
                     <ModelSelect
                       value={rule.from}
                       onChange={(v) => updateRule(i, "from", v)}
                       modelIds={modelIds}
                       placeholder="Match model..."
+                      allowFreeText
                     />
                     <ArrowRight className="w-4 h-4 text-on-surface-variant shrink-0" />
                     <ModelSelect
@@ -413,6 +453,7 @@ function ModelOverrideSection({
                       onChange={(v) => updateRule(i, "to", v)}
                       modelIds={modelIds}
                       placeholder="Replace with..."
+                      allowFreeText
                     />
                     <button
                       onClick={() => removeRule(i)}

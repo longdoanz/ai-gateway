@@ -208,7 +208,9 @@ async def forward_to_nine_router(
             pass
         if original_model:
             from kiro.model_override import OverrideConfig, resolve_model
-            config = OverrideConfig(enabled=True, rules=rules, default_model=default_model)
+            # 9router treats "auto" as a real model name, so a configured default
+            # (even "auto") must be enforced via has_default.
+            config = OverrideConfig(enabled=True, rules=rules, default_model=default_model, has_default=True)
             new_model = resolve_model(original_model, config)
             body = _rewrite_model_in_body(body, new_model)
             logger.info(f"9router model override: {original_model!r} → {new_model!r}")

@@ -35,6 +35,11 @@ class OverrideConfig:
     enabled: bool
     rules: List[dict] = field(default_factory=list)
     default_model: str = "auto"
+    # When True, `default_model` is enforced even if it is the literal string
+    # "auto" (which is a real model name in 9router, not just a pass-through
+    # sentinel). Global override leaves this False so an unset "auto" default
+    # means "no enforcement".
+    has_default: bool = False
 
 
 def resolve_model(model: str, config: OverrideConfig) -> str:
@@ -58,11 +63,15 @@ def resolve_model(model: str, config: OverrideConfig) -> str:
                 logger.debug(f"Model override rule '{from_pattern}': {model} -> {target}")
             return target
 
-    # No rule matched — apply default
+    # No rule matched — apply default.
+    # `default` may be the literal model name "auto" (a real model in 9router),
+    # so we only skip the default when it was never configured (has_default=False
+    # and the resolved value is empty/"auto").
     default = config.default_model or "auto"
-    if default != "auto" and model != default:
-        logger.debug(f"Model override default: {model} -> {default}")
-        return default
+    if config.has_default or default != "auto":
+        if model != default:
+            logger.debug(f"Model override default: {model} -> {default}")
+            return default
 
     return model
 
