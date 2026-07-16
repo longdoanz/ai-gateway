@@ -87,6 +87,31 @@ class TestResolveModel:
         cfg = OverrideConfig(enabled=True, rules=[{"from": "opus"}], default_model="auto")
         assert resolve_model("claude-opus-4.7", cfg) == "claude-opus-4.7"
 
+    def test_no_rules_default_auto_passthrough_without_has_default(self):
+        # has_default=False (global override default): literal "auto" is NOT
+        # enforced — unmatched models pass through unchanged.
+        cfg = OverrideConfig(enabled=True, rules=[], default_model="auto")
+        assert resolve_model("claude-haiku-4.5", cfg) == "claude-haiku-4.5"
+
+    def test_no_rules_default_auto_enforced_with_has_default(self):
+        # has_default=True (9router): literal "auto" IS enforced as a real model,
+        # so unmatched models are rewritten to "auto". This is the bug fix.
+        cfg = OverrideConfig(enabled=True, rules=[], default_model="auto", has_default=True)
+        assert resolve_model("claude-haiku-4.5", cfg) == "auto"
+
+    def test_has_default_enforces_auto_even_with_rules(self):
+        # Rules still win, but when none match the "auto" default applies.
+        cfg = OverrideConfig(enabled=True, rules=[{"from": "opus", "to": "GLM5"}],
+                             default_model="auto", has_default=True)
+        assert resolve_model("claude-opus-4.7", cfg) == "GLM5"
+        assert resolve_model("claude-haiku-4.5", cfg) == "auto"
+
+    def test_has_default_false_keeps_auto_passthrough_with_rules(self):
+        # Without has_default, the "auto" default must still pass through.
+        cfg = OverrideConfig(enabled=True, rules=[{"from": "opus", "to": "GLM5"}],
+                             default_model="auto", has_default=False)
+        assert resolve_model("claude-haiku-4.5", cfg) == "claude-haiku-4.5"
+
 
 # =============================================================================
 # _fetch_override_config — DB and env fallback paths
