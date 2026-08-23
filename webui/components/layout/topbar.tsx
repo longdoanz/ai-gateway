@@ -8,6 +8,7 @@ const pageTitles: Record<string, string> = {
   "/": "System Overview",
   "/analytics": "Usage Analytics",
   "/accounts": "Account Management",
+  "/logs": "System Logs",
   "/settings": "Gateway Configuration",
 };
 

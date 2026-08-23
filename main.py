@@ -538,10 +538,27 @@ async def lifespan(app: FastAPI):
         app.include_router(dashboard_router)
         logger.info("Usage management: dashboard API mounted at /api/")
 
+    # --- Real-time log capture + Telegram notifications ---
+    from kiro.log_stream import log_stream
+    from kiro.telegram_notifier import telegram_notifier
+
+    log_stream.attach_sink()
+    await log_stream.start()
+    if telegram_notifier.is_enabled():
+        telegram_notifier.attach_sink()
+        await telegram_notifier.start(app.state.http_client)
+        logger.info("Telegram error notifications enabled")
+
     yield
 
     # Graceful shutdown
     logger.info("Shutting down application...")
+    # Stop log capture and Telegram notifier before closing shared state.
+    await telegram_notifier.stop()
+    telegram_notifier.detach_sink()
+    await log_stream.stop()
+    log_stream.detach_sink()
+
     # Shutdown usage management
     if is_db_configured():
         await usage_shutdown()

@@ -533,6 +533,21 @@ USAGE_SYNC_INTERVAL: int = int(os.getenv("USAGE_SYNC_INTERVAL", "600"))
 GOOGLE_ALLOWED_EMAILS: str = os.getenv("GOOGLE_ALLOWED_EMAILS", "")
 
 # ==================================================================================================
+# Log Viewer / Telegram Notification Settings
+# ==================================================================================================
+
+# Number of recent log entries kept in memory for the webui log viewer.
+LOG_STREAM_BUFFER_SIZE: int = int(os.getenv("LOG_STREAM_BUFFER_SIZE", "500"))
+
+# Telegram error notifications (disabled unless both token and chat id are set).
+TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "")
+# Minimum log level forwarded to Telegram (default: ERROR).
+TELEGRAM_LOG_LEVEL: str = os.getenv("TELEGRAM_LOG_LEVEL", "ERROR").upper()
+# Minimum seconds between Telegram messages (rate-limit).
+TELEGRAM_MIN_INTERVAL: float = float(os.getenv("TELEGRAM_MIN_INTERVAL", "3"))
+
+# ==================================================================================================
 # Account System Settings
 # ==================================================================================================
 

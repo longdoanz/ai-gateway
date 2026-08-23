@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, BarChart3, UserCog, Settings, LogOut, ChevronUp, Copy, Check, KeyRound, Trash2, ExternalLink } from "lucide-react";
+import { LayoutDashboard, BarChart3, UserCog, Settings, LogOut, ChevronUp, Copy, Check, KeyRound, Trash2, ExternalLink, ScrollText } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useGatewayKey, useCreateGatewayKey, useRevokeGatewayKey } from "@/hooks/use-gateway-keys";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,7 @@ const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, adminOnly: false },
   { href: "/analytics", label: "Analytics", icon: BarChart3, adminOnly: false },
   { href: "/accounts", label: "Accounts", icon: UserCog, adminOnly: true },
+  { href: "/logs", label: "Logs", icon: ScrollText, adminOnly: true },
   { href: "/settings", label: "Settings", icon: Settings, adminOnly: true },
 ];
 
