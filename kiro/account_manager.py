@@ -276,6 +276,7 @@ class AccountManager:
                     
                     # Try SQLite validation
                     elif cred_type == "sqlite":
+                        conn = None
                         try:
                             import sqlite3
                             conn = sqlite3.connect(str(file_path))
@@ -284,9 +285,14 @@ class AccountManager:
                             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='auth_kv'")
                             if cursor.fetchone():
                                 is_valid = True
-                            conn.close()
                         except Exception as e:
                             logger.warning(f"Invalid SQLite database file {file_path.name}: {e}")
+                        finally:
+                            if conn is not None:
+                                try:
+                                    conn.close()
+                                except Exception:
+                                    pass
                     
                     if is_valid:
                         self._accounts[account_id] = Account(id=account_id)

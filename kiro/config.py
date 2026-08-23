@@ -521,6 +521,12 @@ WEB_SEARCH_ENABLED: bool = os.getenv("WEB_SEARCH_ENABLED", "true").lower() in ("
 # ==================================================================================================
 
 DATABASE_URL: str = os.getenv("DATABASE_URL", "")
+# Async engine connection pool. Sized for dashboard routes + usage sync worker
+# running concurrently. pool_recycle must be < the server's idle_timeout.
+DB_POOL_SIZE: int = int(os.getenv("DB_POOL_SIZE", "10"))
+DB_MAX_OVERFLOW: int = int(os.getenv("DB_MAX_OVERFLOW", "20"))
+DB_POOL_RECYCLE: int = int(os.getenv("DB_POOL_RECYCLE", "1800"))
+DB_POOL_TIMEOUT: int = int(os.getenv("DB_POOL_TIMEOUT", "30"))
 ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", "")
 JWT_SECRET: str = os.getenv("JWT_SECRET", "")
 JWT_ACCESS_EXPIRY: int = int(os.getenv("JWT_ACCESS_EXPIRY", "900"))

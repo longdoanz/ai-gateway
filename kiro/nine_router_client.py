@@ -14,6 +14,7 @@ Usage:
 
 import asyncio
 import json
+import re
 from typing import AsyncIterator, Awaitable, Callable, Optional
 
 import httpx
@@ -54,6 +55,19 @@ async def _get_nine_router_override() -> tuple[bool, list[dict], str]:
         result = (False, [], "auto")
     _nine_router_override_cache = result
     return result
+
+
+def _strip_context_window_suffix(model: Optional[str]) -> Optional[str]:
+    """Strip a client-side context-window suffix (e.g. ``[1m]``, ``[200k]``).
+
+    Claude Code appends this to the model ID (``claude-opus-5[1m]``) to indicate
+    the context window. It is not part of the real model name — 9router's own
+    model parser/inference never strips it, so we normalize it here to mirror
+    ``kiro.model_resolver.normalize_model_name``.
+    """
+    if model is None:
+        return None
+    return re.sub(r"\[\d+[mk]\]$", "", model, flags=re.IGNORECASE)
 
 
 def _rewrite_model_in_body(body: bytes, override_model: str) -> bytes:
@@ -240,6 +254,11 @@ async def forward_to_nine_router(
             original_model = parsed.get("model")
     except Exception:
         pass
+
+    # Strip any client-side context-window suffix (e.g. "claude-opus-5[1m]")
+    # before override matching / forwarding, so 9router never sees a model ID
+    # with the suffix appended (its own parser/inference does not strip it).
+    original_model = _strip_context_window_suffix(original_model)
 
     if original_model and enabled:
         from kiro.model_override import OverrideConfig, resolve_models

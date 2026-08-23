@@ -537,7 +537,15 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
                         error_content = await response.aread()
                     except Exception:
                         error_content = b"Unknown error"
-                    
+                    finally:
+                        # Response is a streaming response (request was made with
+                        # stream=True); release its connection even if aread() failed,
+                        # otherwise the connection stays held on the shared client.
+                        try:
+                            await response.aclose()
+                        except Exception:
+                            pass
+
                     await http_client.close()
                     error_text = error_content.decode('utf-8', errors='replace')
                     

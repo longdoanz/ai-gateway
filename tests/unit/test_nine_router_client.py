@@ -365,6 +365,76 @@ class TestOnUsageCallback:
 
 
 # ---------------------------------------------------------------------------
+# Context-window suffix stripping ([1m] / [200k])
+# ---------------------------------------------------------------------------
+
+class TestContextWindowSuffixStripping:
+    def test_strip_1m_suffix(self):
+        import kiro.nine_router_client as mod
+        assert mod._strip_context_window_suffix("claude-opus-5[1m]") == "claude-opus-5"
+
+    def test_strip_200k_suffix_case_insensitive(self):
+        import kiro.nine_router_client as mod
+        assert mod._strip_context_window_suffix("claude-haiku-4-5-20251001[200K]") == "claude-haiku-4-5-20251001"
+
+    def test_no_suffix_unchanged(self):
+        import kiro.nine_router_client as mod
+        assert mod._strip_context_window_suffix("claude-opus-5") == "claude-opus-5"
+
+    def test_none_returns_none(self):
+        import kiro.nine_router_client as mod
+        assert mod._strip_context_window_suffix(None) is None
+
+    @pytest.mark.asyncio
+    async def test_forward_strips_suffix_before_override_and_forward(self):
+        """A model with a [1m] suffix must be normalized before override matching,
+        so a rule keyed on the clean name (e.g. "opus") still matches, and the
+        suffix is never forwarded to 9router."""
+        import kiro.nine_router_client as mod
+
+        resp_ok = _mock_stream_response(200)
+        client = _mock_client(response=resp_ok)
+        body = b'{"model":"claude-opus-5[1m]","messages":[]}'
+        rules = [{"from": "opus", "to": "claude-opus"}]
+
+        with (
+            patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
+            patch.object(mod, "_get_nine_router_override", AsyncMock(return_value=(True, rules, "auto"))),
+            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+        ):
+            req = _mock_request()
+            resp = await mod.forward_to_nine_router(req, body)
+            assert isinstance(resp, StreamingResponse)
+
+        sent = client.build_request.call_args_list[0].kwargs["content"]
+        assert b'"model":"claude-opus"' in sent
+        assert b"[1m]" not in sent
+
+    @pytest.mark.asyncio
+    async def test_forward_strips_suffix_when_override_disabled(self):
+        """Even with override disabled, the [1m] suffix must be stripped so the
+        forwarded body carries the clean model name."""
+        import kiro.nine_router_client as mod
+
+        resp_ok = _mock_stream_response(200)
+        client = _mock_client(response=resp_ok)
+        body = b'{"model":"claude-haiku-4-5-20251001[1m]","messages":[]}'
+
+        with (
+            patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
+            patch.object(mod, "_get_nine_router_override", AsyncMock(return_value=(False, [], "auto"))),
+            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+        ):
+            req = _mock_request()
+            resp = await mod.forward_to_nine_router(req, body)
+            assert isinstance(resp, StreamingResponse)
+
+        sent = client.build_request.call_args_list[0].kwargs["content"]
+        assert b'"model":"claude-haiku-4-5-20251001"' in sent
+        assert b"[1m]" not in sent
+
+
+# ---------------------------------------------------------------------------
 # Multi-level override failover
 # ---------------------------------------------------------------------------
 
