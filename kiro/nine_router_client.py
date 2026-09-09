@@ -285,7 +285,11 @@ async def forward_to_nine_router(
         client = shared_client
         owns_client = False
     else:
-        client = httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0))
+        # connect=30s aligned with the shared client timeout in main.py so the
+        # fallback path doesn't fail faster than the steady-state path; pool=10s
+        # kept short so a genuinely exhausted pool fails fast and the
+        # account-manager can move on instead of holding the request for 60s+.
+        client = httpx.AsyncClient(timeout=httpx.Timeout(connect=30.0, read=300.0, write=30.0, pool=10.0))
         owns_client = True
 
     async def _maybe_close_client() -> None:

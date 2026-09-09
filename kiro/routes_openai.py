@@ -438,12 +438,17 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
             url = f"{auth_manager.api_host}/generateAssistantResponse"
             logger.debug(f"Kiro API URL: {url} (account: {account.id})")
             
+            # Prepare data for token counting (used in both success and error paths)
+            messages_for_tokenizer = [msg.model_dump() for msg in request_data.messages]
+            tools_for_tokenizer = [tool.model_dump() for tool in request_data.tools] if request_data.tools else None
+            system_for_tokenizer = None  # OpenAI doesn't have separate system in ChatCompletion
+
             if request_data.stream:
                 http_client = KiroHttpClient(auth_manager, shared_client=None)
             else:
                 shared_client = request.app.state.http_client
                 http_client = KiroHttpClient(auth_manager, shared_client=shared_client)
-            
+
             try:
                 # Make request to Kiro API
                 response = await http_client.request_with_retry(
@@ -456,11 +461,7 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
                 if response.status_code == 200:
                     # SUCCESS - report and return
                     await account_manager.report_success(account.id, request_data.model)
-                    
-                    # Prepare data for token counting
-                    messages_for_tokenizer = [msg.model_dump() for msg in request_data.messages]
-                    tools_for_tokenizer = [tool.model_dump() for tool in request_data.tools] if request_data.tools else None
-                    
+
                     if request_data.stream:
                         # Streaming mode
                         async def stream_wrapper():
@@ -558,11 +559,34 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
                         error_reason = error_info.reason
                         last_error_message = error_info.user_message
                         last_error_status = response.status_code
-                        logger.debug(f"Original Kiro error: {error_info.original_message} (reason: {error_info.reason})")
+
+                        # Log detailed 400 error info for debugging
+                        if response.status_code == 400:
+                            # Estimate input tokens for debugging context limit issues
+                            estimated_tokens = 0
+                            try:
+                                from kiro.tokenizer import estimate_request_tokens
+                                token_stats = estimate_request_tokens(
+                                    messages=messages_for_tokenizer or [],
+                                    tools=tools_for_tokenizer,
+                                    system_prompt=system_for_tokenizer,
+                                    apply_claude_correction=False
+                                )
+                                estimated_tokens = token_stats["total_tokens"]
+                            except Exception:
+                                pass
+
+                            logger.warning(
+                                f"HTTP 400 error - model={request_data.model}, "
+                                f"reason={error_reason}, estimated_input_tokens={estimated_tokens}, "
+                                f"original_message={error_info.original_message[:200]}"
+                            )
+                        else:
+                            logger.debug(f"Original Kiro error: {error_info.original_message} (reason: {error_info.reason})")
                     except (json.JSONDecodeError, KeyError):
                         last_error_message = error_text
                         last_error_status = response.status_code
-                    
+
                     # Classify error
                     error_type = classify_error(response.status_code, error_reason)
                     

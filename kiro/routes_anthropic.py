@@ -585,11 +585,34 @@ async def messages(
                         error_reason = error_info.reason
                         last_error_message = error_info.user_message
                         last_error_status = response.status_code
-                        logger.debug(f"Original Kiro error: {error_info.original_message} (reason: {error_info.reason})")
+
+                        # Log detailed 400 error info for debugging
+                        if response.status_code == 400:
+                            # Estimate input tokens for debugging context limit issues
+                            estimated_tokens = 0
+                            try:
+                                from kiro.tokenizer import estimate_request_tokens
+                                token_stats = estimate_request_tokens(
+                                    messages=messages_for_tokenizer or [],
+                                    tools=tools_for_tokenizer,
+                                    system_prompt=system_for_tokenizer,
+                                    apply_claude_correction=False
+                                )
+                                estimated_tokens = token_stats["total_tokens"]
+                            except Exception:
+                                pass
+
+                            logger.warning(
+                                f"HTTP 400 error - model={request_data.model}, "
+                                f"reason={error_reason}, estimated_input_tokens={estimated_tokens}, "
+                                f"original_message={error_info.original_message[:200]}"
+                            )
+                        else:
+                            logger.debug(f"Original Kiro error: {error_info.original_message} (reason: {error_info.reason})")
                     except (json.JSONDecodeError, KeyError):
                         last_error_message = error_text
                         last_error_status = response.status_code
-                    
+
                     # Classify error
                     error_type = classify_error(response.status_code, error_reason)
                     
