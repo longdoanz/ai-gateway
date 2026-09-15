@@ -67,6 +67,13 @@ manual_api_test.py
 webui/node_modules
 webui/.next
 
+# 9router's node_modules is installed inside Dockerfile.ninerouter. The host copy
+# carries glibc native binaries (@next/swc-*-gnu, lightningcss-*-gnu,
+# better-sqlite3) while the build image is alpine/musl — copying it over the
+# container's install breaks the build.
+9router/node_modules
+9router/.next
+
 # Misc
 *.log
 .crush
