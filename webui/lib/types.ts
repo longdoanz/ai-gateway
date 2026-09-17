@@ -298,3 +298,68 @@ export interface GatewayKeyAnalyticsResponse {
   daily_series: GatewayKeyDailySeries[];
   user_usages: GatewayKeyUserUsage[];
 }
+
+// --- Service Accounts ---
+
+export interface ServiceAccountResponse {
+  id: number;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+  allowed_models: string[];
+  allowed_model_count: number;
+  key_count: number;
+  created_by_user_id: number | null;
+  created_at: string;
+}
+
+export interface ServiceAccountCreate {
+  name: string;
+  description?: string;
+  allowed_models: string[];
+}
+
+export interface ServiceAccountUpdate {
+  name?: string;
+  description?: string;
+  allowed_models?: string[];
+  is_active?: boolean;
+}
+
+export interface ServiceAccountKeyResponse {
+  id: number;
+  service_account_id: number;
+  key_prefix: string;
+  key_suffix: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface ServiceAccountKeyCreated extends ServiceAccountKeyResponse {
+  raw_key: string;
+}
+
+export interface ServiceAccountMonthlyUsage {
+  month: string;
+  current_usage: number;
+  last_used_at: string | null;
+}
+
+export interface ServiceAccountDailyUsage {
+  date: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+}
+
+export interface ServiceAccountUsageHistoryResponse {
+  monthly: ServiceAccountMonthlyUsage[];
+  daily: ServiceAccountDailyUsage[];
+}
+
+// --- 9router Models ---
+
+export interface NineRouterModelsResponse {
+  models: string[];
+  total: number;
+}

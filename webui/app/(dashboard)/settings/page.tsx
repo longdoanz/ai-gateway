@@ -639,7 +639,8 @@ export default function SettingsPage() {
             <p className="text-sm text-on-surface-variant mt-1 max-w-lg">
               When enabled, every API request is forwarded straight to 9router, bypassing the Kiro
               account/key pool entirely. The 9Router Model Override rules below still apply on the
-              forwarded requests.
+              forwarded requests — except for Service Account traffic, which always goes straight to
+              9router regardless of this switch, and is never rewritten by the override.
             </p>
           </div>
           <Switch
@@ -659,7 +660,7 @@ export default function SettingsPage() {
         onDefaultModelChange={handleChange(setNineRouterDefaultModel)}
         modelIds={modelIds}
         title="9Router Model Override"
-        description="Override models on requests forwarded to 9router. Independent from Global Model Enforcement above."
+        description="Override models on requests forwarded to 9router. Independent from Global Model Enforcement above. Does not apply to Service Account traffic — the model a Service Account is allow-listed for is the model that gets sent upstream."
       />
 
       <SystemKeysSection />

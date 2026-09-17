@@ -45,8 +45,9 @@ function AddKeyDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button size="sm" className="gap-1.5" />}>
-        <span className="material-symbols-outlined text-[16px]">add</span> Register Key
+      {/* DEPRECATED: de-emphasized CTA — new key creation should happen in 9router instead. */}
+      <DialogTrigger render={<Button variant="outline" size="sm" className="gap-1.5 text-on-surface-variant" />}>
+        <span className="material-symbols-outlined text-[16px]">add</span> Register Legacy Key
       </DialogTrigger>
       <DialogContent className="glass-panel-elevated">
         <DialogHeader>
@@ -724,13 +725,14 @@ export default function AccountsPage() {
 
   return (
     <div className="space-y-6">
-      <Tabs defaultValue="access" className="w-full">
+      {/* DEPRECATED: "access" tab (Kiro API key registration/list) is legacy — key management now lives in 9router. Kept for admin visibility until the cleanup PR removes it. */}
+      <Tabs defaultValue="accounts" className="w-full">
         <TabsList variant="line" className="w-full justify-start h-full gap-6 rounded-none border-b border-outline-variant/30 p-0">
           <TabsTrigger
             value="access"
             className="cursor-pointer !h-auto !rounded-none !border-0 !bg-transparent !px-1 !py-0 pb-4 pt-4 text-base text-on-surface-variant hover:text-primary-container transition-colors duration-200 data-[active]:text-primary-container data-[active]:font-semibold data-[active]:border-b-2 data-[active]:border-primary-container data-[active]:bg-white data-[active]:rounded-t-lg"
           >
-            Access &amp; Overrides
+            Access &amp; Overrides <span className="text-xs font-normal text-on-surface-variant">(Legacy)</span>
           </TabsTrigger>
           <TabsTrigger
             value="import"
@@ -747,6 +749,19 @@ export default function AccountsPage() {
         </TabsList>
 
         <TabsContent value="access" className="mt-6 space-y-6">
+          {/* DEPRECATED: legacy Kiro API key screen — superseded by Service Accounts / 9router. Remove once confirmed unused. */}
+          <div className="glass-panel rounded-2xl border border-amber-200/60 bg-amber-50/60 px-5 py-4 flex items-start gap-3">
+            <span className="material-symbols-outlined text-amber-600 text-xl mt-0.5">info</span>
+            <div className="text-sm text-on-surface">
+              <p className="font-semibold text-amber-900">This screen is legacy and will be removed</p>
+              <p className="text-on-surface-variant mt-0.5">
+                API key management has moved to <span className="font-medium text-on-surface">Service Accounts</span>, and
+                usage reporting to <span className="font-medium text-on-surface">9router</span>. The list below shows existing
+                Kiro keys for visibility only — you can still disable or delete a key here, but new keys should be issued
+                from the Service Accounts page.
+              </p>
+            </div>
+          </div>
           <div className="flex items-center justify-end gap-3">
             <Button variant="outline" size="sm" type="button">
               <span className="material-symbols-outlined text-[16px]">download</span>

@@ -3,13 +3,49 @@
 import { useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAnalytics, type AnalyticsRange } from "@/hooks/use-analytics";
-import { useKiroCreditUsage } from "@/hooks/use-kiro-credit-usage";
 import { useGatewayKeyAnalytics } from "@/hooks/use-gateway-key-analytics";
 import { BarChartTokens } from "@/components/charts/bar-chart-credits";
 import { DonutChartShare } from "@/components/charts/donut-chart-share";
-import { KiroCreditUsageTable } from "@/components/charts/kiro-credit-usage-table";
 import { GatewayKeyUsageTable } from "@/components/charts/gateway-key-usage-table";
 import { LineChartUserDaily } from "@/components/charts/line-chart-user-daily";
+
+// DEPRECATED: Kiro credit usage reporting has moved to 9router. See NineRouterUsageBanner
+// below, which replaces the old KiroCreditUsageTable section. Kept the hook/component
+// (hooks/use-kiro-credit-usage.ts, components/charts/kiro-credit-usage-table.tsx) intact
+// for the cleanup PR to remove once nothing references them.
+const NINE_ROUTER_ENABLED = process.env.NEXT_PUBLIC_NINE_ROUTER_ENABLED === "true";
+const NINE_ROUTER_URL = (process.env.NEXT_PUBLIC_NINE_ROUTER_URL || "").replace(/\/+$/, "");
+
+function NineRouterUsageBanner() {
+  const hasLink = NINE_ROUTER_ENABLED && NINE_ROUTER_URL;
+
+  function handleClick() {
+    window.open(`${NINE_ROUTER_URL}/api/auth/oidc/start`, "_blank", "noopener");
+  }
+
+  return (
+    <div className="glass-panel rounded-3xl px-6 py-5 flex items-center justify-between gap-4 flex-wrap">
+      <div className="flex items-start gap-3">
+        <span className="material-symbols-outlined text-sky-600 text-xl mt-0.5">open_in_new</span>
+        <div>
+          <p className="text-sm font-semibold text-on-surface">Kiro credit usage reporting has moved to 9router</p>
+          <p className="text-xs text-on-surface-variant mt-0.5">
+            Kiro credit/token usage per user is now tracked in 9router. This dashboard no longer shows it here.
+          </p>
+        </div>
+      </div>
+      {hasLink && (
+        <button
+          onClick={handleClick}
+          className="cursor-pointer shrink-0 px-3 py-1.5 text-xs font-medium rounded-lg border border-outline-variant/60 bg-white/70 text-on-surface hover:bg-white/90 hover:-translate-y-[1px] transition-all shadow-[0_1px_3px_rgba(0,0,0,0.05)] flex items-center gap-1.5"
+        >
+          Open 9router
+          <span className="material-symbols-outlined text-[14px]">arrow_outward</span>
+        </button>
+      )}
+    </div>
+  );
+}
 
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -22,7 +58,6 @@ const RANGES: AnalyticsRange[] = ["7d", "30d", "90d"];
 export default function AnalyticsPage() {
   const [range, setRange] = useState<AnalyticsRange>("7d");
   const { data, isLoading, isError } = useAnalytics(range);
-  const { data: creditData, isLoading: creditLoading, isError: creditError } = useKiroCreditUsage();
   const { data: gwData, isLoading: gwLoading, isError: gwError } = useGatewayKeyAnalytics(range);
 
   return (
@@ -129,28 +164,8 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* Row 4: Kiro User Credit Usage */}
-      <div className="glass-panel rounded-3xl p-0 overflow-hidden">
-        <div className="px-6 py-4 border-b border-outline-variant/30 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-on-surface">Kiro User Credit Usage <span className="text-xs font-normal text-on-surface-variant">(credits / tokens)</span></h3>
-          {creditData?.month && (
-            <span className="text-xs text-on-surface-variant">{creditData.month}</span>
-          )}
-        </div>
-        <div className="p-2">
-          {creditLoading ? (
-            <div className="p-4 space-y-3">
-              {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}
-            </div>
-          ) : creditError ? (
-            <div className="p-6"><ErrorState /></div>
-          ) : !creditData?.users?.length ? (
-            <div className="p-6"><EmptyState /></div>
-          ) : (
-            <KiroCreditUsageTable data={creditData.users} />
-          )}
-        </div>
-      </div>
+      {/* Row 4: Kiro User Credit Usage — DEPRECATED, replaced by NineRouterUsageBanner (see top of file) */}
+      <NineRouterUsageBanner />
 
       {/* Row 5: Gateway Key Usage */}
       <div className="grid grid-cols-1 gap-6">
