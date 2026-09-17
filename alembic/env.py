@@ -9,7 +9,11 @@ from kiro.db.models import Base
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers=False: alembic's fileConfig would otherwise switch
+    # off every logger already created in the process. When migrations run from
+    # the app (kiro.db.engine.init_db) that includes the app's own loggers, so the
+    # recovery guidance logged on a failed upgrade was silently dropped.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

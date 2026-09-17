@@ -26,14 +26,23 @@ SAFE_GREP = re.compile(
 )
 ENV_FILE = re.compile(r"(?<![\w.-])(\.env(?:[._][\w-]+)?)(?![\w.-])")
 ENV_SAFE_EXT = {"example", "sample", "template", "dist", "ci", "test"}
+# Extraction that yields only KEY names, never the `=value` half: the
+# `=`-separated first field. The awk form must pin `-F=` and print only `$1`;
+# bare `awk '{print $1}'` splits on whitespace and would echo whole lines.
+KEY_EXTRACT = re.compile(
+    r"awk\b[^|;&]*-F\s*['\"]?=[^|;&]*\{\s*print\s+\$1\s*\}"
+    r"|cut\b[^|;&]*-d\s*['\"]?=['\"]?[^|;&]*-f\s*1\b"
+)
 READER = re.compile(
     r"\b(cat|bat|less|more|head|tail|sed|awk|grep|rg|source|xxd|od|strings|"
     r"vi|vim|nano|emacs|diff|tee|cp|docker\s+cp)\b"
 )
 # Names whose value is a credential — catches `echo "$X"` / `printenv X`.
+# Letter boundaries so a keyword only counts as a whole word: `$KEYBOARD_LAYOUT`
+# and `$SECRETARY` are not credentials, but `$API_KEY` / `$JWT_SECRET` are.
 SECRET_NAME = re.compile(
-    r"(?:PASS(?:WORD)?|SECRET|TOKEN|KEY|ENCRYPT|CREDENTIAL|"
-    r"DATABASE_URL|REDIS_URL|_DSN)",
+    r"(?<![A-Za-z])(?:PASS(?:WORD)?|SECRET|TOKEN|KEY|ENCRYPT|CREDENTIAL|"
+    r"DATABASE_URL|REDIS_URL|DSN)(?![A-Za-z])",
     re.IGNORECASE,
 )
 ECHO = re.compile(r"\b(echo|printf)\b")
@@ -92,8 +101,15 @@ def _env_file_matches(cmd: str) -> bool:
     return bool(live_env_files(cmd)) and bool(READER.search(cmd))
 
 
+def _env_file_safe(cmd: str) -> bool:
+    return bool(KEY_EXTRACT.search(cmd))
+
+
 def _exec_env_matches(cmd: str) -> bool:
-    return bool(re.search(r"\bdocker\s+(exec|run)\b[^|;&]*\b(env|printenv)\b", cmd))
+    # `env`/`printenv` as the spawned command, not the flag `--env` / `--env-file`
+    # or a `.env*` filename: `docker run --env FOO=bar …` and
+    # `docker run --env-file .env.example …` are legit, not env dumps.
+    return bool(re.search(r"\bdocker\s+(exec|run)\b[^|;&]*?(?<![\w.-])(env|printenv)\b", cmd))
 
 
 RULES = [
@@ -132,7 +148,7 @@ RULES = [
         _env_file_matches,
         "Reading a live .env file prints secret values into the transcript.",
         "Read key names only: `grep -o '^[A-Z_]*=' <file>` (count with `| wc -l`).",
-        None,
+        _env_file_safe,
     ),
     (
         _exec_env_matches,
