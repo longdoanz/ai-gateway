@@ -84,6 +84,21 @@ ENCRYPTION_KEY="32-byte-encryption-key"
 DEBUG_MODE="off"  # "off" | "errors" | "all"
 ```
 
+## Secrets — never print values
+
+Terminal output is retained in the transcript, so a command that echoes a secret
+publishes it. Use the count/redact form:
+
+| Instead of | Use |
+|---|---|
+| `docker compose config` | `docker compose config --no-interpolate` (or `--quiet`) |
+| `docker inspect <c>` | `docker inspect --format '{{.State.Status}}' <c>` |
+| `cat`/`head`/`grep X .env_prod` | `grep -o '^[A-Z_]*=' .env_prod` or `grep -c '' .env_prod` |
+| `env` / `docker exec <c> env` | `printenv NAME >/dev/null && echo set` |
+
+A `PreToolUse` Bash hook (`.claude/hooks/guard-secrets.py`) blocks the leaking
+shapes and allows these safe forms — extend its `RULES` if a new shape appears.
+
 ## Making Changes
 
 1. Read files before editing
