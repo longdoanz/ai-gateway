@@ -1,4 +1,5 @@
 import hashlib
+import json
 import re
 from datetime import datetime, timedelta, timezone
 
@@ -16,7 +17,23 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiro.config import ENCRYPTION_KEY
-from kiro.db.models import ApiKey, DailyCreditSnapshot, DailyUsage, FallbackUsage, GatewayKey, GatewayKeyDailyUsage, GatewayKeyUsage, KeyUsage, KiroUserMapping, SystemConfig, User
+from kiro.db.models import (
+    ApiKey,
+    DailyCreditSnapshot,
+    DailyUsage,
+    FallbackUsage,
+    GatewayKey,
+    GatewayKeyDailyUsage,
+    GatewayKeyUsage,
+    KeyUsage,
+    KiroUserMapping,
+    ServiceAccount,
+    ServiceAccountDailyUsage,
+    ServiceAccountKey,
+    ServiceAccountUsage,
+    SystemConfig,
+    User,
+)
 
 
 _fernet = None
@@ -658,3 +675,344 @@ async def set_config(session: AsyncSession, key: str, value: str) -> None:
 async def get_all_config(session: AsyncSession) -> dict[str, str]:
     result = await session.execute(select(SystemConfig))
     return {row.key: row.value for row in result.scalars().all()}
+
+
+# --- ServiceAccount ---
+
+SERVICE_ACCOUNT_KEY_PREFIX = "izisa_"
+
+
+def generate_service_account_key() -> str:
+    """Generate a new raw service-account API key with the ``izisa_`` prefix.
+
+    Returns:
+        A new raw key string, e.g. ``"izisa_<random>"``.
+    """
+    import secrets
+    return SERVICE_ACCOUNT_KEY_PREFIX + secrets.token_urlsafe(32)
+
+
+def encode_allowed_models(models: list[str] | None) -> str:
+    """Serialize an allowed-model list to JSON text for the ``allowed_models`` column.
+
+    Args:
+        models: Model-id strings the service account may use. None is
+            treated the same as an empty list.
+
+    Returns:
+        JSON-encoded string, e.g. ``'["kiro/claude-sonnet-4"]'``. An empty
+        list serializes to ``"[]"`` — the fail-closed default: no models allowed.
+    """
+    return json.dumps(list(models or []))
+
+
+def decode_allowed_models(raw: str | None) -> list[str]:
+    """Deserialize the ``allowed_models`` JSON column back into a list of strings.
+
+    Fail-closed: a missing, blank, or malformed value decodes to an empty
+    list (no models allowed) rather than raising or defaulting to "all
+    models allowed".
+
+    Args:
+        raw: The raw JSON text stored in ServiceAccount.allowed_models.
+
+    Returns:
+        List of model-id strings, or [] if raw is None/blank/invalid.
+    """
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except (ValueError, TypeError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [str(m) for m in parsed]
+
+
+async def create_service_account(
+    session: AsyncSession,
+    name: str,
+    description: str | None = None,
+    allowed_models: list[str] | None = None,
+    created_by_user_id: int | None = None,
+) -> ServiceAccount:
+    """Create a new service account.
+
+    Service accounts are non-human identities (CI bots, apps, teams) that
+    are never tied to a User and always route straight to 9router.
+
+    Args:
+        session: Active async database session.
+        name: Unique, human-readable identifier for the service account.
+        description: Optional free-text description.
+        allowed_models: Model ids this account may use. None or an empty
+            list means the account may use NO model (fail-closed) until an
+            admin grants access.
+        created_by_user_id: Admin user id that created this account. Audit
+            only — does NOT imply ownership.
+
+    Returns:
+        The newly created ServiceAccount.
+    """
+    service_account = ServiceAccount(
+        name=name,
+        description=description,
+        allowed_models=encode_allowed_models(allowed_models),
+        created_by_user_id=created_by_user_id,
+    )
+    session.add(service_account)
+    await session.commit()
+    await session.refresh(service_account)
+    return service_account
+
+
+async def list_service_accounts(session: AsyncSession, limit: int = 50, offset: int = 0) -> list[ServiceAccount]:
+    """List service accounts ordered by id.
+
+    Args:
+        session: Active async database session.
+        limit: Maximum number of rows to return.
+        offset: Number of rows to skip.
+
+    Returns:
+        List of ServiceAccount rows (includes both active and inactive).
+    """
+    result = await session.execute(select(ServiceAccount).order_by(ServiceAccount.id).limit(limit).offset(offset))
+    return list(result.scalars().all())
+
+
+async def get_service_account_by_id(session: AsyncSession, service_account_id: int) -> ServiceAccount | None:
+    result = await session.execute(select(ServiceAccount).where(ServiceAccount.id == service_account_id))
+    return result.scalar_one_or_none()
+
+
+async def get_service_account_by_name(session: AsyncSession, name: str) -> ServiceAccount | None:
+    result = await session.execute(select(ServiceAccount).where(ServiceAccount.name == name))
+    return result.scalar_one_or_none()
+
+
+async def update_service_account(session: AsyncSession, service_account_id: int, **kwargs) -> ServiceAccount | None:
+    """Update mutable fields of a service account.
+
+    Args:
+        session: Active async database session.
+        service_account_id: Target service account id.
+        **kwargs: Any of ``name``, ``description``, ``is_active``, or
+            ``allowed_models`` (as a ``list[str]`` — encoded to JSON here).
+
+    Returns:
+        The updated ServiceAccount, or None if it does not exist.
+    """
+    if "allowed_models" in kwargs:
+        kwargs["allowed_models"] = encode_allowed_models(kwargs["allowed_models"])
+    if kwargs:
+        await session.execute(update(ServiceAccount).where(ServiceAccount.id == service_account_id).values(**kwargs))
+        await session.commit()
+    return await get_service_account_by_id(session, service_account_id)
+
+
+async def delete_service_account(session: AsyncSession, service_account_id: int) -> bool:
+    """Soft-delete a service account: deactivate it and all of its keys.
+
+    Usage history is preserved for audit/analytics purposes.
+
+    Args:
+        session: Active async database session.
+        service_account_id: Target service account id.
+
+    Returns:
+        True if the service account existed and was deactivated, False otherwise.
+    """
+    service_account = await get_service_account_by_id(session, service_account_id)
+    if service_account is None:
+        return False
+    service_account.is_active = False
+    await session.execute(
+        update(ServiceAccountKey)
+        .where(ServiceAccountKey.service_account_id == service_account_id)
+        .values(is_active=False)
+    )
+    await session.commit()
+    return True
+
+
+# --- ServiceAccountKey ---
+
+async def create_service_account_key(session: AsyncSession, service_account_id: int) -> tuple[ServiceAccountKey, str]:
+    """Issue a new API key for a service account.
+
+    Unlike GatewayKey (one key per user), a service account can hold many
+    active keys at once so keys can be rotated without downtime. Only the
+    salted hash is stored — like GatewayKey, the raw key is only ever
+    verified, never replayed upstream.
+
+    Args:
+        session: Active async database session.
+        service_account_id: The service account to issue the key for.
+
+    Returns:
+        (ServiceAccountKey, raw_key). raw_key must be shown to the caller
+        exactly once — it is never recoverable afterward.
+    """
+    raw_key = generate_service_account_key()
+    key = ServiceAccountKey(
+        service_account_id=service_account_id,
+        key_hash=hash_api_key(raw_key),
+        key_prefix=raw_key[:10],
+        key_suffix=raw_key[-4:],
+    )
+    session.add(key)
+    await session.commit()
+    await session.refresh(key)
+    return key, raw_key
+
+
+async def list_service_account_keys(session: AsyncSession, service_account_id: int) -> list[ServiceAccountKey]:
+    result = await session.execute(
+        select(ServiceAccountKey)
+        .where(ServiceAccountKey.service_account_id == service_account_id)
+        .order_by(ServiceAccountKey.id)
+    )
+    return list(result.scalars().all())
+
+
+async def get_service_account_key_by_hash(session: AsyncSession, key_hash: str) -> ServiceAccountKey | None:
+    """Resolve an active service-account key by its hash.
+
+    Requires both the key and its owning service account to be active, so a
+    deactivated service account cannot authenticate through a key that was
+    never individually revoked.
+
+    Args:
+        session: Active async database session.
+        key_hash: SHA-256 hex digest of the raw key (see hash_api_key).
+
+    Returns:
+        The matching ServiceAccountKey, or None if not found/inactive.
+    """
+    result = await session.execute(
+        select(ServiceAccountKey)
+        .join(ServiceAccount, ServiceAccountKey.service_account_id == ServiceAccount.id)
+        .where(
+            ServiceAccountKey.key_hash == key_hash,
+            ServiceAccountKey.is_active == True,
+            ServiceAccount.is_active == True,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def revoke_service_account_key(session: AsyncSession, service_account_id: int, key_id: int) -> bool:
+    """Revoke (deactivate) one key belonging to a service account.
+
+    Args:
+        session: Active async database session.
+        service_account_id: Owning service account id (scopes the lookup).
+        key_id: The key to revoke.
+
+    Returns:
+        True if the key existed and was revoked, False otherwise.
+    """
+    result = await session.execute(
+        select(ServiceAccountKey).where(
+            ServiceAccountKey.id == key_id, ServiceAccountKey.service_account_id == service_account_id
+        )
+    )
+    key = result.scalar_one_or_none()
+    if key is None:
+        return False
+    key.is_active = False
+    await session.commit()
+    return True
+
+
+# --- ServiceAccountUsage / ServiceAccountDailyUsage ---
+
+async def increment_service_account_usage(session: AsyncSession, service_account_id: int, month: str, amount: int = 1) -> None:
+    """Increment the monthly request-count rollup for a service account.
+
+    Args:
+        session: Active async database session.
+        service_account_id: Service account whose usage to increment.
+        month: Month bucket in "YYYY-MM" format.
+        amount: Number of requests to add (default 1).
+    """
+    now = _utcnow()
+    stmt = pg_insert(ServiceAccountUsage).values(
+        service_account_id=service_account_id, month=month, current_usage=amount, last_used_at=now
+    )
+    stmt = stmt.on_conflict_do_update(
+        constraint="uq_sa_usage_sa_month",
+        set_={"current_usage": ServiceAccountUsage.current_usage + amount, "last_used_at": now},
+    )
+    await session.execute(stmt)
+    await session.commit()
+
+
+async def increment_service_account_daily_usage(
+    session: AsyncSession,
+    service_account_id: int,
+    date: str,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    model: str = "unknown",
+) -> None:
+    """Increment the daily per-model token usage for a service account.
+
+    Args:
+        session: Active async database session.
+        service_account_id: Service account whose usage to increment.
+        date: Day bucket in "YYYY-MM-DD" format.
+        input_tokens: Input tokens to add.
+        output_tokens: Output tokens to add.
+        model: Model id these tokens were consumed against.
+    """
+    stmt = pg_insert(ServiceAccountDailyUsage).values(
+        service_account_id=service_account_id,
+        date=date,
+        model=model,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+    )
+    stmt = stmt.on_conflict_do_update(
+        constraint="uq_sa_daily_usage_sa_date_model",
+        set_={
+            "input_tokens": ServiceAccountDailyUsage.input_tokens + input_tokens,
+            "output_tokens": ServiceAccountDailyUsage.output_tokens + output_tokens,
+        },
+    )
+    await session.execute(stmt)
+    await session.commit()
+
+
+async def get_service_account_usage_history(session: AsyncSession, service_account_id: int) -> list[ServiceAccountUsage]:
+    """Return the monthly usage rollup for a service account, newest month first."""
+    result = await session.execute(
+        select(ServiceAccountUsage)
+        .where(ServiceAccountUsage.service_account_id == service_account_id)
+        .order_by(ServiceAccountUsage.month.desc())
+    )
+    return list(result.scalars().all())
+
+
+async def get_service_account_daily_usage(
+    session: AsyncSession, service_account_id: int, limit: int = 30
+) -> list[ServiceAccountDailyUsage]:
+    """Return the daily per-model usage breakdown for a service account, newest day first.
+
+    Args:
+        session: Active async database session.
+        service_account_id: Target service account id.
+        limit: Maximum number of daily-usage rows to return.
+
+    Returns:
+        List of ServiceAccountDailyUsage rows ordered by date descending.
+    """
+    result = await session.execute(
+        select(ServiceAccountDailyUsage)
+        .where(ServiceAccountDailyUsage.service_account_id == service_account_id)
+        .order_by(ServiceAccountDailyUsage.date.desc())
+        .limit(limit)
+    )
+    return list(result.scalars().all())

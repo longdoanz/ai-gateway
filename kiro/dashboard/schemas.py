@@ -321,4 +321,76 @@ class GatewayKeyAnalyticsResponse(BaseModel):
     total_gateway_users: int
     active_gateway_users: int
     daily_series: list[GatewayKeyDailySeries]
-    user_usages: list[GatewayKeyUserUsage]
+
+
+# --- ServiceAccount ---
+
+class ServiceAccountCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = None
+    allowed_models: list[str] = []  # fail-closed: empty means no model is allowed
+
+
+class ServiceAccountUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    allowed_models: list[str] | None = None
+    is_active: bool | None = None
+
+
+class ServiceAccountResponse(BaseModel):
+    id: int
+    name: str
+    description: str | None = None
+    is_active: bool
+    allowed_models: list[str]
+    allowed_model_count: int
+    key_count: int
+    created_by_user_id: int | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ServiceAccountKeyResponse(BaseModel):
+    id: int
+    service_account_id: int
+    key_prefix: str
+    key_suffix: str
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ServiceAccountKeyCreated(ServiceAccountKeyResponse):
+    raw_key: str  # shown only once at creation
+
+
+class ServiceAccountUsageResponse(BaseModel):
+    month: str
+    current_usage: int
+    last_used_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class ServiceAccountDailyUsageResponse(BaseModel):
+    date: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+
+    model_config = {"from_attributes": True}
+
+
+class ServiceAccountUsageHistoryResponse(BaseModel):
+    monthly: list[ServiceAccountUsageResponse]
+    daily: list[ServiceAccountDailyUsageResponse]
+
+
+# --- 9router model catalog ---
+
+class NineRouterModelListResponse(BaseModel):
+    models: list[str]
+    total: int

@@ -608,3 +608,172 @@ class TestIsNineRouterDirectEnabled:
             mod.invalidate_nine_router_direct_cache()
             assert await mod.is_nine_router_direct_enabled() is False
             assert get_config.await_count == 2
+
+
+# ---------------------------------------------------------------------------
+# fetch_nine_router_models
+# ---------------------------------------------------------------------------
+
+def _mock_models_response(status_code: int = 200, payload: dict | None = None):
+    resp = MagicMock()
+    resp.status_code = status_code
+    resp.json.return_value = payload if payload is not None else {
+        "object": "list",
+        "data": [
+            {"id": "kiro/claude-sonnet-4", "object": "model"},
+            {"id": "openai/gpt-5", "object": "model"},
+        ],
+    }
+    return resp
+
+
+class TestFetchNineRouterModels:
+    @pytest.mark.asyncio
+    async def test_parses_documented_response_shape(self):
+        import kiro.nine_router_client as mod
+        mod.invalidate_nine_router_models_cache()
+
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(return_value=_mock_models_response())
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with (
+            patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
+            patch.object(mod, "NINE_ROUTER_API_KEY", ""),
+            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=mock_client),
+        ):
+            models = await mod.fetch_nine_router_models()
+
+        assert models == ["kiro/claude-sonnet-4", "openai/gpt-5"]
+        mock_client.get.assert_awaited_once_with("http://ninerouter:20128/v1/models", headers={})
+
+    @pytest.mark.asyncio
+    async def test_sends_api_key_when_configured(self):
+        """A 9router with requireApiKey enabled answers 401 to an anonymous GET,
+        which would silently empty the catalog and lock every service account
+        out (fail-closed). The key must be sent."""
+        import kiro.nine_router_client as mod
+        mod.invalidate_nine_router_models_cache()
+
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(return_value=_mock_models_response())
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with (
+            patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
+            patch.object(mod, "NINE_ROUTER_API_KEY", "secret-key"),
+            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=mock_client),
+        ):
+            models = await mod.fetch_nine_router_models()
+
+        assert models == ["kiro/claude-sonnet-4", "openai/gpt-5"]
+        mock_client.get.assert_awaited_once_with(
+            "http://ninerouter:20128/v1/models",
+            headers={"Authorization": "Bearer secret-key"},
+        )
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_list_when_not_configured(self):
+        import kiro.nine_router_client as mod
+        mod.invalidate_nine_router_models_cache()
+
+        with patch.object(mod, "NINE_ROUTER_URL", ""):
+            assert await mod.fetch_nine_router_models() == []
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_list_on_non_200(self):
+        import kiro.nine_router_client as mod
+        mod.invalidate_nine_router_models_cache()
+
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(return_value=_mock_models_response(status_code=500))
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with (
+            patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
+            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=mock_client),
+        ):
+            assert await mod.fetch_nine_router_models() == []
+
+    @pytest.mark.asyncio
+    async def test_never_raises_on_connection_error(self):
+        import kiro.nine_router_client as mod
+        mod.invalidate_nine_router_models_cache()
+
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(side_effect=Exception("connection refused"))
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with (
+            patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
+            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=mock_client),
+        ):
+            assert await mod.fetch_nine_router_models() == []
+
+    @pytest.mark.asyncio
+    async def test_ignores_malformed_entries(self):
+        import kiro.nine_router_client as mod
+        mod.invalidate_nine_router_models_cache()
+
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(return_value=_mock_models_response(payload={
+            "object": "list",
+            "data": [
+                {"id": "kiro/claude-sonnet-4"},
+                {"no_id": "oops"},
+                "not-a-dict",
+                {"id": ""},
+            ],
+        }))
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with (
+            patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
+            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=mock_client),
+        ):
+            assert await mod.fetch_nine_router_models() == ["kiro/claude-sonnet-4"]
+
+    @pytest.mark.asyncio
+    async def test_result_is_cached_until_ttl_expires(self):
+        import kiro.nine_router_client as mod
+        mod.invalidate_nine_router_models_cache()
+
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(return_value=_mock_models_response())
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with (
+            patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
+            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=mock_client),
+        ):
+            first = await mod.fetch_nine_router_models()
+            second = await mod.fetch_nine_router_models()
+
+        assert first == second
+        mock_client.get.assert_awaited_once()  # second call served from cache
+
+    @pytest.mark.asyncio
+    async def test_invalidate_forces_refetch(self):
+        import kiro.nine_router_client as mod
+        mod.invalidate_nine_router_models_cache()
+
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(return_value=_mock_models_response())
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with (
+            patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
+            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=mock_client),
+        ):
+            await mod.fetch_nine_router_models()
+            mod.invalidate_nine_router_models_cache()
+            await mod.fetch_nine_router_models()
+
+        assert mock_client.get.await_count == 2

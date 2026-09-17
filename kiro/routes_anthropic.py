@@ -73,13 +73,25 @@ auth_header = APIKeyHeader(name="Authorization", auto_error=False)
 
 async def verify_anthropic_api_key(
     x_api_key: Optional[str] = Security(anthropic_api_key_header),
-    authorization: Optional[str] = Security(auth_header)
+    authorization: Optional[str] = Security(auth_header),
+    request: Request = None,
 ) -> bool:
     """
     Verify API key for Anthropic API.
 
     In API_KEY_MODE the caller's token is the Kiro API key — we only check
     that at least one auth header is present, not that it matches PROXY_API_KEY.
+
+    Also resolves the token as a Service Account key (``izisa_`` prefix) and
+    stashes the result on ``request.state.service_account`` (None when the
+    token is not a service-account key), independent of API_KEY_MODE, so
+    request-path enforcement in the endpoints can read it. A resolved
+    service account is accepted outright — it is a distinct token type from
+    PROXY_API_KEY / Kiro API keys, so this does not change accept/reject
+    behavior for any other token type. `request` defaults to None and is
+    placed last / optional so this function stays callable exactly as
+    before when invoked directly (e.g. in unit tests) without a real
+    Request object; FastAPI itself always injects it via DI.
 
     Supports two authentication methods:
     1. x-api-key header (Anthropic native)
@@ -88,6 +100,8 @@ async def verify_anthropic_api_key(
     Args:
         x_api_key: Value from x-api-key header
         authorization: Value from Authorization header
+        request: FastAPI Request, used to stash the resolved service-account
+            context (if any) on request.state for the endpoint to read.
 
     Returns:
         True if key is valid
@@ -95,6 +109,35 @@ async def verify_anthropic_api_key(
     Raises:
         HTTPException: 401 if key is invalid or missing
     """
+    from kiro.db.repositories import SERVICE_ACCOUNT_KEY_PREFIX
+    from kiro.service_accounts import resolve_service_account
+
+    token = x_api_key or (
+        authorization[7:] if authorization and authorization.startswith("Bearer ") else None
+    )
+    service_account = await resolve_service_account(token) if token else None
+    if request is not None:
+        request.state.service_account = service_account
+    if service_account is not None:
+        return True
+
+    # A token carrying our own prefix that did NOT resolve is revoked, disabled,
+    # or forged — reject it here. Without this it would fall through to the
+    # API_KEY_MODE branch below, which accepts any bearer token, so revoking a
+    # key or deactivating an account would have no effect whatsoever.
+    if token and token.startswith(SERVICE_ACCOUNT_KEY_PREFIX):
+        logger.warning("Rejected a service-account key that is revoked, disabled, or unknown.")
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "type": "error",
+                "error": {
+                    "type": "authentication_error",
+                    "message": "Invalid or revoked service account key",
+                },
+            },
+        )
+
     if API_KEY_MODE:
         if x_api_key or (authorization and authorization.startswith("Bearer ")):
             return True
@@ -167,6 +210,37 @@ async def messages(
 
     if anthropic_version:
         logger.debug(f"Anthropic API version: {anthropic_version}")
+
+    # Service Account enforcement — MUST run before the direct-9router /
+    # API_KEY_MODE / Kiro-pool branch split below, otherwise flipping the
+    # direct-9router-mode runtime toggle (an admin Settings switch) would
+    # silently bypass the model allowlist. Service accounts always forward
+    # straight to 9router with the admin-configured override disabled, so
+    # the model validated here is the model that actually goes upstream.
+    service_account = getattr(request.state, "service_account", None)
+    if service_account is not None:
+        from kiro.service_accounts import is_model_allowed, make_service_account_usage_cb
+
+        if not is_model_allowed(request_data.model, service_account.allowed_models):
+            logger.warning(
+                f"Service account '{service_account.name}' requested disallowed model '{request_data.model}'"
+            )
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "type": "error",
+                    "error": {
+                        "type": "permission_error",
+                        "message": f"Model '{request_data.model}' is not permitted for this service account.",
+                    },
+                },
+            )
+        return await forward_to_nine_router(
+            request,
+            await request.body(),
+            on_usage=make_service_account_usage_cb(service_account.id),
+            apply_override=False,
+        )
 
     # Direct-to-9router mode: bypass the Kiro account/key pool entirely and
     # forward the raw request to 9router as the primary upstream. This covers
@@ -1002,7 +1076,15 @@ async def count_tokens_endpoint(
     since Kiro API only provides accurate token counts after request completion.
     This endpoint is called BEFORE the actual request, so we cannot use Kiro's
     contextUsagePercentage (which is only available after generation completes).
-    
+
+    Service Account note: this endpoint is intentionally NOT gated by the
+    allowlist. It never calls the Kiro pool or 9router and never consumes
+    quota — it's a pure local token estimate over the request payload
+    (see kiro.tokenizer.estimate_request_tokens) — so there is nothing for a
+    service account to gain by probing it with a disallowed model, and
+    blocking it would only break Claude Code's compaction check for
+    otherwise-legitimate traffic.
+
     Args:
         request: FastAPI Request for accessing app.state
         request_data: Request in Anthropic MessagesRequest format

@@ -15,6 +15,7 @@ Usage:
 import asyncio
 import json
 import re
+import time
 from typing import AsyncIterator, Awaitable, Callable, Optional
 
 import httpx
@@ -110,6 +111,73 @@ async def is_nine_router_direct_enabled() -> bool:
         result = ENABLE_NINE_ROUTER_DIRECT
     _nine_router_direct_cache = result
     return result
+
+# ---------------------------------------------------------------------------
+# 9router model catalog — GET /v1/models (no authentication required), used
+# by the admin dashboard's model picker (e.g. for Service Account
+# allowed_models). Cached in-process for a short TTL since it's a network
+# call made from admin UI page loads, not the request hot path.
+# ---------------------------------------------------------------------------
+_NINE_ROUTER_MODELS_CACHE_TTL = 300  # seconds
+_nine_router_models_cache: tuple[list[str], float] | None = None  # (model_ids, fetched_at)
+
+
+def invalidate_nine_router_models_cache() -> None:
+    """Clear the cached 9router model catalog so the next fetch hits the network."""
+    global _nine_router_models_cache
+    _nine_router_models_cache = None
+
+
+async def fetch_nine_router_models() -> list[str]:
+    """Fetch the list of model ids that 9router can route to.
+
+    Calls 9router's own ``GET /v1/models`` endpoint (source:
+    9router/src/app/api/v1/models/route.js), which returns
+    ``{"object": "list", "data": [{"id": "<alias>/<model>", ...}]}``
+    — e.g. ``"kiro/claude-sonnet-4"``, ``"openai/gpt-5"``. Combo models appear
+    as bare ids without an alias prefix (e.g. ``"claude-opus-5"``).
+
+    The endpoint is unauthenticated only while 9router runs with
+    ``requireApiKey`` disabled; a deployment that enables it answers 401, so we
+    send NINE_ROUTER_API_KEY the same way :func:`forward_to_nine_router` does.
+    Results are cached
+    in-process for a few minutes to avoid hitting 9router on every admin page
+    load.
+
+    Returns:
+        List of model-id strings from the ``data[].id`` field. Returns an
+        empty list on any failure (network error, non-200, malformed body)
+        or when NINE_ROUTER_URL is not configured — this function never raises.
+    """
+    global _nine_router_models_cache
+
+    now = time.time()
+    if _nine_router_models_cache is not None and now - _nine_router_models_cache[1] < _NINE_ROUTER_MODELS_CACHE_TTL:
+        return _nine_router_models_cache[0]
+
+    if not NINE_ROUTER_URL:
+        return []
+
+    url = f"{NINE_ROUTER_URL.rstrip('/')}/v1/models"
+    headers = {}
+    if NINE_ROUTER_API_KEY:
+        headers["Authorization"] = f"Bearer {NINE_ROUTER_API_KEY}"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, headers=headers)
+        if response.status_code != 200:
+            logger.warning(f"9router model catalog fetch failed: HTTP {response.status_code}")
+            return []
+        data = response.json()
+        entries = data.get("data", []) if isinstance(data, dict) else []
+        model_ids = [entry["id"] for entry in entries if isinstance(entry, dict) and entry.get("id")]
+    except Exception as exc:
+        logger.warning(f"9router model catalog fetch failed: {exc}")
+        return []
+
+    _nine_router_models_cache = (model_ids, now)
+    return model_ids
+
 
 # Headers that must not be forwarded upstream
 _HOP_BY_HOP = frozenset({
@@ -213,6 +281,7 @@ async def forward_to_nine_router(
     body: bytes,
     path: Optional[str] = None,
     on_usage: Optional[OnUsage] = None,
+    apply_override: bool = True,
 ) -> StreamingResponse | JSONResponse:
     """
     Forward an OpenAI-compatible request to 9router and stream the response back.
@@ -226,6 +295,14 @@ async def forward_to_nine_router(
                   *best-effort* — the proxy layer does not delay the client; if the
                   stream is exhausted or an error occurs the callback is still fired
                   with whatever token counts were accumulated (possibly zeroes).
+        apply_override: When False, skip the admin-configured 9router model
+                  override (see ``_get_nine_router_override``) and forward the
+                  request body's model unchanged. Callers that have already
+                  validated the requested model against a fixed allowlist
+                  (e.g. Service Account enforcement) must pass False here —
+                  otherwise the override could silently rewrite the model to
+                  one the caller was never granted. Defaults to True so
+                  existing callers are unaffected.
 
     Returns:
         StreamingResponse for streaming requests, JSONResponse for non-streaming.
@@ -260,7 +337,7 @@ async def forward_to_nine_router(
     # with the suffix appended (its own parser/inference does not strip it).
     original_model = _strip_context_window_suffix(original_model)
 
-    if original_model and enabled:
+    if original_model and enabled and apply_override:
         from kiro.model_override import OverrideConfig, resolve_models
         # 9router treats "auto" as a real model name, so a configured default
         # (even "auto") must be enforced via has_default.

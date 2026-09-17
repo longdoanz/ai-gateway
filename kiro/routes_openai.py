@@ -67,17 +67,30 @@ except ImportError:
 api_key_header = APIKeyHeader(name="Authorization", auto_error=False)
 
 
-async def verify_api_key(auth_header: str = Security(api_key_header)) -> bool:
+async def verify_api_key(auth_header: str = Security(api_key_header), request: Request = None) -> bool:
     """
     Verify API key in Authorization header.
 
     In API_KEY_MODE the Bearer token is the caller's Kiro API key — we only
     check that it is present, not that it matches PROXY_API_KEY.
 
+    Also resolves the token as a Service Account key (``izisa_`` prefix) and
+    stashes the result on ``request.state.service_account`` (None when the
+    token is not a service-account key), independent of API_KEY_MODE, so
+    request-path enforcement in the endpoints can read it. A resolved
+    service account is accepted outright — it is a distinct token type from
+    PROXY_API_KEY / Kiro API keys, so this does not change accept/reject
+    behavior for any other token type. `request` defaults to None (rather
+    than being a required first positional param) so this function stays
+    callable exactly as before when invoked directly (e.g. in unit tests)
+    without a real Request object; FastAPI itself always injects it via DI.
+
     Expects format: "Bearer {PROXY_API_KEY}" (or any Bearer token in API_KEY_MODE)
 
     Args:
         auth_header: Authorization header value
+        request: FastAPI Request, used to stash the resolved service-account
+            context (if any) on request.state for the endpoint to read.
 
     Returns:
         True if key is valid
@@ -85,6 +98,24 @@ async def verify_api_key(auth_header: str = Security(api_key_header)) -> bool:
     Raises:
         HTTPException: 401 if key is invalid or missing
     """
+    from kiro.db.repositories import SERVICE_ACCOUNT_KEY_PREFIX
+    from kiro.service_accounts import resolve_service_account
+
+    token = auth_header[7:] if auth_header and auth_header.startswith("Bearer ") else None
+    service_account = await resolve_service_account(token) if token else None
+    if request is not None:
+        request.state.service_account = service_account
+    if service_account is not None:
+        return True
+
+    # A token carrying our own prefix that did NOT resolve is revoked, disabled,
+    # or forged — reject it here. Without this it would fall through to the
+    # API_KEY_MODE branch below, which accepts any bearer token, so revoking a
+    # key or deactivating an account would have no effect whatsoever.
+    if token and token.startswith(SERVICE_ACCOUNT_KEY_PREFIX):
+        logger.warning("Rejected a service-account key that is revoked, disabled, or unknown.")
+        raise HTTPException(status_code=401, detail="Invalid or revoked service account key")
+
     if API_KEY_MODE:
         if not auth_header or not auth_header.startswith("Bearer "):
             raise HTTPException(
@@ -147,6 +178,18 @@ async def get_models(request: Request):
     """
     logger.info("Request to /v1/models")
 
+    service_account = getattr(request.state, "service_account", None)
+    if service_account is not None:
+        # A Service Account is not a Kiro API key — it cannot be resolved via
+        # get_models_cached()/_resolve_gateway_key(). Return exactly its
+        # admin-configured allowlist so it's the first call a client makes
+        # (e.g. Claude Code probing /v1/models) discovers what it can use.
+        models = [
+            OpenAIModel(id=mid, object="model", created=0, owned_by="anthropic")
+            for mid in service_account.allowed_models
+        ]
+        return ModelList(object="list", data=models)
+
     if API_KEY_MODE:
         from kiro.api_key_mode import get_models_cached, get_api_key_from_request, _resolve_gateway_key
         from kiro.config import HIDDEN_MODELS, HIDDEN_FROM_LIST
@@ -191,6 +234,15 @@ async def get_usage(request: Request, resource_type: str = "AGENTIC_REQUEST"):
     """
     if not API_KEY_MODE:
         raise HTTPException(status_code=501, detail="Usage endpoint is only available in API_KEY_MODE")
+
+    # A service-account key is not a Kiro credential. Without this guard it
+    # would be forwarded verbatim to Kiro's getUsageLimits, leaking our own
+    # secret to a third party for a request that can only ever fail.
+    if getattr(request.state, "service_account", None) is not None:
+        raise HTTPException(
+            status_code=404,
+            detail="Kiro usage limits do not apply to service accounts; see the Service Accounts dashboard.",
+        )
 
     from kiro.api_key_mode import get_usage_limits, get_api_key_from_request
     api_key = get_api_key_from_request(request)
@@ -243,6 +295,37 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
         HTTPException: On validation or API errors
     """
     logger.info(f"Request to /v1/chat/completions (model={request_data.model}, stream={request_data.stream})")
+
+    # Service Account enforcement — MUST run before the direct-9router /
+    # API_KEY_MODE / Kiro-pool branch split below, otherwise flipping the
+    # direct-9router-mode runtime toggle (an admin Settings switch) would
+    # silently bypass the model allowlist. Service accounts always forward
+    # straight to 9router with the admin-configured override disabled, so
+    # the model validated here is the model that actually goes upstream.
+    service_account = getattr(request.state, "service_account", None)
+    if service_account is not None:
+        from kiro.service_accounts import is_model_allowed, make_service_account_usage_cb
+
+        if not is_model_allowed(request_data.model, service_account.allowed_models):
+            logger.warning(
+                f"Service account '{service_account.name}' requested disallowed model '{request_data.model}'"
+            )
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": {
+                        "message": f"Model '{request_data.model}' is not permitted for this service account.",
+                        "type": "permission_error",
+                        "code": 403,
+                    }
+                },
+            )
+        return await forward_to_nine_router(
+            request,
+            await request.body(),
+            on_usage=make_service_account_usage_cb(service_account.id),
+            apply_override=False,
+        )
 
     # Direct-to-9router mode: bypass the Kiro account/key pool entirely and
     # forward the raw request to 9router as the primary upstream. This covers

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -173,6 +173,97 @@ class DailyCreditSnapshot(Base):
     date: Mapped[str] = mapped_column(String(10), nullable=False)
     current_usage: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+
+class ServiceAccount(Base):
+    """A non-human identity (CI bot, app, team) that is NOT tied to a User.
+
+    Service accounts always route straight to 9router (never the Kiro pool)
+    and are restricted to an admin-configured allowlist of models.
+    """
+
+    __tablename__ = "service_accounts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # JSON-encoded list[str] of allowed model ids. Fail-closed: an empty list
+    # ("[]") means the account may use NO model. See
+    # kiro.db.repositories.encode_allowed_models / decode_allowed_models.
+    allowed_models: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    # Audit only — which admin created this account. NOT a relationship that
+    # implies ownership (unlike GatewayKey.user_id, which does).
+    created_by_user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+    keys: Mapped[list["ServiceAccountKey"]] = relationship(
+        "ServiceAccountKey", back_populates="service_account", lazy="selectin", cascade="all, delete-orphan"
+    )
+    usages: Mapped[list["ServiceAccountUsage"]] = relationship(
+        "ServiceAccountUsage", back_populates="service_account", lazy="selectin", cascade="all, delete-orphan"
+    )
+    daily_usages: Mapped[list["ServiceAccountDailyUsage"]] = relationship(
+        "ServiceAccountDailyUsage", back_populates="service_account", lazy="selectin", cascade="all, delete-orphan"
+    )
+
+
+class ServiceAccountKey(Base):
+    """An API key (prefix ``izisa_``) issued to a ServiceAccount.
+
+    A service account can hold many active keys at once, so keys can be
+    rotated without downtime. Only the salted hash is stored — like
+    GatewayKey, the raw key is only ever verified, never replayed upstream.
+    """
+
+    __tablename__ = "service_account_keys"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    service_account_id: Mapped[int] = mapped_column(Integer, ForeignKey("service_accounts.id"), index=True, nullable=False)
+    key_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    key_prefix: Mapped[str] = mapped_column(String(20), nullable=False)
+    key_suffix: Mapped[str] = mapped_column(String(10), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+    service_account: Mapped["ServiceAccount"] = relationship("ServiceAccount", back_populates="keys")
+
+
+class ServiceAccountUsage(Base):
+    """Monthly request-count rollup for a service account. Mirrors GatewayKeyUsage."""
+
+    __tablename__ = "service_account_usage"
+    __table_args__ = (
+        UniqueConstraint("service_account_id", "month", name="uq_sa_usage_sa_month"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    service_account_id: Mapped[int] = mapped_column(Integer, ForeignKey("service_accounts.id"), nullable=False)
+    month: Mapped[str] = mapped_column(String(7), nullable=False)
+    current_usage: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    service_account: Mapped["ServiceAccount"] = relationship("ServiceAccount", back_populates="usages")
+
+
+class ServiceAccountDailyUsage(Base):
+    """Daily per-model token usage for a service account. Mirrors GatewayKeyDailyUsage."""
+
+    __tablename__ = "service_account_daily_usage"
+    __table_args__ = (
+        UniqueConstraint("service_account_id", "date", "model", name="uq_sa_daily_usage_sa_date_model"),
+        Index("ix_sa_daily_usage_date", "date"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    service_account_id: Mapped[int] = mapped_column(Integer, ForeignKey("service_accounts.id"), nullable=False)
+    date: Mapped[str] = mapped_column(String(10), nullable=False)
+    model: Mapped[str] = mapped_column(String(100), nullable=False, default="unknown")
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+    service_account: Mapped["ServiceAccount"] = relationship("ServiceAccount", back_populates="daily_usages")
 
 
 class SystemConfig(Base):

@@ -11,6 +11,8 @@ from kiro.dashboard.routes_gateway_keys import router as gateway_keys_router
 from kiro.dashboard.routes_system_keys import router as system_keys_router
 from kiro.dashboard.routes_models import router as models_router
 from kiro.dashboard.routes_logs import router as logs_router
+from kiro.dashboard.routes_service_accounts import router as service_accounts_router
+from kiro.dashboard.routes_nine_router import router as nine_router_router
 
 dashboard_router = APIRouter(prefix="/api", tags=["dashboard"])
 dashboard_router.include_router(auth_router)
@@ -24,3 +26,5 @@ dashboard_router.include_router(gateway_keys_router)
 dashboard_router.include_router(system_keys_router)
 dashboard_router.include_router(models_router)
 dashboard_router.include_router(logs_router)
+dashboard_router.include_router(service_accounts_router)
+dashboard_router.include_router(nine_router_router)
