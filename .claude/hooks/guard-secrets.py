@@ -107,9 +107,19 @@ def _env_file_safe(cmd: str) -> bool:
 
 def _exec_env_matches(cmd: str) -> bool:
     # `env`/`printenv` as the spawned command, not the flag `--env` / `--env-file`
-    # or a `.env*` filename: `docker run --env FOO=bar …` and
-    # `docker run --env-file .env.example …` are legit, not env dumps.
-    return bool(re.search(r"\bdocker\s+(exec|run)\b[^|;&]*?(?<![\w.-])(env|printenv)\b", cmd))
+    # or a path segment ending in one: `docker run --env FOO=bar …`,
+    # `docker run --env-file .env.example …` and a bind mount of an `env.py`
+    # (`docker run -v /repo/alembic/env.py:/app/alembic/env.py …`) are all legit.
+    # The lookarounds exclude a preceding or trailing path/word character, so a
+    # bare `env`/`printenv` argument still matches but `…/env.py` does not.
+    # `compose exec` is included — it spawns a process in the container just as
+    # `docker exec` does, and dumps the same environment.
+    return bool(
+        re.search(
+            r"\bdocker(\s+compose)?\s+(exec|run)\b[^|;&]*?(?<![\w./-])(env|printenv)\b(?![\w./-])",
+            cmd,
+        )
+    )
 
 
 RULES = [
