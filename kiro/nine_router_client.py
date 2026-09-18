@@ -289,6 +289,42 @@ async def forward_to_nine_router(
     if original_request.url.query:
         target_url += f"?{original_request.url.query}"
 
+    # PII guardrail. Runs before the model-override parse below so everything
+    # downstream — including the body actually sent and anything 9router logs —
+    # sees only surrogates. `pii_vault` is None when the guard is off, in
+    # redact mode, or when nothing matched, in which case the response path
+    # stays byte-for-byte what it is today.
+    from kiro.guardrails import SecretFound, restore_stream, scrub_request
+
+    pii_vault = None
+    pii_restore_tool_args = True
+    try:
+        body, pii_vault, pii_restore_tool_args = await scrub_request(body)
+    except SecretFound as exc:
+        # Deterministic client error: the same payload will fail identically
+        # every time, so this must not be retried or trigger a route cooldown.
+        logger.warning(f"PII guard: blocked request carrying {exc.entity_types}")
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "message": (
+                        "Request blocked: it contains credential material "
+                        f"({', '.join(sorted(set(exc.entity_types)))}). "
+                        "Remove the secret and retry."
+                    ),
+                    "type": "invalid_request_error",
+                    "code": "secret_detected",
+                }
+            },
+        )
+    except Exception as exc:
+        # Fail open for PII: a scrubber bug must not take the gateway down.
+        # Secrets fail closed above, and only above — that branch cannot be
+        # reached from here.
+        logger.error(f"PII guard: scrub failed, forwarding unscrubbed: {exc}")
+        pii_vault = None
+
     # Apply 9router's own model override (independent of Global Model Enforcement).
     # Returns an ordered list of candidate models — a multi-level override yields
     # several targets tried in order, with the default (when configured) as the
@@ -296,10 +332,12 @@ async def forward_to_nine_router(
     # original body untouched" (no model key to rewrite).
     enabled, rules, default_model = await _get_nine_router_override()
     original_model: Optional[str] = None
+    raw_model: Optional[str] = None
     try:
         parsed = json.loads(body)
         if isinstance(parsed, dict):
             original_model = parsed.get("model")
+            raw_model = original_model
     except Exception:
         pass
 
@@ -350,7 +388,17 @@ async def forward_to_nine_router(
     # partial bytes must not be retried.
     last_error: JSONResponse | None = None
     for idx, candidate in enumerate(candidates):
-        request_body = _rewrite_model_in_body(body, candidate) if candidate is not None else body
+        # `candidate` is usually just the unchanged model: when the override is
+        # disabled/absent, `candidates = [original_model]`, so this loop would
+        # otherwise parse+re-serialize the whole body just to write back the
+        # value it already had (measured ~4.5ms on large payloads). Compare
+        # against the *raw* (pre-suffix-strip) model — not `original_model` —
+        # because a client-sent suffix like "claude-opus-5[1m]" means a real
+        # rewrite is still needed even though `candidate` looks "unchanged".
+        if candidate is not None and candidate != raw_model:
+            request_body = _rewrite_model_in_body(body, candidate)
+        else:
+            request_body = body
         try:
             response = await client.send(
                 client.build_request(
@@ -402,6 +450,11 @@ async def forward_to_nine_router(
                 logger.info(f"9router override failover: {candidate!r} failed ({response.status_code}), trying next candidate")
                 continue
             await _maybe_close_client()
+            if pii_vault is not None:
+                # Upstream errors often quote the offending part of the request
+                # back; leaving surrogates in them would confuse the caller.
+                from kiro.guardrails import restore_bytes
+                error_body = restore_bytes(error_body, pii_vault)
             return JSONResponse(
                 status_code=response.status_code,
                 content={"error": {"message": error_body.decode("utf-8", errors="replace"), "type": "nine_router_error"}},
@@ -437,8 +490,23 @@ async def forward_to_nine_router(
                     except Exception as exc:  # never let tracking break the stream
                         logger.debug(f"9router usage callback failed: {exc}")
 
+        # content-length is already stripped by _HOP_BY_HOP, so restoring
+        # surrogates (which changes the body length) cannot desync the framing.
+        stream = _stream_and_close()
+        if pii_vault is not None:
+            # A surrogate spans several model tokens, so on an SSE response it
+            # arrives split across frames and has to be rejoined at the delta
+            # level; a whole JSON body is simply buffered and substituted once.
+            content_type = response.headers.get("content-type", "")
+            stream = restore_stream(
+                stream,
+                pii_vault,
+                sse="event-stream" in content_type,
+                restore_tool_args=pii_restore_tool_args,
+            )
+
         return StreamingResponse(
-            _stream_and_close(),
+            stream,
             status_code=response.status_code,
             headers=upstream_headers,
             media_type=response.headers.get("content-type", "text/event-stream"),

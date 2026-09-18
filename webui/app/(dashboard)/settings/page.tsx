@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { useConfig, useUpdateConfig } from "@/hooks/use-config";
 import { useNineRouterModels } from "@/hooks/use-nine-router-models";
-import type { ModelOverrideRule } from "@/lib/types";
+import type { ModelOverrideRule, PiiGuardMode, PiiSecretAction } from "@/lib/types";
 
 interface ModelSelectProps {
   value: string;
@@ -242,6 +242,101 @@ function ModelOverrideSection({
   );
 }
 
+interface PiiGuardSectionProps {
+  mode: PiiGuardMode;
+  onModeChange: (v: PiiGuardMode) => void;
+  secretAction: PiiSecretAction;
+  onSecretActionChange: (v: PiiSecretAction) => void;
+  restoreToolArgs: boolean;
+  onRestoreToolArgsChange: (v: boolean) => void;
+}
+
+function PiiGuardSection({
+  mode,
+  onModeChange,
+  secretAction,
+  onSecretActionChange,
+  restoreToolArgs,
+  onRestoreToolArgsChange,
+}: PiiGuardSectionProps) {
+  const enabled = mode !== "off";
+
+  return (
+    <div className="glass-panel rounded-3xl p-8 md:p-10 group relative overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+      <div className="flex items-start justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-on-surface">PII Guardrail</h3>
+          <p className="text-sm text-on-surface-variant mt-1 max-w-lg">
+            Replaces personal data (email, phone, ID, card, IP) with placeholders before a request
+            leaves the gateway, and puts the real values back in the response. Takes effect
+            immediately — no restart. Turn this off first if replies or tool calls start looking
+            wrong.
+          </p>
+        </div>
+        <Switch checked={enabled} onCheckedChange={(v) => onModeChange(v ? "tokenize" : "off")} />
+      </div>
+
+      {enabled && (
+        <div className="mt-6 space-y-5">
+          <div className="space-y-2">
+            <Label>Mode</Label>
+            <p className="text-xs text-on-surface-variant">
+              Tokenize replaces values and restores them on the way back, so the user sees the
+              original text. Redact strips them permanently — nothing is restored.
+            </p>
+            <Select value={mode} onValueChange={(v) => onModeChange(v as PiiGuardMode)}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="tokenize">Tokenize — restore original on response</SelectItem>
+                <SelectItem value="redact">Redact — remove permanently</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Credentials in requests</Label>
+            <p className="text-xs text-on-surface-variant">
+              Block rejects the request with a 400. Use it only if you can live with a false
+              positive stopping a request — library source and documentation do contain things that
+              look like keys.
+            </p>
+            <Select
+              value={secretAction}
+              onValueChange={(v) => onSecretActionChange(v as PiiSecretAction)}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="warn">Warn — log and forward</SelectItem>
+                <SelectItem value="block">Block — reject with 400</SelectItem>
+                <SelectItem value="off">Off — do not scan</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {mode === "tokenize" && (
+            <div className="flex items-start justify-between gap-6 pt-1">
+              <div>
+                <Label>Restore inside tool arguments</Label>
+                <p className="text-xs text-on-surface-variant mt-1 max-w-lg">
+                  Without this, a tool runs against the placeholder instead of the real value. Turn
+                  it off only if tool calls come back malformed — chat text keeps being restored
+                  either way.
+                </p>
+              </div>
+              <Switch checked={restoreToolArgs} onCheckedChange={onRestoreToolArgsChange} />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { data: config, isLoading, refetch } = useConfig();
   const { data: modelsData } = useNineRouterModels();
@@ -250,6 +345,9 @@ export default function SettingsPage() {
   const [enableNineRouterModelOverride, setEnableNineRouterModelOverride] = useState(false);
   const [nineRouterOverrideRules, setNineRouterOverrideRules] = useState<ModelOverrideRule[]>([]);
   const [nineRouterDefaultModel, setNineRouterDefaultModel] = useState("auto");
+  const [piiGuardMode, setPiiGuardMode] = useState<PiiGuardMode>("off");
+  const [piiSecretAction, setPiiSecretAction] = useState<PiiSecretAction>("warn");
+  const [piiRestoreToolArgs, setPiiRestoreToolArgs] = useState(true);
   const [dirty, setDirty] = useState(false);
 
   const modelIds = modelsData?.models ?? [];
@@ -259,6 +357,9 @@ export default function SettingsPage() {
       setEnableNineRouterModelOverride(config.enable_nine_router_model_override ?? false);
       setNineRouterOverrideRules(config.nine_router_model_override_rules ?? []);
       setNineRouterDefaultModel(config.nine_router_model_override_default ?? "auto");
+      setPiiGuardMode(config.pii_guard_mode ?? "off");
+      setPiiSecretAction(config.pii_secret_action ?? "warn");
+      setPiiRestoreToolArgs(config.pii_restore_tool_args ?? true);
       setDirty(false);
     }
   }, [config]);
@@ -275,6 +376,9 @@ export default function SettingsPage() {
       enable_nine_router_model_override: enableNineRouterModelOverride,
       nine_router_model_override_rules: nineRouterOverrideRules,
       nine_router_model_override_default: nineRouterDefaultModel,
+      pii_guard_mode: piiGuardMode,
+      pii_secret_action: piiSecretAction,
+      pii_restore_tool_args: piiRestoreToolArgs,
     });
     setDirty(false);
   }
@@ -312,6 +416,15 @@ export default function SettingsPage() {
         defaultModel={nineRouterDefaultModel}
         onDefaultModelChange={handleChange(setNineRouterDefaultModel)}
         modelIds={modelIds}
+      />
+
+      <PiiGuardSection
+        mode={piiGuardMode}
+        onModeChange={handleChange(setPiiGuardMode)}
+        secretAction={piiSecretAction}
+        onSecretActionChange={handleChange(setPiiSecretAction)}
+        restoreToolArgs={piiRestoreToolArgs}
+        onRestoreToolArgsChange={handleChange(setPiiRestoreToolArgs)}
       />
 
       {updateConfig.isSuccess && !dirty && (

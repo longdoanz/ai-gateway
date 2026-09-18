@@ -1,4 +1,6 @@
 from datetime import datetime
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -140,12 +142,20 @@ class SystemConfigResponse(BaseModel):
     enable_nine_router_model_override: bool = False
     nine_router_model_override_rules: list[ModelOverrideRule] = []
     nine_router_model_override_default: str = "auto"
+    # PII guardrail. Exposed on the dashboard so a misbehaving guard can be
+    # switched off while traffic is flowing, without redeploying.
+    pii_guard_mode: Literal["off", "tokenize", "redact"] = "off"
+    pii_secret_action: Literal["off", "warn", "block"] = "warn"
+    pii_restore_tool_args: bool = True
 
 
 class SystemConfigUpdate(BaseModel):
     enable_nine_router_model_override: bool | None = None
     nine_router_model_override_rules: list[ModelOverrideRule] | None = None
     nine_router_model_override_default: str | None = None
+    pii_guard_mode: Literal["off", "tokenize", "redact"] | None = None
+    pii_secret_action: Literal["off", "warn", "block"] | None = None
+    pii_restore_tool_args: bool | None = None
 
 
 # --- Import ---

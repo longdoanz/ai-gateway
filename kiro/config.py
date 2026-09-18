@@ -563,6 +563,67 @@ OIDC_CLIENT_SECRET: str = os.getenv("OIDC_CLIENT_SECRET", "")
 OIDC_ISSUER_URL: str = os.getenv("OIDC_ISSUER_URL", "http://localhost:18000")
 
 # ==================================================================================================
+# PII Guardrail
+# ==================================================================================================
+
+# How outbound prompts are scrubbed before they reach 9router:
+# - "off"      (default): no scanning at all, zero cost on the request path
+# - "tokenize": PII is replaced by a stable surrogate (<<EMAIL_1>>) and restored
+#               in the response, so the client sees the original values back
+# - "redact":   PII is replaced by a type-only marker (<<EMAIL>>) and never
+#               restored — cheaper, and the only safe mode if you also want the
+#               originals kept out of upstream logs permanently
+#
+# Default "off" so existing deployments are byte-for-byte unaffected until the
+# policy is deliberately turned on.
+PII_GUARD_MODE: str = os.getenv("PII_GUARD_MODE", "off").lower()
+
+# Entity types to scrub. CMND (9-digit national ID) is deliberately absent from
+# the default set: bare 9-digit numbers are extremely common in source code,
+# logs and timestamps, so enabling it on a coding gateway costs prompt quality
+# for very little privacy gain. Add it explicitly if your traffic warrants it.
+_DEFAULT_PII_ENTITIES = "EMAIL,PHONE_VN,CCCD,CARD,IPV4,IBAN"
+PII_ENTITIES: frozenset = frozenset(
+    e.strip().upper()
+    for e in os.getenv("PII_ENTITIES", _DEFAULT_PII_ENTITIES).split(",")
+    if e.strip()
+)
+
+# What to do when a request carries credential material (API keys, private
+# keys, JWTs):
+# - "warn"  (default): log the entity types and forward anyway
+# - "block":           reject with 400
+# - "off":             do not scan for secrets at all
+#
+# Default is "warn", not "block", on measured evidence: scanning 7258 files of
+# this repo, the credential patterns fire overwhelmingly on material a coding
+# agent legitimately reads — PEM headers quoted in the `cryptography` and
+# `ecdsa` sources, placeholder keys in 9router's integration docs, JWT strings
+# inside `python-jose`. Second-stage validators remove most of those, but
+# blocking is still a hard failure on a false positive, so it stays opt-in.
+#
+# When set to "block" the rejection is a deterministic client error: it returns
+# 400 and must never be retried or put a route into cooldown.
+PII_SECRET_ACTION: str = os.getenv("PII_SECRET_ACTION", "warn").lower()
+
+# Whether restored surrogates cover streamed tool-call arguments (OpenAI's
+# tool_calls[].function.arguments, Anthropic's partial_json) in addition to
+# model prose. This is the newest and riskiest restore surface: a tool
+# argument fragment is spliced into a JSON string literal the client will
+# parse and execute, so a bug there corrupts a tool call instead of just
+# chat text. Default true (protection covers the whole response); set false
+# to turn off restoring this one surface without disabling tokenize mode
+# entirely — the client then sees the literal surrogate (e.g. <<EMAIL_1>>)
+# inside tool arguments while prose restoration keeps working normally.
+PII_RESTORE_TOOL_ARGS: bool = os.getenv("PII_RESTORE_TOOL_ARGS", "true").lower() in ("true", "1", "yes")
+
+
+def pii_guard_enabled() -> bool:
+    """True when outbound payloads should be scanned."""
+    return PII_GUARD_MODE in ("tokenize", "redact")
+
+
+# ==================================================================================================
 # Kiro IDE Emulation Constants
 # ==================================================================================================
 

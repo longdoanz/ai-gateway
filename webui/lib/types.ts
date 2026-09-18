@@ -129,16 +129,25 @@ export interface ModelOverrideRule {
   to: string | string[];
 }
 
+export type PiiGuardMode = "off" | "tokenize" | "redact";
+export type PiiSecretAction = "off" | "warn" | "block";
+
 export interface SystemConfigResponse {
   enable_nine_router_model_override: boolean;
   nine_router_model_override_rules: ModelOverrideRule[];
   nine_router_model_override_default: string;
+  pii_guard_mode: PiiGuardMode;
+  pii_secret_action: PiiSecretAction;
+  pii_restore_tool_args: boolean;
 }
 
 export interface SystemConfigUpdate {
   enable_nine_router_model_override?: boolean;
   nine_router_model_override_rules?: ModelOverrideRule[];
   nine_router_model_override_default?: string;
+  pii_guard_mode?: PiiGuardMode;
+  pii_secret_action?: PiiSecretAction;
+  pii_restore_tool_args?: boolean;
 }
 
 // --- Import ---
