@@ -149,13 +149,14 @@ async def health():
 async def get_models(request: Request):
     """
     Return list of available models.
-    
-    Models are loaded at startup (blocking) and cached.
-    This endpoint returns the cached list.
-    
+
+    Sourced live from 9router's own /v1/models (short in-process TTL cache,
+    see fetch_nine_router_models) — the sole upstream, so this always
+    reflects what 9router can actually route to.
+
     Args:
         request: FastAPI Request for accessing app.state
-    
+
     Returns:
         ModelList with available models in consistent format (with dots)
     """
@@ -173,8 +174,7 @@ async def get_models(request: Request):
         return ModelList(object="list", data=models)
 
     from kiro.nine_router_client import fetch_nine_router_models
-    from kiro.config import FALLBACK_MODELS
-    model_ids = await fetch_nine_router_models() or [m["modelId"] for m in FALLBACK_MODELS]
+    model_ids = await fetch_nine_router_models()
     models = [OpenAIModel(id=mid, object="model", created=0, owned_by="anthropic") for mid in model_ids]
     return ModelList(object="list", data=models)
 

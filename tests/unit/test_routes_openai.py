@@ -333,24 +333,27 @@ class TestModelsEndpoint:
     
     def test_models_contains_available_models(self, test_client, valid_proxy_api_key):
         """
-        What it does: Verifies all configured models are returned.
-        Purpose: Ensure model list is complete.
+        What it does: Verifies the model list is sourced from 9router's own
+        catalog (the sole upstream — no static fallback list anymore).
+        Purpose: Ensure /v1/models reflects what 9router can actually route to.
         """
-        print("Action: GET /v1/models with valid auth...")
-        response = test_client.get(
-            "/v1/models",
-            headers={"Authorization": f"Bearer {valid_proxy_api_key}"}
-        )
-        
+        print("Action: GET /v1/models with valid auth, 9router catalog mocked...")
+        with patch(
+            "kiro.nine_router_client.fetch_nine_router_models",
+            new=AsyncMock(return_value=["kiro/claude-sonnet-4", "openai/gpt-5"]),
+        ):
+            response = test_client.get(
+                "/v1/models",
+                headers={"Authorization": f"Bearer {valid_proxy_api_key}"}
+            )
+
         print(f"Result: {response.json()}")
         assert response.status_code == 200
-        
+
         model_ids = [m["id"] for m in response.json()["data"]]
         print(f"Model IDs: {model_ids}")
-        
-        # At minimum, hidden models should be present
-        # (even if Kiro API cache is empty)
-        assert len(model_ids) >= 1, "Expected at least one model (hidden models)"
+
+        assert model_ids == ["kiro/claude-sonnet-4", "openai/gpt-5"]
     
     def test_models_format_is_openai_compatible(self, test_client, valid_proxy_api_key):
         """
