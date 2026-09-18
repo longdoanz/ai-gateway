@@ -108,21 +108,19 @@ class DailyUsage(BaseModel):
     output_tokens: int
 
 
-class CreditTrendPoint(BaseModel):
+class ActiveUsersPoint(BaseModel):
     date: str
-    credits_used: int
+    count: int
 
 
 class OverviewResponse(BaseModel):
     total_input_tokens: int
     total_output_tokens: int
-    total_credits_used: int
-    total_credits_limit: int
     total_users: int
     active_users: int
     active_keys: int
     daily_usage: list[DailyUsage]
-    credit_trend: list[CreditTrendPoint] = []
+    active_users_daily: list[ActiveUsersPoint] = []
     total_gateway_users: int = 0
     active_gateway_users: int = 0
     gateway_input_tokens: int = 0
@@ -226,26 +224,6 @@ class AnalyticsResponse(BaseModel):
     top_users: list[TopUser]
     token_share: list[TokenShare]
     user_daily_series: list[UserDailySeries] = []
-
-
-# --- Kiro User Credit Usage ---
-
-class KiroUserCreditUsage(BaseModel):
-    kiro_user_id: str
-    display_name: str
-    username: str | None = None
-    email: str | None = None
-    used_credit: int
-    quota: int
-    remaining: int
-    remaining_pct: float
-    shared_input_tokens: int = 0
-    shared_output_tokens: int = 0
-
-
-class KiroUserCreditUsageResponse(BaseModel):
-    month: str
-    users: list[KiroUserCreditUsage]
 
 
 # --- GatewayKey ---

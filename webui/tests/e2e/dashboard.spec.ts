@@ -61,22 +61,20 @@ test.describe("Screen 1: Monthly Overview Dashboard", () => {
     await page.goto("/");
     const main = page.locator("main");
     await expect(main.locator("text=System Overview")).toBeVisible({ timeout: 10000 });
-    await expect(main.locator("text=Real-time credit consumption metrics")).toBeVisible();
   });
 
   test("should display KPI cards", async ({ page }) => {
     await page.goto("/");
     const main = page.locator("main");
-    await expect(main.locator("text=Total Monthly Credits Consumed")).toBeVisible({ timeout: 10000 });
+    await expect(main.locator("text=Total Users")).toBeVisible({ timeout: 10000 });
     await expect(main.locator("text=Active Users")).toBeVisible();
-    await expect(main.locator("text=Remaining Budget")).toBeVisible();
+    await expect(main.locator("text=Gateway Key Users")).toBeVisible();
   });
 
-  test("should display consumption trend chart section", async ({ page }) => {
+  test("should display active users trend chart section", async ({ page }) => {
     await page.goto("/");
     const main = page.locator("main");
-    await expect(main.locator("text=Credit Consumption Trend")).toBeVisible({ timeout: 10000 });
-    await expect(main.locator("text=Daily usage over last 30 days")).toBeVisible();
+    await expect(main.locator("text=Active Users Trend")).toBeVisible({ timeout: 10000 });
   });
 
   test("should display Active API Keys card", async ({ page }) => {
@@ -98,8 +96,7 @@ test.describe("Screen 2: Usage Analytics", () => {
   test("should display analytics page with chart", async ({ page }) => {
     await page.goto("/analytics");
     const main = page.locator("main");
-    await expect(main.locator("h1")).toBeVisible({ timeout: 10000 });
-    await expect(main.getByText("User Credit Consumption")).toBeVisible();
+    await expect(main.getByText("Top Users")).toBeVisible({ timeout: 10000 });
   });
 });
 

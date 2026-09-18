@@ -1,26 +1,20 @@
 "use client";
 
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { CreditTrendPoint } from "@/lib/types";
-
-function formatCredits(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toLocaleString();
-}
+import type { ActiveUsersPoint } from "@/lib/types";
 
 interface Props {
-  data: CreditTrendPoint[];
+  data: ActiveUsersPoint[];
 }
 
-export function AreaChartCreditTrend({ data }: Props) {
+export function AreaChartActiveUsers({ data }: Props) {
   return (
     <ResponsiveContainer width="100%" height="100%">
       <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
         <defs>
-          <linearGradient id="creditGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.2} />
-            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+          <linearGradient id="activeUsersGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.25} />
+            <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0} />
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="#e4e1ee" vertical={false} />
@@ -34,7 +28,8 @@ export function AreaChartCreditTrend({ data }: Props) {
           tick={{ fontSize: 12, fill: "#464555" }}
           tickLine={false}
           axisLine={false}
-          tickFormatter={(v) => formatCredits(v)}
+          allowDecimals={false}
+          width={32}
         />
         <Tooltip
           contentStyle={{
@@ -44,14 +39,14 @@ export function AreaChartCreditTrend({ data }: Props) {
             borderRadius: "12px",
             boxShadow: "0 8px 30px rgba(0,0,0,0.05)",
           }}
-          formatter={(value) => [formatCredits(Number(value ?? 0)), "Credits Used"]}
+          formatter={(value) => [Number(value ?? 0).toLocaleString(), "Active Users"]}
         />
         <Area
           type="monotone"
-          dataKey="credits_used"
-          stroke="#f59e0b"
+          dataKey="count"
+          stroke="#0ea5e9"
           strokeWidth={2}
-          fill="url(#creditGradient)"
+          fill="url(#activeUsersGradient)"
         />
       </AreaChart>
     </ResponsiveContainer>

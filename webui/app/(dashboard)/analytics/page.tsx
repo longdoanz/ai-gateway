@@ -9,10 +9,8 @@ import { DonutChartShare } from "@/components/charts/donut-chart-share";
 import { GatewayKeyUsageTable } from "@/components/charts/gateway-key-usage-table";
 import { LineChartUserDaily } from "@/components/charts/line-chart-user-daily";
 
-// DEPRECATED: Kiro credit usage reporting has moved to 9router. See NineRouterUsageBanner
-// below, which replaces the old KiroCreditUsageTable section. Kept the hook/component
-// (hooks/use-kiro-credit-usage.ts, components/charts/kiro-credit-usage-table.tsx) intact
-// for the cleanup PR to remove once nothing references them.
+// Kiro credit usage reporting has moved to 9router. NineRouterUsageBanner below
+// replaces the old KiroCreditUsageTable section (hook/component/endpoint removed).
 const NINE_ROUTER_ENABLED = process.env.NEXT_PUBLIC_NINE_ROUTER_ENABLED === "true";
 const NINE_ROUTER_URL = (process.env.NEXT_PUBLIC_NINE_ROUTER_URL || "").replace(/\/+$/, "");
 

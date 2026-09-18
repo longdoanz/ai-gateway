@@ -6,10 +6,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiro.dashboard.deps import get_current_user
-from kiro.dashboard.schemas import CreditTrendPoint, DailyUsage, OverviewResponse
+from kiro.dashboard.schemas import ActiveUsersPoint, DailyUsage, OverviewResponse
 from kiro.db.engine import get_session
 from kiro.db.models import ApiKey, DailyUsage as DailyUsageModel, GatewayKey, GatewayKeyDailyUsage, GatewayKeyUsage, KeyUsage, KiroUserMapping, User
-from kiro.db.repositories import get_credit_snapshots
 
 router = APIRouter(prefix="/overview", tags=["overview"])
 
@@ -58,26 +57,6 @@ async def get_overview(
     session: AsyncSession = Depends(get_session),
 ):
     current_month = datetime.now(timezone.utc).strftime("%Y-%m")
-
-    # Total credits used & limit this month (MAX per user to avoid double-counting)
-    per_user_subq = (
-        select(
-            ApiKey.kiro_user_id,
-            func.max(KeyUsage.current_usage).label("current_usage"),
-            func.max(KeyUsage.usage_limit).label("usage_limit"),
-        )
-        .join(ApiKey, ApiKey.id == KeyUsage.key_id)
-        .where(KeyUsage.month == current_month, ApiKey.kiro_user_id.isnot(None))
-        .group_by(ApiKey.kiro_user_id)
-        .subquery()
-    )
-    usage_result = await session.execute(
-        select(
-            func.coalesce(func.sum(per_user_subq.c.current_usage), 0),
-            func.coalesce(func.sum(per_user_subq.c.usage_limit), 0),
-        )
-    )
-    total_used, total_limit = usage_result.one()
 
     from kiro.db.repositories import normalize_kiro_user_id
 
@@ -258,26 +237,60 @@ async def get_overview(
     )
     gw_input_total, gw_output_total = gw_token_result.one()
 
-    # Credit trend: daily deltas from snapshots
-    snapshot_start = (start_date - timedelta(days=1)).isoformat()
-    snapshots = await get_credit_snapshots(session, snapshot_start, end_str)
-    credit_trend: list[CreditTrendPoint] = []
-    for i in range(1, len(snapshots)):
-        prev_date, prev_total = snapshots[i - 1]
-        cur_date, cur_total = snapshots[i]
-        delta = max(0, cur_total - prev_total)
-        credit_trend.append(CreditTrendPoint(date=cur_date, credits_used=delta))
+    # Active users per day: union of Kiro-pool and gateway-key activity, keyed by
+    # the same dedup identity used for the monthly active_users count above.
+    from collections import defaultdict
+
+    active_users_daily_map: dict[str, set[str]] = defaultdict(set)
+
+    active_kiro_daily_rows = (await session.execute(
+        select(DailyUsageModel.date, KiroUserMapping.kiro_user_id, KiroUserMapping.username, KiroUserMapping.email)
+        .join(ApiKey, ApiKey.id == DailyUsageModel.key_id)
+        .join(KiroUserMapping, KiroUserMapping.kiro_user_id == ApiKey.kiro_user_id)
+        .where(
+            DailyUsageModel.date >= start_str,
+            DailyUsageModel.date <= end_str,
+            (DailyUsageModel.input_tokens + DailyUsageModel.output_tokens) > 0,
+            KiroUserMapping.is_active == True,
+        )
+        .distinct()
+    )).all()
+    for row in active_kiro_daily_rows:
+        if (k := _dedup_key(row.email, row.username, row.kiro_user_id)):
+            active_users_daily_map[row.date].add(k)
+
+    active_gw_daily_rows = (await session.execute(
+        select(GatewayKeyDailyUsage.date, User.username, User.email)
+        .join(GatewayKey, GatewayKey.id == GatewayKeyDailyUsage.gateway_key_id)
+        .join(User, User.id == GatewayKey.user_id)
+        .where(
+            GatewayKeyDailyUsage.date >= start_str,
+            GatewayKeyDailyUsage.date <= end_str,
+            (GatewayKeyDailyUsage.input_tokens + GatewayKeyDailyUsage.output_tokens) > 0,
+            User.is_active == True,
+        )
+        .distinct()
+    )).all()
+    for row in active_gw_daily_rows:
+        if (k := _dedup_key(row.email, row.username)):
+            active_users_daily_map[row.date].add(k)
+
+    active_users_daily = [
+        ActiveUsersPoint(
+            date=(start_date + timedelta(days=i)).isoformat(),
+            count=len(active_users_daily_map.get((start_date + timedelta(days=i)).isoformat(), set())),
+        )
+        for i in range((today - start_date).days + 1)
+    ]
 
     return OverviewResponse(
         total_input_tokens=int(total_input),
         total_output_tokens=int(total_output),
-        total_credits_used=int(total_used),
-        total_credits_limit=int(total_limit),
         total_users=total_users,
         active_users=active_users,
         active_keys=active_keys,
         daily_usage=daily_usage,
-        credit_trend=credit_trend,
+        active_users_daily=active_users_daily,
         total_gateway_users=len(total_gw_keys),
         active_gateway_users=len(active_gw_keys),
         gateway_input_tokens=int(gw_input_total),

@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 from datetime import datetime, timezone
-from kiro.usage.sync_worker import sync_usage_limits, _snapshot_daily_credits
+from kiro.usage.sync_worker import sync_usage_limits
 
 class _FakeResult:
     def __init__(self, rows):
@@ -31,8 +31,7 @@ async def test_sync_usage_limits_optimizes_calls():
          patch("kiro.usage.sync_worker.upsert_usage_limits") as mock_upsert_limits, \
          patch("kiro.usage.sync_worker.upsert_kiro_user_mappings") as mock_upsert_mappings, \
          patch("kiro.usage.sync_worker.update_api_key") as mock_update_key, \
-         patch("kiro.usage.sync_worker.merge_duplicate_keys_for_user") as mock_merge, \
-         patch("kiro.usage.sync_worker._snapshot_daily_credits") as mock_snapshot:
+         patch("kiro.usage.sync_worker.merge_duplicate_keys_for_user") as mock_merge:
         
         # Configure mock_factory to return a mock_session context manager
         mock_factory.return_value.__aenter__.return_value = mock_session
@@ -60,23 +59,3 @@ async def test_sync_usage_limits_optimizes_calls():
         # One for initial fetch, plus one for each sync (2 syncs)
         # Total __aenter__ calls: 3
         assert mock_factory.return_value.__aenter__.call_count == 3
-
-@pytest.mark.asyncio
-async def test_snapshot_daily_credits_isolates_transactions():
-    row1 = MagicMock(kiro_user_id="user1", current_usage=500)
-    row2 = MagicMock(kiro_user_id="user2", current_usage=600)
-    
-    mock_session = AsyncMock()
-    mock_session.execute.return_value = _FakeResult([row1, row2])
-
-    with patch("kiro.usage.sync_worker.async_session_factory") as mock_factory, \
-         patch("kiro.usage.sync_worker.upsert_daily_credit_snapshot") as mock_upsert:
-        
-        mock_factory.return_value.__aenter__.return_value = mock_session
-        
-        await _snapshot_daily_credits()
-        
-        # One for initial fetch, one for each user snapshot (2 users)
-        # Total __aenter__ calls: 3
-        assert mock_factory.return_value.__aenter__.call_count == 3
-        assert mock_upsert.call_count == 2

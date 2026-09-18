@@ -8,11 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from kiro.dashboard.deps import require_admin
 from kiro.dashboard.schemas import (
     AnalyticsResponse, TokenShare, DailySeries, TopUser, UserTokenUsage, UserDailySeries,
-    KiroUserCreditUsage, KiroUserCreditUsageResponse,
     GatewayKeyDailySeries, GatewayKeyUserUsage, GatewayKeyAnalyticsResponse,
 )
 from kiro.db.engine import get_session
-from kiro.db.models import ApiKey, DailyUsage, FallbackUsage, GatewayKey, GatewayKeyDailyUsage, GatewayKeyUsage, KeyUsage, KiroUserMapping, User
+from kiro.db.models import ApiKey, DailyUsage, GatewayKey, GatewayKeyDailyUsage, GatewayKeyUsage, KiroUserMapping, User
 
 router = APIRouter(prefix="/overview", tags=["analytics"])
 
@@ -374,102 +373,6 @@ async def get_analytics(
     session: AsyncSession = Depends(get_session),
 ) -> AnalyticsResponse:
     return await _aggregate_analytics(session, range)
-
-
-async def _aggregate_kiro_credit_usage(
-    session: AsyncSession, month: str
-) -> KiroUserCreditUsageResponse:
-    from kiro.db.repositories import normalize_kiro_user_id
-
-    def _display_name(kiro_uid: str, username: str | None, email: str | None) -> str:
-        if username:
-            return username
-        if email:
-            return email
-        normalized = normalize_kiro_user_id(kiro_uid)
-        return normalized or kiro_uid
-
-    usage_rows = (await session.execute(
-        select(
-            ApiKey.kiro_user_id,
-            func.coalesce(func.max(KeyUsage.current_usage), 0).label("used_credit"),
-            func.coalesce(func.max(KeyUsage.usage_limit), 0).label("quota"),
-        )
-        .outerjoin(KeyUsage, (KeyUsage.key_id == ApiKey.id) & (KeyUsage.month == month))
-        .where(ApiKey.kiro_user_id.isnot(None), ApiKey.is_active == True, ApiKey.is_system == False)
-        .group_by(ApiKey.kiro_user_id)
-    )).all()
-
-    usage_map: dict[str, dict] = {}
-    for row in usage_rows:
-        usage_map[row.kiro_user_id] = {
-            "used_credit": row.used_credit,
-            "quota": row.quota,
-        }
-
-    # Shared usage: tokens consumed by fallback keys on behalf of this user's keys
-    fallback_subq = (
-        select(
-            ApiKey.kiro_user_id,
-            func.coalesce(func.sum(FallbackUsage.input_tokens), 0).label("shared_input"),
-            func.coalesce(func.sum(FallbackUsage.output_tokens), 0).label("shared_output"),
-        )
-        .join(FallbackUsage, FallbackUsage.original_key_id == ApiKey.id)
-        .where(FallbackUsage.month == month, ApiKey.kiro_user_id.isnot(None), ApiKey.is_system == False)
-        .group_by(ApiKey.kiro_user_id)
-    )
-    fallback_rows = (await session.execute(fallback_subq)).all()
-
-    fallback_map: dict[str, tuple[int, int]] = {}
-    for row in fallback_rows:
-        fallback_map[row.kiro_user_id] = (row.shared_input, row.shared_output)
-
-    mapping_rows = (await session.execute(
-        select(KiroUserMapping.kiro_user_id, KiroUserMapping.username, KiroUserMapping.email)
-    )).all()
-    info_map: dict[str, tuple[str | None, str | None]] = {}
-    for r in mapping_rows:
-        info_map[r.kiro_user_id] = (r.username, r.email)
-        normalized = normalize_kiro_user_id(r.kiro_user_id)
-        if normalized != r.kiro_user_id:
-            info_map[normalized] = (r.username, r.email)
-
-    users = []
-    for kiro_uid, data in usage_map.items():
-        total_used = data["used_credit"]
-        quota = data["quota"]
-        shared_in, shared_out = fallback_map.get(kiro_uid, (0, 0))
-        remaining = quota - total_used
-        remaining_pct = round(remaining / quota * 100, 1) if quota > 0 else 0.0
-        normalized = normalize_kiro_user_id(kiro_uid)
-        username, email = info_map.get(kiro_uid) or info_map.get(normalized) or (None, None)
-        users.append(KiroUserCreditUsage(
-            kiro_user_id=kiro_uid,
-            display_name=_display_name(kiro_uid, username, email),
-            username=username,
-            email=email,
-            used_credit=total_used,
-            quota=quota,
-            remaining=remaining,
-            remaining_pct=remaining_pct,
-            shared_input_tokens=shared_in,
-            shared_output_tokens=shared_out,
-        ))
-
-    users.sort(key=lambda u: u.used_credit, reverse=True)
-
-    return KiroUserCreditUsageResponse(month=month, users=users)
-
-
-@router.get("/analytics/kiro-credit-usage", response_model=KiroUserCreditUsageResponse)
-async def get_kiro_credit_usage(
-    month: str = Query(default="", pattern=r"^(\d{4}-\d{2})?$"),
-    caller: User = Depends(require_admin),
-    session: AsyncSession = Depends(get_session),
-) -> KiroUserCreditUsageResponse:
-    if not month:
-        month = dt.now(timezone.utc).strftime("%Y-%m")
-    return await _aggregate_kiro_credit_usage(session, month)
 
 
 @router.get("/analytics/gateway-key-usage", response_model=GatewayKeyAnalyticsResponse)

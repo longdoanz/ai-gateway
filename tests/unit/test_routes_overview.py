@@ -50,8 +50,7 @@ async def _call_overview(session: AsyncMock, today: date, granularity: str = "da
 
     fake_user = MagicMock(id=1, username="admin", role="admin")
 
-    with _freeze_clock(today), \
-         patch("kiro.dashboard.routes_overview.get_credit_snapshots", new_callable=AsyncMock, return_value=[]):
+    with _freeze_clock(today):
         return await get_overview(granularity, caller=fake_user, session=session)
 
 
@@ -66,17 +65,18 @@ async def test_merges_gw_system_into_daily_usage():
     today = date(2026, 7, 16)
 
     session.execute = AsyncMock(side_effect=[
-        _one(0, 0),                                                               # 1  — per_user_subq .one()
-        _all(3),                                                                  # 2  — active_keys .scalar_one()
-        _all(),                                                                   # 3  — active_kiro_rows .all()
-        _all(),                                                                   # 4  — active_gw_rows .all()
-        _all(),                                                                   # 5  — total_kiro_rows .all()
-        _all(),                                                                   # 6  — total_gw_rows .all()
-        _all(_row(date="2026-07-16", input_tokens=100, output_tokens=50)),        # 7  — daily_rows .all()
-        _all(_row(date="2026-07-16", input_tokens=40, output_tokens=10)),        # 8  — gw_system_daily_rows .all()
-        _one(100, 50),                                                            # 9  — own_token_result .one()
-        _one(40, 10),                                                            # 10 — gw_sys_token_result .one()
-        _one(40, 10),                                                            # 11 — gw_token_result .one()
+        _all(3),                                                                  # 1  — active_keys .scalar_one()
+        _all(),                                                                   # 2  — active_kiro_rows .all()
+        _all(),                                                                   # 3  — active_gw_rows .all()
+        _all(),                                                                   # 4  — total_kiro_rows .all()
+        _all(),                                                                   # 5  — total_gw_rows .all()
+        _all(_row(date="2026-07-16", input_tokens=100, output_tokens=50)),        # 6  — daily_rows .all()
+        _all(_row(date="2026-07-16", input_tokens=40, output_tokens=10)),        # 7  — gw_system_daily_rows .all()
+        _one(100, 50),                                                            # 8  — own_token_result .one()
+        _one(40, 10),                                                            # 9  — gw_sys_token_result .one()
+        _one(40, 10),                                                            # 10 — gw_token_result .one()
+        _all(),                                                                   # 11 — active_kiro_daily_rows .all()
+        _all(),                                                                   # 12 — active_gw_daily_rows .all()
     ])
 
     result = await _call_overview(session, today)
@@ -95,14 +95,14 @@ async def test_no_gateway_data_still_works():
     today = date(2026, 7, 16)
 
     session.execute = AsyncMock(side_effect=[
-        _one(0, 0),                                                               # 1
-        _all(3),                                                                  # 2
-        _all(), _all(), _all(), _all(),                                           # 3-6
-        _all(_row(date="2026-07-16", input_tokens=100, output_tokens=50)),        # 7
-        _all(),                                                                   # 8  — gw_system_daily EMPTY
-        _one(100, 50),                                                            # 9
+        _all(3),                                                                  # 1
+        _all(), _all(), _all(), _all(),                                           # 2-5
+        _all(_row(date="2026-07-16", input_tokens=100, output_tokens=50)),        # 6
+        _all(),                                                                   # 7  — gw_system_daily EMPTY
+        _one(100, 50),                                                            # 8
+        _one(0, 0),                                                              # 9
         _one(0, 0),                                                              # 10
-        _one(0, 0),                                                              # 11
+        _all(), _all(),                                                          # 11-12 — active_*_daily_rows
     ])
 
     result = await _call_overview(session, today)
@@ -120,20 +120,20 @@ async def test_weekly_granularity_merges_gw():
     today = date(2026, 7, 16)  # Thursday
 
     session.execute = AsyncMock(side_effect=[
-        _one(0, 0),                                                               # 1
-        _all(3),                                                                  # 2
-        _all(), _all(), _all(), _all(),                                           # 3-6
+        _all(3),                                                                  # 1
+        _all(), _all(), _all(), _all(),                                           # 2-5
         _all(
             _row(date="2026-07-13", input_tokens=50, output_tokens=20),
             _row(date="2026-07-14", input_tokens=60, output_tokens=30),
-        ),                                                                        # 7
+        ),                                                                        # 6
         _all(
             _row(date="2026-07-13", input_tokens=10, output_tokens=5),
             _row(date="2026-07-14", input_tokens=15, output_tokens=8),
-        ),                                                                        # 8
-        _one(110, 50),                                                            # 9
+        ),                                                                        # 7
+        _one(110, 50),                                                            # 8
+        _one(25, 13),                                                            # 9
         _one(25, 13),                                                            # 10
-        _one(25, 13),                                                            # 11
+        _all(), _all(),                                                          # 11-12 — active_*_daily_rows
     ])
 
     result = await _call_overview(session, today, "weekly")
@@ -158,14 +158,14 @@ async def test_monthly_granularity_merges_gw():
     today = date(2026, 7, 16)
 
     session.execute = AsyncMock(side_effect=[
-        _one(0, 0),                                                               # 1
-        _all(3),                                                                  # 2
-        _all(), _all(), _all(), _all(),                                           # 3-6
-        _all(_row(date="2026-07-10", input_tokens=100, output_tokens=50)),        # 7
-        _all(_row(date="2026-07-10", input_tokens=30, output_tokens=15)),        # 8
-        _one(100, 50),                                                            # 9
+        _all(3),                                                                  # 1
+        _all(), _all(), _all(), _all(),                                           # 2-5
+        _all(_row(date="2026-07-10", input_tokens=100, output_tokens=50)),        # 6
+        _all(_row(date="2026-07-10", input_tokens=30, output_tokens=15)),        # 7
+        _one(100, 50),                                                            # 8
+        _one(30, 15),                                                            # 9
         _one(30, 15),                                                            # 10
-        _one(30, 15),                                                            # 11
+        _all(), _all(),                                                          # 11-12 — active_*_daily_rows
     ])
 
     result = await _call_overview(session, today, "monthly")
@@ -191,14 +191,14 @@ async def test_disjoint_dates_no_overlap():
     today = date(2026, 7, 16)
 
     session.execute = AsyncMock(side_effect=[
-        _one(0, 0),                                                               # 1
-        _all(3),                                                                  # 2
-        _all(), _all(), _all(), _all(),                                           # 3-6
-        _all(_row(date="2026-07-10", input_tokens=100, output_tokens=50)),        # 7
-        _all(_row(date="2026-07-15", input_tokens=80, output_tokens=40)),        # 8
-        _one(100, 50),                                                            # 9
+        _all(3),                                                                  # 1
+        _all(), _all(), _all(), _all(),                                           # 2-5
+        _all(_row(date="2026-07-10", input_tokens=100, output_tokens=50)),        # 6
+        _all(_row(date="2026-07-15", input_tokens=80, output_tokens=40)),        # 7
+        _one(100, 50),                                                            # 8
+        _one(80, 40),                                                            # 9
         _one(80, 40),                                                            # 10
-        _one(80, 40),                                                            # 11
+        _all(), _all(),                                                          # 11-12 — active_*_daily_rows
     ])
 
     result = await _call_overview(session, today)

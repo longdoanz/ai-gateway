@@ -103,21 +103,19 @@ export interface DailyUsage {
   output_tokens: number;
 }
 
-export interface CreditTrendPoint {
+export interface ActiveUsersPoint {
   date: string;
-  credits_used: number;
+  count: number;
 }
 
 export interface OverviewResponse {
   total_input_tokens: number;
   total_output_tokens: number;
-  total_credits_used: number;
-  total_credits_limit: number;
   total_users: number;
   active_users: number;
   active_keys: number;
   daily_usage: DailyUsage[];
-  credit_trend: CreditTrendPoint[];
+  active_users_daily: ActiveUsersPoint[];
   total_gateway_users: number;
   active_gateway_users: number;
   gateway_input_tokens: number;
@@ -203,26 +201,6 @@ export interface AnalyticsResponse {
   top_users: TopUser[];
   token_share: TokenShare[];
   user_daily_series: UserDailySeries[];
-}
-
-// --- Kiro User Credit Usage ---
-
-export interface KiroUserCreditUsage {
-  kiro_user_id: string;
-  display_name: string;
-  username: string | null;
-  email: string | null;
-  used_credit: number;
-  quota: number;
-  remaining: number;
-  remaining_pct: number;
-  shared_input_tokens: number;
-  shared_output_tokens: number;
-}
-
-export interface KiroUserCreditUsageResponse {
-  month: string;
-  users: KiroUserCreditUsage[];
 }
 
 // --- GatewayKey ---
