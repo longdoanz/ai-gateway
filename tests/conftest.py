@@ -40,68 +40,6 @@ def event_loop():
 # Environment Fixtures
 # =============================================================================
 
-@pytest.fixture(scope="session", autouse=True)
-def setup_test_environment(tmp_path_factory):
-    """
-    CRITICAL FIXTURE: Sets up isolated test environment.
-    
-    Creates temporary credentials.json and state.json to prevent:
-    1. Tests failing when .env doesn't exist
-    2. Pollution of working directory with test files
-    
-    This fixture:
-    - Creates temporary directory for test files
-    - Creates mock credentials.json with valid test data
-    - Creates mock Kiro credentials file
-    - Patches config paths to use temporary files
-    """
-    print("🔧 Setting up isolated test environment...")
-    
-    # Create temporary directory for test files
-    tmp_dir = tmp_path_factory.mktemp("test_config")
-    
-    # Create mock Kiro credentials file (JSON format)
-    mock_kiro_creds = {
-        "accessToken": "mock_access_token_from_fixture",
-        "refreshToken": "mock_refresh_token_from_fixture",
-        "expiresAt": "2099-01-01T00:00:00.000Z",
-        "profileArn": "arn:aws:codewhisperer:us-east-1:123456789:profile/mock",
-        "region": "us-east-1"
-    }
-    mock_creds_file = tmp_dir / "mock_kiro_creds.json"
-    mock_creds_file.write_text(json.dumps(mock_kiro_creds, indent=2))
-    
-    # Create credentials.json pointing to mock file
-    credentials_data = [
-        {
-            "type": "json",
-            "path": str(mock_creds_file),
-            "enabled": True
-        }
-    ]
-    creds_file = tmp_dir / "credentials.json"
-    creds_file.write_text(json.dumps(credentials_data, indent=2))
-    
-    # Patch config paths to use temporary files
-    import kiro.config
-    original_creds_file = kiro.config.ACCOUNTS_CONFIG_FILE
-    original_state_file = kiro.config.ACCOUNTS_STATE_FILE
-
-    kiro.config.ACCOUNTS_CONFIG_FILE = str(creds_file)
-    kiro.config.ACCOUNTS_STATE_FILE = str(tmp_dir / "state.json")
-
-    print(f"✅ Test credentials: {creds_file}")
-    print(f"✅ Test state: {tmp_dir / 'state.json'}")
-
-    yield
-
-    # Restore original paths
-    kiro.config.ACCOUNTS_CONFIG_FILE = original_creds_file
-    kiro.config.ACCOUNTS_STATE_FILE = original_state_file
-
-    print("🧹 Test environment cleaned up")
-
-
 @pytest.fixture
 def mock_env_vars(monkeypatch):
     """
@@ -422,7 +360,6 @@ def block_all_network_calls():
     mock_token_response.raise_for_status = Mock()
 
     # Mock response for ListAvailableModels
-    # Used by AccountManager._initialize_account()
     mock_models_response = AsyncMock(spec=httpx.Response)
     mock_models_response.status_code = 200
     mock_models_response.json.return_value = {
@@ -499,7 +436,6 @@ def block_all_network_calls():
         patch('kiro.auth.httpx.AsyncClient', return_value=mock_async_client),
         patch('kiro.http_client.httpx.AsyncClient', return_value=mock_async_client),
         patch('kiro.streaming_openai.httpx.AsyncClient', return_value=mock_async_client),
-        patch('kiro.account_manager.httpx.AsyncClient', return_value=mock_async_client),
     ]
     
     # Start patchers
@@ -539,29 +475,8 @@ def test_client(clean_app):
     Creates a FastAPI TestClient for synchronous endpoint tests,
     properly handling lifespan events.
 
-    Forces API_KEY_MODE=False and mocks AccountManager so the lifespan
-    completes account initialization regardless of .env settings.
+    Forces API_KEY_MODE=False regardless of .env settings.
     """
-    import main as _main
-    from unittest.mock import patch, AsyncMock, MagicMock
-
-    mock_account = MagicMock()
-    mock_account.auth_manager = MagicMock()
-
-    mock_manager = AsyncMock()
-    mock_manager._accounts = {"test": mock_account}
-    mock_manager._current_account_index = 0
-    mock_manager._initialize_account = AsyncMock(return_value=True)
-    mock_manager._save_state = AsyncMock()
-    mock_manager.save_state_periodically = AsyncMock()
-    mock_manager.get_first_account = MagicMock(return_value=mock_account)
-    mock_manager.get_all_available_models = MagicMock(return_value=["claude-sonnet-4-5", "claude-opus-4-5"])
-
-    original_api_key_mode = _main.API_KEY_MODE
-    original_account_system = _main.ACCOUNT_SYSTEM
-    _main.API_KEY_MODE = False
-    _main.ACCOUNT_SYSTEM = True
-
     import kiro.routes_openai as _routes_openai
     import kiro.routes_anthropic as _routes_anthropic
     original_openai_mode = _routes_openai.API_KEY_MODE
@@ -570,13 +485,10 @@ def test_client(clean_app):
     _routes_anthropic.API_KEY_MODE = False
 
     print("Creating TestClient with lifespan support...")
-    with patch("main.AccountManager", return_value=mock_manager):
-        with TestClient(clean_app) as client:
-            yield client
+    with TestClient(clean_app) as client:
+        yield client
     print("Closing TestClient...")
 
-    _main.API_KEY_MODE = original_api_key_mode
-    _main.ACCOUNT_SYSTEM = original_account_system
     _routes_openai.API_KEY_MODE = original_openai_mode
     _routes_anthropic.API_KEY_MODE = original_anthropic_mode
 
@@ -1668,99 +1580,6 @@ def temp_credentials_folder(tmp_path):
     text_file.write_text("This is not a credentials file")
     
     return (str(folder), [str(valid_file1), str(valid_file2)])
-
-
-@pytest.fixture
-def mock_account():
-    """
-    Creates a mock Account object with all dependencies.
-    """
-    from kiro.account_manager import Account, AccountStats
-    from kiro.auth import KiroAuthManager
-    from kiro.cache import ModelInfoCache
-    from kiro.model_resolver import ModelResolver
-    
-    # Create mock auth_manager
-    auth_manager = KiroAuthManager(
-        refresh_token="test_refresh_token",
-        profile_arn="arn:aws:codewhisperer:us-east-1:123456789:profile/test",
-        region="us-east-1"
-    )
-    auth_manager._access_token = "test_access_token"
-    auth_manager._expires_at = datetime(2099, 1, 1, tzinfo=timezone.utc)
-    
-    # Create mock model_cache
-    model_cache = ModelInfoCache()
-    
-    # Create mock model_resolver
-    model_resolver = ModelResolver(
-        cache=model_cache,
-        hidden_models={},
-        aliases={},
-        hidden_from_list=set()
-    )
-    
-    # Create Account
-    account = Account(
-        id="/home/user/.aws/sso/cache/test.json",
-        auth_manager=auth_manager,
-        model_cache=model_cache,
-        model_resolver=model_resolver,
-        failures=0,
-        last_failure_time=0.0,
-        models_cached_at=time.time(),
-        stats=AccountStats()
-    )
-    
-    return account
-
-
-@pytest.fixture
-def mock_account_manager(tmp_path):
-    """
-    Creates a mock AccountManager with temporary files.
-    
-    Factory fixture that accepts credentials and state data.
-    """
-    async def _create_manager(credentials_data=None, state_data=None):
-        from kiro.account_manager import AccountManager
-        
-        # Create temporary files
-        creds_file = tmp_path / "credentials.json"
-        state_file = tmp_path / "state.json"
-        
-        if credentials_data is None:
-            credentials_data = [
-                {
-                    "type": "json",
-                    "path": str(tmp_path / "test.json"),
-                    "enabled": True
-                }
-            ]
-            # Create the test.json file
-            test_creds = tmp_path / "test.json"
-            test_creds.write_text(json.dumps({
-                "accessToken": "test_token",
-                "refreshToken": "test_refresh",
-                "expiresAt": "2099-01-01T00:00:00.000Z",
-                "profileArn": "arn:aws:codewhisperer:us-east-1:123456789:profile/test",
-                "region": "us-east-1"
-            }))
-        
-        creds_file.write_text(json.dumps(credentials_data, indent=2))
-        
-        if state_data is not None:
-            state_file.write_text(json.dumps(state_data, indent=2))
-        
-        # Create AccountManager
-        manager = AccountManager(
-            credentials_file=str(creds_file),
-            state_file=str(state_file)
-        )
-        
-        return manager
-    
-    return _create_manager
 
 
 @pytest.fixture

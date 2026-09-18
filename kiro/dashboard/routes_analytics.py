@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiro.dashboard.deps import get_current_user
+from kiro.dashboard.deps import require_admin
 from kiro.dashboard.schemas import (
     AnalyticsResponse, TokenShare, DailySeries, TopUser, UserTokenUsage, UserDailySeries,
     KiroUserCreditUsage, KiroUserCreditUsageResponse,
@@ -370,7 +370,7 @@ async def _aggregate_analytics(
 @router.get("/analytics", response_model=AnalyticsResponse)
 async def get_analytics(
     range: str = Query(default="7d", pattern="^(7d|30d|90d)$"),
-    caller: User = Depends(get_current_user),
+    caller: User = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ) -> AnalyticsResponse:
     return await _aggregate_analytics(session, range)
@@ -464,7 +464,7 @@ async def _aggregate_kiro_credit_usage(
 @router.get("/analytics/kiro-credit-usage", response_model=KiroUserCreditUsageResponse)
 async def get_kiro_credit_usage(
     month: str = Query(default="", pattern=r"^(\d{4}-\d{2})?$"),
-    caller: User = Depends(get_current_user),
+    caller: User = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ) -> KiroUserCreditUsageResponse:
     if not month:
@@ -475,7 +475,7 @@ async def get_kiro_credit_usage(
 @router.get("/analytics/gateway-key-usage", response_model=GatewayKeyAnalyticsResponse)
 async def get_gateway_key_analytics(
     range_key: str = Query(default="7d", alias="range", pattern="^(7d|30d|90d)$"),
-    caller: User = Depends(get_current_user),
+    caller: User = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ) -> GatewayKeyAnalyticsResponse:
     days = _RANGE_DAYS[range_key]

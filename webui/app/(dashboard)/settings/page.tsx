@@ -1,300 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Save, RefreshCw, Trash2, Plus, Key, ArrowRight, Pencil, List, X } from "lucide-react";
+import { Save, RefreshCw, Trash2, Plus, ArrowRight, Pencil, List, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useConfig, useUpdateConfig } from "@/hooks/use-config";
-import { useSystemKeys, useCreateSystemKey, useUpdateSystemKey, useDeleteSystemKey, useSystemKeyPool, useStickyBindings } from "@/hooks/use-system-keys";
-import { useModels } from "@/hooks/use-models";
-import { maskKey } from "@/lib/utils";
+import { useNineRouterModels } from "@/hooks/use-nine-router-models";
 import type { ModelOverrideRule } from "@/lib/types";
-
-function AddSystemKeyDialog() {
-  const [rawKey, setRawKey] = useState("");
-  const [useProxy, setUseProxy] = useState(false);
-  const [open, setOpen] = useState(false);
-  const createKey = useCreateSystemKey();
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    await createKey.mutateAsync({
-      raw_key: rawKey,
-      use_proxy: useProxy,
-    });
-    setRawKey("");
-    setUseProxy(false);
-    setOpen(false);
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button size="sm" className="gap-2" />}>
-        <Plus className="w-4 h-4" /> Add Kiro Key
-      </DialogTrigger>
-      <DialogContent className="glass-panel-elevated max-w-md w-full">
-        <DialogHeader>
-          <DialogTitle>Register System API Key</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-          <div className="space-y-2">
-            <Label htmlFor="raw_key">Kiro API Key</Label>
-            <Input
-              id="raw_key"
-              value={rawKey}
-              onChange={(e) => setRawKey(e.target.value)}
-              placeholder="sk-proj-..."
-              className="font-mono text-sm"
-              required
-              minLength={10}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label>Use Proxy</Label>
-              <p className="text-xs text-on-surface-variant">Enable if this key requires a proxy</p>
-            </div>
-            <Switch checked={useProxy} onCheckedChange={setUseProxy} />
-          </div>
-          <Button type="submit" disabled={createKey.isPending} className="w-full">
-            {createKey.isPending ? "Registering..." : "Register Key"}
-          </Button>
-          {createKey.isError && (
-            <p className="text-sm text-error">
-              {(createKey.error as any)?.response?.data?.detail || "Failed to register key"}
-            </p>
-          )}
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function fmtTokens(n: number): string {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
-  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
-  return n.toString();
-}
-
-function SystemKeysSection() {
-  const { data: keys, isLoading } = useSystemKeys();
-  const updateKey = useUpdateSystemKey();
-  const deleteKey = useDeleteSystemKey();
-
-  if (isLoading) {
-    return <Skeleton className="h-48 rounded-3xl" />;
-  }
-
-  return (
-    <div className="glass-panel rounded-3xl p-8 md:p-10 group relative overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h3 className="text-lg font-semibold text-on-surface flex items-center gap-2">
-            <Key className="w-5 h-5 text-sky-600" />
-            System Kiro Keys
-          </h3>
-          <p className="text-sm text-on-surface-variant mt-1">
-            Manage system-level backup keys used for the fallback mechanism.
-          </p>
-        </div>
-        <AddSystemKeyDialog />
-      </div>
-
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="border-b border-outline-variant/30">
-              <th className="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Key</th>
-              <th className="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider text-right">Credits (month)</th>
-              <th className="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider text-right">Tokens (30d)</th>
-              <th className="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Last Used</th>
-              <th className="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider text-center">Proxy</th>
-              <th className="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider text-center">Status</th>
-              <th className="py-3 px-4 text-right"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-outline-variant/20">
-            {keys?.map((key) => (
-              <tr key={key.id} className="hover:bg-surface-container-lowest/50 transition-colors">
-                <td className="py-3 px-4 font-mono text-xs text-on-surface">
-                  {maskKey(key.key_prefix, key.key_suffix)}
-                </td>
-                <td className="py-3 px-4 text-right text-sm tabular-nums text-on-surface">
-                  {key.current_usage.toLocaleString()}
-                  {key.usage_limit > 0 && (
-                    <span className="text-on-surface-variant"> / {key.usage_limit.toLocaleString()}</span>
-                  )}
-                </td>
-                <td className="py-3 px-4 text-right text-xs tabular-nums text-on-surface-variant whitespace-nowrap">
-                  <span className="text-sky-700">{fmtTokens(key.input_tokens ?? 0)}</span>
-                  {" in / "}
-                  <span className="text-emerald-700">{fmtTokens(key.output_tokens ?? 0)}</span>
-                  {" out"}
-                </td>
-                <td className="py-3 px-4 text-xs text-on-surface-variant whitespace-nowrap">
-                  {key.last_used_at
-                    ? new Date(key.last_used_at).toLocaleString()
-                    : <span className="italic">Never</span>}
-                </td>
-                <td className="py-3 px-4 text-center">
-                  <Switch
-                    checked={key.use_proxy}
-                    onCheckedChange={(checked) =>
-                      updateKey.mutate({ keyId: key.id, data: { use_proxy: checked } })
-                    }
-                    disabled={updateKey.isPending}
-                    className="scale-75"
-                  />
-                </td>
-                <td className="py-3 px-4 text-center">
-                  <Switch
-                    checked={key.is_active}
-                    onCheckedChange={(checked) =>
-                      updateKey.mutate({ keyId: key.id, data: { is_active: checked } })
-                    }
-                    disabled={updateKey.isPending}
-                    className="scale-75"
-                  />
-                </td>
-                <td className="py-3 px-4 text-right">
-                  <button
-                    onClick={() => {
-                      if (confirm("Are you sure you want to delete this system key?")) {
-                        deleteKey.mutate(key.id);
-                      }
-                    }}
-                    disabled={deleteKey.isPending}
-                    className="text-on-surface-variant hover:text-error transition-colors p-1"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {keys?.length === 0 && (
-              <tr>
-                <td colSpan={7} className="py-8 text-center text-sm text-on-surface-variant italic">
-                  No system keys registered yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-function SystemKeyLiveStatus() {
-  const { data: pool, isLoading: poolLoading } = useSystemKeyPool();
-  const { data: bindings, isLoading: bindingsLoading } = useStickyBindings();
-
-  if (poolLoading || bindingsLoading) {
-    return <Skeleton className="h-32 rounded-3xl" />;
-  }
-
-  return (
-    <div className="glass-panel rounded-3xl p-8 md:p-10 group relative overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-      <h3 className="text-lg font-semibold text-on-surface flex items-center gap-2 mb-6">
-        <Key className="w-5 h-5 text-emerald-600" />
-        Live Key Pool Status
-      </h3>
-
-      <div className="space-y-6">
-        {/* Pool */}
-        <div>
-          <p className="text-sm font-medium text-on-surface-variant mb-3">System Keys in Pool</p>
-          {!pool?.length ? (
-            <p className="text-sm text-on-surface-variant italic">No system keys in cache.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-outline-variant/30">
-                    <th className="py-2 px-3 text-xs text-on-surface-variant uppercase tracking-wider">Key ID</th>
-                    <th className="py-2 px-3 text-xs text-on-surface-variant uppercase tracking-wider text-right">Usage</th>
-                    <th className="py-2 px-3 text-xs text-on-surface-variant uppercase tracking-wider text-right">Remaining</th>
-                    <th className="py-2 px-3 text-xs text-on-surface-variant uppercase tracking-wider text-center">Proxy</th>
-                    <th className="py-2 px-3 text-xs text-on-surface-variant uppercase tracking-wider text-center">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-outline-variant/20">
-                  {pool.map((entry) => (
-                    <tr key={entry.key_id} className="hover:bg-surface-container-lowest/50 transition-colors">
-                      <td className="py-2 px-3 font-mono text-xs text-on-surface">#{entry.key_id}</td>
-                      <td className="py-2 px-3 text-right text-xs tabular-nums text-on-surface">
-                        {entry.current_usage.toLocaleString()} / {entry.usage_limit > 0 ? entry.usage_limit.toLocaleString() : "∞"}
-                      </td>
-                      <td className="py-2 px-3 text-right text-xs tabular-nums">
-                        <span className={entry.remaining !== null && entry.remaining < 100 ? "text-amber-600 font-medium" : "text-emerald-600"}>
-                          {entry.remaining !== null ? entry.remaining.toLocaleString() : "∞"}
-                        </span>
-                      </td>
-                      <td className="py-2 px-3 text-center text-xs">
-                        {entry.use_proxy ? <span className="text-sky-600">yes</span> : <span className="text-on-surface-variant">no</span>}
-                      </td>
-                      <td className="py-2 px-3 text-center text-xs">
-                        {!entry.is_active ? (
-                          <span className="text-error">inactive</span>
-                        ) : entry.quota_exhausted_for_seconds !== null ? (
-                          <span className="text-amber-600">cooldown {entry.quota_exhausted_for_seconds}s</span>
-                        ) : (
-                          <span className="text-emerald-600">active</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* Bindings */}
-        <div>
-          <p className="text-sm font-medium text-on-surface-variant mb-3">Active Sticky Bindings</p>
-          {!bindings?.length ? (
-            <p className="text-sm text-on-surface-variant italic">No active bindings.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-outline-variant/30">
-                    <th className="py-2 px-3 text-xs text-on-surface-variant uppercase tracking-wider">Gateway Key</th>
-                    <th className="py-2 px-3 text-xs text-on-surface-variant uppercase tracking-wider">Using System Key</th>
-                    <th className="py-2 px-3 text-xs text-on-surface-variant uppercase tracking-wider text-right">Expires in</th>
-                    <th className="py-2 px-3 text-xs text-on-surface-variant uppercase tracking-wider text-right">Usage</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-outline-variant/20">
-                  {bindings.map((b) => (
-                    <tr key={b.gateway_key_id} className="hover:bg-surface-container-lowest/50 transition-colors">
-                      <td className="py-2 px-3 font-mono text-xs text-on-surface">#{b.gateway_key_id}</td>
-                      <td className="py-2 px-3 font-mono text-xs text-sky-700">#{b.system_key_id}</td>
-                      <td className="py-2 px-3 text-right text-xs tabular-nums text-on-surface-variant">
-                        {b.expires_in_seconds}s
-                      </td>
-                      <td className="py-2 px-3 text-right text-xs tabular-nums text-on-surface">
-                        {b.current_usage !== null ? `${b.current_usage.toLocaleString()} / ${b.usage_limit?.toLocaleString() ?? "∞"}` : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 interface ModelSelectProps {
   value: string;
@@ -366,8 +82,6 @@ interface ModelOverrideSectionProps {
   defaultModel: string;
   onDefaultModelChange: (v: string) => void;
   modelIds: string[];
-  title?: string;
-  description?: string;
 }
 
 function ModelOverrideSection({
@@ -378,8 +92,6 @@ function ModelOverrideSection({
   defaultModel,
   onDefaultModelChange,
   modelIds,
-  title = "Global Model Enforcement",
-  description = "Override models on all API requests. Rules are matched by substring (first match wins). The default applies when no rule matches.",
 }: ModelOverrideSectionProps) {
   function addRule() {
     onRulesChange([...rules, { from: modelIds[0] ?? "auto", to: "auto" }]);
@@ -426,8 +138,13 @@ function ModelOverrideSection({
       <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
       <div className="flex items-start justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-on-surface">{title}</h3>
-          <p className="text-sm text-on-surface-variant mt-1 max-w-lg">{description}</p>
+          <h3 className="text-lg font-semibold text-on-surface">Model Override</h3>
+          <p className="text-sm text-on-surface-variant mt-1 max-w-lg">
+            Override models on forwarded API requests. Rules are matched by substring (first match
+            wins). The default applies when no rule matches. Does not apply to Service Account
+            traffic — the model a Service Account is allow-listed for is the model that gets sent
+            upstream.
+          </p>
         </div>
         <Switch checked={enabled} onCheckedChange={onEnabledChange} />
       </div>
@@ -527,31 +244,21 @@ function ModelOverrideSection({
 
 export default function SettingsPage() {
   const { data: config, isLoading, refetch } = useConfig();
-  const { data: modelsData } = useModels();
+  const { data: modelsData } = useNineRouterModels();
   const updateConfig = useUpdateConfig();
 
-  const [enableModelOverride, setEnableModelOverride] = useState(false);
-  const [overrideRules, setOverrideRules] = useState<ModelOverrideRule[]>([]);
-  const [defaultModel, setDefaultModel] = useState("auto");
-  const [enableUsageSharing, setEnableUsageSharing] = useState(false);
   const [enableNineRouterModelOverride, setEnableNineRouterModelOverride] = useState(false);
   const [nineRouterOverrideRules, setNineRouterOverrideRules] = useState<ModelOverrideRule[]>([]);
   const [nineRouterDefaultModel, setNineRouterDefaultModel] = useState("auto");
-  const [enableNineRouterDirect, setEnableNineRouterDirect] = useState(false);
   const [dirty, setDirty] = useState(false);
 
-  const modelIds = (modelsData?.models ?? []).map((m) => m.id);
+  const modelIds = modelsData?.models ?? [];
 
   useEffect(() => {
     if (config) {
-      setEnableModelOverride(config.enable_model_override);
-      setOverrideRules(config.model_override_rules ?? []);
-      setDefaultModel(config.model_override_default ?? "auto");
-      setEnableUsageSharing(config.enable_usage_sharing);
       setEnableNineRouterModelOverride(config.enable_nine_router_model_override ?? false);
       setNineRouterOverrideRules(config.nine_router_model_override_rules ?? []);
       setNineRouterDefaultModel(config.nine_router_model_override_default ?? "auto");
-      setEnableNineRouterDirect(config.enable_nine_router_direct ?? false);
       setDirty(false);
     }
   }, [config]);
@@ -565,14 +272,9 @@ export default function SettingsPage() {
 
   async function handleSave() {
     await updateConfig.mutateAsync({
-      enable_model_override: enableModelOverride,
-      model_override_rules: overrideRules,
-      model_override_default: defaultModel,
-      enable_usage_sharing: enableUsageSharing,
       enable_nine_router_model_override: enableNineRouterModelOverride,
       nine_router_model_override_rules: nineRouterOverrideRules,
       nine_router_model_override_default: nineRouterDefaultModel,
-      enable_nine_router_direct: enableNineRouterDirect,
     });
     setDirty(false);
   }
@@ -603,55 +305,6 @@ export default function SettingsPage() {
       </div>
 
       <ModelOverrideSection
-        enabled={enableModelOverride}
-        onEnabledChange={handleChange(setEnableModelOverride)}
-        rules={overrideRules}
-        onRulesChange={handleChange(setOverrideRules)}
-        defaultModel={defaultModel}
-        onDefaultModelChange={handleChange(setDefaultModel)}
-        modelIds={modelIds}
-      />
-
-      {/* Usage Sharing / Fallback Section */}
-      <div className="glass-panel rounded-3xl p-8 md:p-10 group relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-        <div className="flex items-start justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-on-surface">Usage Sharing (Fallback)</h3>
-            <p className="text-sm text-on-surface-variant mt-1 max-w-lg">
-              When enabled, the gateway will automatically use round-robin fallback to borrow a backup
-              key when the primary key is below 1% of its usage limit.
-            </p>
-          </div>
-          <Switch
-            checked={enableUsageSharing}
-            onCheckedChange={handleChange(setEnableUsageSharing)}
-          />
-        </div>
-      </div>
-
-      {/* 9Router Direct Mode Section */}
-      <div className="glass-panel rounded-3xl p-8 md:p-10 group relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-        <div className="flex items-start justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-on-surface">Use 9router directly</h3>
-            <p className="text-sm text-on-surface-variant mt-1 max-w-lg">
-              When enabled, every API request is forwarded straight to 9router, bypassing the Kiro
-              account/key pool entirely. The 9Router Model Override rules below still apply on the
-              forwarded requests — except for Service Account traffic, which always goes straight to
-              9router regardless of this switch, and is never rewritten by the override.
-            </p>
-          </div>
-          <Switch
-            checked={enableNineRouterDirect}
-            onCheckedChange={handleChange(setEnableNineRouterDirect)}
-          />
-        </div>
-      </div>
-
-      {/* 9Router Model Override Section */}
-      <ModelOverrideSection
         enabled={enableNineRouterModelOverride}
         onEnabledChange={handleChange(setEnableNineRouterModelOverride)}
         rules={nineRouterOverrideRules}
@@ -659,13 +312,7 @@ export default function SettingsPage() {
         defaultModel={nineRouterDefaultModel}
         onDefaultModelChange={handleChange(setNineRouterDefaultModel)}
         modelIds={modelIds}
-        title="9Router Model Override"
-        description="Override models on requests forwarded to 9router. Independent from Global Model Enforcement above. Does not apply to Service Account traffic — the model a Service Account is allow-listed for is the model that gets sent upstream."
       />
-
-      <SystemKeysSection />
-
-      <SystemKeyLiveStatus />
 
       {updateConfig.isSuccess && !dirty && (
         <div className="glass-panel-elevated rounded-3xl p-4 text-center text-sm text-emerald-700 bg-emerald-50/50">

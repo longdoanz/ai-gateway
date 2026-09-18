@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, BarChart3, UserCog, Settings, LogOut, ChevronUp, Copy, Check, KeyRound, Trash2, ExternalLink, ScrollText, Bot } from "lucide-react";
+import { LayoutDashboard, BarChart3, UserCog, Settings, LogOut, ChevronUp, Copy, Check, KeyRound, Trash2, ExternalLink, ScrollText, Bot, X } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useGatewayKey, useCreateGatewayKey, useRevokeGatewayKey } from "@/hooks/use-gateway-keys";
 import { cn } from "@/lib/utils";
@@ -14,7 +14,7 @@ import type { GatewayKeyCreated } from "@/lib/types";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, adminOnly: false },
-  { href: "/analytics", label: "Analytics", icon: BarChart3, adminOnly: false },
+  { href: "/analytics", label: "Analytics", icon: BarChart3, adminOnly: true },
   { href: "/accounts", label: "Accounts", icon: UserCog, adminOnly: true },
   { href: "/service-accounts", label: "Service Accounts", icon: Bot, adminOnly: true },
   { href: "/logs", label: "Logs", icon: ScrollText, adminOnly: true },
@@ -174,7 +174,13 @@ function GatewayKeyDialog() {
   );
 }
 
-export function Sidebar() {
+export function Sidebar({
+  mobileOpen = false,
+  onMobileOpenChange,
+}: {
+  mobileOpen?: boolean;
+  onMobileOpenChange?: (open: boolean) => void;
+}) {
   const pathname = usePathname();
   const { user } = useAuth();
 
@@ -182,45 +188,72 @@ export function Sidebar() {
     (item) => !item.adminOnly || user?.role === "admin"
   );
 
+  function closeMobile() {
+    onMobileOpenChange?.(false);
+  }
+
   return (
-    <nav className="hidden md:flex flex-col fixed left-0 top-0 h-screen w-64 border-r border-slate-200/50 bg-white/60 backdrop-blur-xl shadow-[0_0_30px_rgba(0,0,0,0.02)] z-40">
-      <div className="p-6 mb-2">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary-container to-primary flex items-center justify-center text-white font-bold shadow-sm">
-            AI
-          </div>
-          <div>
-            <h1 className="text-xl font-black tracking-tight text-on-surface">AI Gateway</h1>
-            <p className="text-xs text-on-surface-variant font-medium">AI Usage Management</p>
+    <>
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm md:hidden"
+          onClick={closeMobile}
+        />
+      )}
+      <nav
+        className={cn(
+          "fixed left-0 top-0 h-screen w-64 flex flex-col border-r border-slate-200/50 bg-white/95 md:bg-white/60 backdrop-blur-xl shadow-[0_0_30px_rgba(0,0,0,0.02)] z-50 transition-transform duration-200 md:translate-x-0",
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        <div className="p-6 mb-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary-container to-primary flex items-center justify-center text-white font-bold shadow-sm">
+                AI
+              </div>
+              <div>
+                <h1 className="text-xl font-black tracking-tight text-on-surface">AI Gateway</h1>
+                <p className="text-xs text-on-surface-variant font-medium">AI Usage Management</p>
+              </div>
+            </div>
+            <button
+              onClick={closeMobile}
+              className="md:hidden p-1.5 text-on-surface-variant hover:text-primary hover:bg-surface-container rounded-full transition-colors"
+              aria-label="Close menu"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
         </div>
-      </div>
 
-      <div className="flex-1 px-4 space-y-1">
-        {visibleItems.map((item) => {
-          const isActive = pathname === item.href;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium",
-                isActive
-                  ? "text-primary bg-primary/5 shadow-sm border border-primary/10 font-semibold"
-                  : "text-on-surface-variant hover:bg-white/60 hover:text-primary hover:-translate-y-[1px] active:scale-95"
-              )}
-            >
-              <item.icon className="w-5 h-5" />
-              <span>{item.label}</span>
-            </Link>
-          );
-        })}
-        <NineRouterButton />
-      </div>
+        <div className="flex-1 px-4 space-y-1 overflow-y-auto">
+          {visibleItems.map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={closeMobile}
+                className={cn(
+                  "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium",
+                  isActive
+                    ? "text-primary bg-primary/5 shadow-sm border border-primary/10 font-semibold"
+                    : "text-on-surface-variant hover:bg-white/60 hover:text-primary hover:-translate-y-[1px] active:scale-95"
+                )}
+              >
+                <item.icon className="w-5 h-5" />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+          <NineRouterButton />
+        </div>
 
-      <div className="p-4 mt-auto space-y-1 border-t border-slate-200/50">
-        {user && <GatewayKeyDialog />}
-      </div>
-    </nav>
+        <div className="p-4 mt-auto space-y-1 border-t border-slate-200/50">
+          {user && <GatewayKeyDialog />}
+        </div>
+      </nav>
+    </>
   );
 }

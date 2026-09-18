@@ -7,13 +7,10 @@ Covers:
 - kiro/service_accounts.py: resolve_service_account, is_model_allowed
   (normalization rules), make_service_account_usage_cb.
 - kiro/routes_openai.py chat_completions / GET /v1/models: allowlist
-  enforcement runs before the direct-9router / API_KEY_MODE / Kiro-pool
-  branch split, forwards with apply_override=False, and /v1/models returns
-  the account's allowlist.
+  enforcement runs before the unconditional 9router forward, forwards with
+  apply_override=False, and /v1/models returns the account's allowlist.
 - kiro/routes_anthropic.py messages: same enforcement, Anthropic-shaped
   error body.
-- The regression this design fixes: enforcement still applies even when
-  direct-9router mode is toggled on.
 
 The data layer itself (repositories.py CRUD, key issuance, usage increments)
 is already covered by tests/unit/test_service_accounts.py — this file only
@@ -272,54 +269,12 @@ class TestOpenAIChatCompletionsServiceAccountEnforcement:
         assert response.status_code == 403
         mock_forward.assert_not_called()
 
-    def test_enforcement_applies_even_when_direct_nine_router_mode_is_on(self, test_client):
-        """Regression coverage: flipping the admin's direct-9router runtime
-        toggle must NOT bypass the service-account model allowlist, because
-        enforcement runs before that branch is ever checked."""
-        sa = _sa_context(["kiro/claude-sonnet-4"])
-        mock_forward = AsyncMock(return_value=MagicMock(status_code=200))
-        mock_direct_enabled = AsyncMock(return_value=True)
-
-        with (
-            patch("kiro.service_accounts.resolve_service_account", AsyncMock(return_value=sa)),
-            patch("kiro.routes_openai.forward_to_nine_router", mock_forward),
-            patch("kiro.routes_openai.is_nine_router_direct_enabled", mock_direct_enabled),
-        ):
-            # Disallowed model — must still 403, not silently pass through
-            # because direct mode is "on".
-            response = test_client.post(
-                "/v1/chat/completions",
-                headers={"Authorization": "Bearer izisa_testtoken"},
-                json={
-                    "model": "openai/gpt-5",
-                    "messages": [{"role": "user", "content": "Hello"}],
-                },
-            )
-            assert response.status_code == 403
-            mock_forward.assert_not_called()
-
-            # Allowed model — forwarded via the service-account path
-            # (apply_override=False), not the direct-mode path.
-            response = test_client.post(
-                "/v1/chat/completions",
-                headers={"Authorization": "Bearer izisa_testtoken"},
-                json={
-                    "model": "kiro/claude-sonnet-4",
-                    "messages": [{"role": "user", "content": "Hello"}],
-                },
-            )
-            assert response.status_code == 200
-
-        mock_forward.assert_called_once()
-        assert mock_forward.call_args.kwargs["apply_override"] is False
-        # The direct-mode toggle is never even consulted — enforcement
-        # returns before that branch runs.
-        mock_direct_enabled.assert_not_called()
-
     def test_non_service_account_token_is_unaffected(self, test_client, valid_proxy_api_key):
         """A normal PROXY_API_KEY request must not be treated as a service
-        account and must not be forwarded to 9router by this new code path."""
-        mock_forward = AsyncMock()
+        account — it still forwards to 9router, but via the unconditional
+        gateway-key path (apply_override defaults to True), not the
+        service-account short-circuit (apply_override=False)."""
+        mock_forward = AsyncMock(return_value=MagicMock(status_code=200))
 
         with (
             patch("kiro.service_accounts.resolve_service_account", AsyncMock(return_value=None)),
@@ -334,12 +289,9 @@ class TestOpenAIChatCompletionsServiceAccountEnforcement:
                 },
             )
 
-        # Falls through to the normal Kiro account-manager path (mocked
-        # account has no real auth_manager token, so this will fail deeper
-        # in the stack) — the important assertion is that our new
-        # service-account short-circuit was never taken.
-        mock_forward.assert_not_called()
-        assert response.status_code != 403
+        assert response.status_code == 200
+        mock_forward.assert_called_once()
+        assert "apply_override" not in mock_forward.call_args.kwargs
 
 
 class TestOpenAIModelsServiceAccount:
@@ -441,43 +393,6 @@ class TestAnthropicMessagesServiceAccountEnforcement:
 
         assert response.status_code == 403
         mock_forward.assert_not_called()
-
-    def test_enforcement_applies_even_when_direct_nine_router_mode_is_on(self, test_client):
-        sa = _sa_context(["kiro/claude-sonnet-4"])
-        mock_forward = AsyncMock(return_value=MagicMock(status_code=200))
-        mock_direct_enabled = AsyncMock(return_value=True)
-
-        with (
-            patch("kiro.service_accounts.resolve_service_account", AsyncMock(return_value=sa)),
-            patch("kiro.routes_anthropic.forward_to_nine_router", mock_forward),
-            patch("kiro.routes_anthropic.is_nine_router_direct_enabled", mock_direct_enabled),
-        ):
-            response = test_client.post(
-                "/v1/messages",
-                headers={"x-api-key": "izisa_testtoken"},
-                json={
-                    "model": "openai/gpt-5",
-                    "max_tokens": 1024,
-                    "messages": [{"role": "user", "content": "Hello"}],
-                },
-            )
-            assert response.status_code == 403
-            mock_forward.assert_not_called()
-
-            response = test_client.post(
-                "/v1/messages",
-                headers={"x-api-key": "izisa_testtoken"},
-                json={
-                    "model": "kiro/claude-sonnet-4",
-                    "max_tokens": 1024,
-                    "messages": [{"role": "user", "content": "Hello"}],
-                },
-            )
-            assert response.status_code == 200
-
-        mock_forward.assert_called_once()
-        assert mock_forward.call_args.kwargs["apply_override"] is False
-        mock_direct_enabled.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

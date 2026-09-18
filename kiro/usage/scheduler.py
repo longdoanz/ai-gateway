@@ -66,13 +66,6 @@ async def startup() -> None:
     asyncio.create_task(sync_all_active_keys())
     logger.info("Usage management: triggered immediate startup sync")
 
-    # Load initial fallback config
-    from kiro.usage.fallback import fallback_router
-    from kiro.db.repositories import get_all_config
-    async with async_session_factory() as session:
-        config = await get_all_config(session)
-    fallback_router.update_sharing_config(config.get("enable_usage_sharing", "false").lower() == "true")
-
     # Start sync worker
     _sync_task = asyncio.create_task(run_sync_loop())
     logger.info("Usage management: sync worker started")

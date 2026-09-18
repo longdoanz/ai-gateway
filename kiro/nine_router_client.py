@@ -23,7 +23,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from loguru import logger
 
-from kiro.config import ENABLE_NINE_ROUTER_DIRECT, NINE_ROUTER_API_KEY, NINE_ROUTER_URL
+from kiro.config import NINE_ROUTER_API_KEY, NINE_ROUTER_URL
 
 # ---------------------------------------------------------------------------
 # 9router model override — own config (toggle, rules, default), cached in-process
@@ -82,35 +82,6 @@ def _rewrite_model_in_body(body: bytes, override_model: str) -> bytes:
         pass
     return body
 
-
-# ---------------------------------------------------------------------------
-# 9router direct mode — global toggle routing every request straight to 9router
-# ---------------------------------------------------------------------------
-_nine_router_direct_cache: bool | None = None
-
-
-def invalidate_nine_router_direct_cache() -> None:
-    global _nine_router_direct_cache
-    _nine_router_direct_cache = None
-
-
-async def is_nine_router_direct_enabled() -> bool:
-    """Return True when direct-to-9router mode is enabled (DB key, env fallback)."""
-    global _nine_router_direct_cache
-    if _nine_router_direct_cache is not None:
-        return _nine_router_direct_cache
-    result = False
-    try:
-        from kiro.db.engine import async_session_factory
-        from kiro.db.repositories import get_config
-        async with async_session_factory() as session:
-            enabled_raw = await get_config(session, "enable_nine_router_direct") or ""
-        result = enabled_raw.lower() == "true"
-    except Exception:
-        # DB unavailable — fall back to the environment flag.
-        result = ENABLE_NINE_ROUTER_DIRECT
-    _nine_router_direct_cache = result
-    return result
 
 # ---------------------------------------------------------------------------
 # 9router model catalog — GET /v1/models (no authentication required), used

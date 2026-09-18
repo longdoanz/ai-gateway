@@ -81,17 +81,6 @@ export interface ApiKeyResponse {
   last_used_at: string | null;
 }
 
-export interface SystemKeyCreate {
-  raw_key: string;
-  use_proxy?: boolean;
-  is_active?: boolean;
-}
-
-export interface SystemKeyUpdate {
-  is_active?: boolean;
-  use_proxy?: boolean;
-}
-
 export interface ApiKeyToggle {
   is_active: boolean;
 }
@@ -143,37 +132,15 @@ export interface ModelOverrideRule {
 }
 
 export interface SystemConfigResponse {
-  enable_model_override: boolean;
-  model_override_rules: ModelOverrideRule[];
-  model_override_default: string;
-  enable_usage_sharing: boolean;
   enable_nine_router_model_override: boolean;
   nine_router_model_override_rules: ModelOverrideRule[];
   nine_router_model_override_default: string;
-  enable_nine_router_direct: boolean;
 }
 
 export interface SystemConfigUpdate {
-  enable_model_override?: boolean;
-  model_override_rules?: ModelOverrideRule[];
-  model_override_default?: string;
-  enable_usage_sharing?: boolean;
   enable_nine_router_model_override?: boolean;
   nine_router_model_override_rules?: ModelOverrideRule[];
   nine_router_model_override_default?: string;
-  enable_nine_router_direct?: boolean;
-}
-
-// --- Models ---
-
-export interface ModelInfo {
-  id: string;
-  source: "cache" | "fallback";
-}
-
-export interface ModelListResponse {
-  models: ModelInfo[];
-  total: number;
 }
 
 // --- Import ---

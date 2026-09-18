@@ -7,7 +7,7 @@ from loguru import logger
 
 from kiro.db.engine import async_session_factory
 from kiro.db.models import ApiKey, KeyUsage
-from kiro.db.repositories import decrypt_api_key, merge_duplicate_keys_for_user, get_all_config, upsert_kiro_user_mappings, upsert_usage_limits, upsert_daily_credit_snapshot, update_api_key
+from kiro.db.repositories import decrypt_api_key, merge_duplicate_keys_for_user, upsert_kiro_user_mappings, upsert_usage_limits, upsert_daily_credit_snapshot, update_api_key
 from kiro.usage.usage_cache import usage_cache
 
 _SYNC_DELAY_MIN = 300   # 5 minutes
@@ -251,10 +251,6 @@ async def run_sync_loop() -> None:
                 _pending_syncs.pop(kid, None)
             if due:
                 await sync_usage_limits(due)
-                from kiro.usage.fallback import fallback_router
-                async with async_session_factory() as session:
-                    config = await get_all_config(session)
-                fallback_router.update_sharing_config(config.get("enable_usage_sharing", "false").lower() == "true")
 
         except asyncio.CancelledError:
             logger.info("Sync worker: cancelled")

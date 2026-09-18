@@ -84,17 +84,6 @@ class ApiKeyResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class SystemKeyCreate(BaseModel):
-    raw_key: str = Field(min_length=10)
-    use_proxy: bool = False
-    is_active: bool = True
-
-
-class SystemKeyUpdate(BaseModel):
-    is_active: bool | None = None
-    use_proxy: bool | None = None
-
-
 class ApiKeyToggle(BaseModel):
     is_active: bool
 
@@ -150,37 +139,15 @@ class ModelOverrideRule(BaseModel):
 
 
 class SystemConfigResponse(BaseModel):
-    enable_model_override: bool = False
-    model_override_rules: list[ModelOverrideRule] = []
-    model_override_default: str = "auto"
-    enable_usage_sharing: bool = False
     enable_nine_router_model_override: bool = False
     nine_router_model_override_rules: list[ModelOverrideRule] = []
     nine_router_model_override_default: str = "auto"
-    enable_nine_router_direct: bool = False
 
 
 class SystemConfigUpdate(BaseModel):
-    enable_model_override: bool | None = None
-    model_override_rules: list[ModelOverrideRule] | None = None
-    model_override_default: str | None = None
-    enable_usage_sharing: bool | None = None
     enable_nine_router_model_override: bool | None = None
     nine_router_model_override_rules: list[ModelOverrideRule] | None = None
     nine_router_model_override_default: str | None = None
-    enable_nine_router_direct: bool | None = None
-
-
-# --- Models ---
-
-class ModelInfo(BaseModel):
-    id: str
-    source: str  # "cache" | "fallback"
-
-
-class ModelListResponse(BaseModel):
-    models: list[ModelInfo]
-    total: int
 
 
 # --- Import ---
@@ -321,6 +288,7 @@ class GatewayKeyAnalyticsResponse(BaseModel):
     total_gateway_users: int
     active_gateway_users: int
     daily_series: list[GatewayKeyDailySeries]
+    user_usages: list[GatewayKeyUserUsage]
 
 
 # --- ServiceAccount ---

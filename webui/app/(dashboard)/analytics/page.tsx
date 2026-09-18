@@ -171,7 +171,7 @@ export default function AnalyticsPage() {
       <div className="grid grid-cols-1 gap-6">
         <div className="glass-panel rounded-3xl p-0 overflow-hidden">
           <div className="px-6 py-4 border-b border-outline-variant/30 flex items-center justify-between">
-            <h3 className="text-base font-semibold text-on-surface">Gateway Key Users</h3>
+            <h3 className="text-base font-semibold text-on-surface">Gateway Users</h3>
             {gwData && (
               <span className="text-xs text-on-surface-variant">
                 {gwData.active_gateway_users} active / {gwData.total_gateway_users} total

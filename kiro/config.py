@@ -104,17 +104,6 @@ PROXY_API_KEY: str = os.getenv("PROXY_API_KEY", "my-super-secret-password-123")
 API_KEY_MODE: bool = os.getenv("API_KEY_MODE", "false").lower() in ("true", "1", "yes")
 
 # ==================================================================================================
-# Global Model Override
-# ==================================================================================================
-
-# Enable global model override via environment (File-based deployment without DB)
-ENABLE_MODEL_OVERRIDE: bool = os.getenv("ENABLE_MODEL_OVERRIDE", "false").lower() in ("true", "1", "yes")
-
-# The global model to enforce when ENABLE_MODEL_OVERRIDE is true
-# Set to "auto" to let Kiro decide, or explicitly set a supported model
-ENFORCED_GLOBAL_MODEL: str = os.getenv("ENFORCED_GLOBAL_MODEL", "auto")
-
-# ==================================================================================================
 # VPN/Proxy Settings for Kiro API Access
 # ==================================================================================================
 
@@ -553,34 +542,13 @@ TELEGRAM_LOG_LEVEL: str = os.getenv("TELEGRAM_LOG_LEVEL", "ERROR").upper()
 # Minimum seconds between Telegram messages (rate-limit).
 TELEGRAM_MIN_INTERVAL: float = float(os.getenv("TELEGRAM_MIN_INTERVAL", "3"))
 
-# ==================================================================================================
-# Account System Settings
-# ==================================================================================================
-
-# Enable account system with failover (default: false)
-# When false: uses first account without failover (legacy mode)
-# When true: enables full failover loop with Circuit Breaker
-ACCOUNT_SYSTEM: bool = os.getenv("ACCOUNT_SYSTEM", "false").lower() in ("true", "1", "yes")
-
-# Path to credentials configuration file
-ACCOUNTS_CONFIG_FILE: str = os.getenv("ACCOUNTS_CONFIG_FILE", "credentials.json")
-
-# Path to runtime state file
-ACCOUNTS_STATE_FILE: str = os.getenv("ACCOUNTS_STATE_FILE", "state.json")
-
 # ===========================================
-# 9Router Fallback
+# 9Router
 # ===========================================
 
-# URL of the 9router service (internal Docker network)
-# When set, all-accounts-exhausted errors fall back to 9router instead of returning 503
+# URL of the 9router service (internal Docker network) — every request
+# forwards here (see kiro.nine_router_client.forward_to_nine_router).
 NINE_ROUTER_URL: str = os.getenv("NINE_ROUTER_URL", "")
-
-# Direct mode — route every request straight to 9router, bypassing the Kiro
-# account/key pool entirely. This is the env fallback; the DB-backed toggle
-# (`enable_nine_router_direct`) takes precedence when the dashboard DB is
-# configured. See kiro.nine_router_client.is_nine_router_direct_enabled().
-ENABLE_NINE_ROUTER_DIRECT: bool = os.getenv("ENABLE_NINE_ROUTER_DIRECT", "false").lower() in ("true", "1", "yes")
 
 # API key for 9router's /v1/* endpoints (REQUIRE_API_KEY=true in 9router)
 NINE_ROUTER_API_KEY: str = os.getenv("NINE_ROUTER_API_KEY", "")
@@ -593,40 +561,6 @@ OIDC_CLIENT_SECRET: str = os.getenv("OIDC_CLIENT_SECRET", "")
 
 # OIDC issuer URL (this gateway's public base URL)
 OIDC_ISSUER_URL: str = os.getenv("OIDC_ISSUER_URL", "http://localhost:18000")
-
-# ==================================================================================================
-# Circuit Breaker Settings
-# ==================================================================================================
-
-# Base recovery timeout in seconds (for exponential backoff)
-# Actual timeout = BASE * 2^(failures - 1), capped at BASE * MAX_MULTIPLIER
-# Examples with BASE=60s, MAX=1440x:
-#   1 failure: 1m, 2: 2m, 3: 4m, 4: 8m, 5: 16m, 6: 32m, 7: 1h, 8: 2h, 9: 4h, 10: 8.5h, 11: 17h, 12+: 1d (cap)
-ACCOUNT_RECOVERY_TIMEOUT: int = int(os.getenv("ACCOUNT_RECOVERY_TIMEOUT", "60"))
-
-# Maximum backoff multiplier (cap for exponential backoff)
-# With BASE=60s and MAX=1440, maximum cooldown is 60 * 1440 = 86400s = 1 day
-ACCOUNT_MAX_BACKOFF_MULTIPLIER: float = float(os.getenv("ACCOUNT_MAX_BACKOFF_MULTIPLIER", "1440.0"))
-
-# Probabilistic retry chance for "broken" accounts (0.0 - 1.0)
-# Even if account is broken and timeout hasn't passed, try with this probability
-# Default: 0.1 (10% chance) - prevents permanent "stuck" state
-ACCOUNT_PROBABILISTIC_RETRY_CHANCE: float = float(os.getenv("ACCOUNT_PROBABILISTIC_RETRY_CHANCE", "0.1"))
-
-# ==================================================================================================
-# Account Cache Settings
-# ==================================================================================================
-
-# Model cache TTL in seconds (12 hours)
-# Cache is refreshed only when account is used (not in background)
-ACCOUNT_CACHE_TTL: int = int(os.getenv("ACCOUNT_CACHE_TTL", "43200"))
-
-# ==================================================================================================
-# State Persistence Settings
-# ==================================================================================================
-
-# Interval for periodic state.json saving in seconds
-STATE_SAVE_INTERVAL_SECONDS: int = int(os.getenv("STATE_SAVE_INTERVAL_SECONDS", "10"))
 
 # ==================================================================================================
 # Kiro IDE Emulation Constants

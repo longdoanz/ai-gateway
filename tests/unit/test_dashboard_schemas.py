@@ -54,16 +54,15 @@ class TestDashboardSchemas:
         assert lr.username == "admin"
 
     def test_system_config_update_partial(self):
-        c = SystemConfigUpdate(enable_model_override=True)
+        c = SystemConfigUpdate(enable_nine_router_model_override=True)
         dumped = c.model_dump(exclude_unset=True)
-        assert dumped == {"enable_model_override": True}
+        assert dumped == {"enable_nine_router_model_override": True}
 
     def test_system_config_response_defaults(self):
         c = SystemConfigResponse()
-        assert c.enable_model_override is False
-        assert c.model_override_rules == []
-        assert c.model_override_default == "auto"
-        assert c.enable_usage_sharing is False
+        assert c.enable_nine_router_model_override is False
+        assert c.nine_router_model_override_rules == []
+        assert c.nine_router_model_override_default == "auto"
 
 
 class TestModelOverrideRule:
@@ -87,43 +86,41 @@ class TestModelOverrideRule:
 
     def test_system_config_update_with_rules(self):
         update = SystemConfigUpdate(
-            enable_model_override=True,
-            model_override_rules=[ModelOverrideRule(**{"from": "opus", "to": "GLM5"})],
-            model_override_default="deepseek",
+            enable_nine_router_model_override=True,
+            nine_router_model_override_rules=[ModelOverrideRule(**{"from": "opus", "to": "GLM5"})],
+            nine_router_model_override_default="deepseek",
         )
         dumped = update.model_dump(exclude_unset=True, by_alias=True)
-        assert dumped["model_override_rules"] == [{"from": "opus", "to": "GLM5"}]
-        assert dumped["model_override_default"] == "deepseek"
+        assert dumped["nine_router_model_override_rules"] == [{"from": "opus", "to": "GLM5"}]
+        assert dumped["nine_router_model_override_default"] == "deepseek"
 
 
 class TestToResponse:
     def test_defaults_when_empty_raw(self):
         resp = _to_response({})
-        assert resp.enable_model_override is False
-        assert resp.model_override_rules == []
-        assert resp.model_override_default == "auto"
-        assert resp.enable_usage_sharing is False
+        assert resp.enable_nine_router_model_override is False
+        assert resp.nine_router_model_override_rules == []
+        assert resp.nine_router_model_override_default == "auto"
 
     def test_parses_rules_from_json(self):
         raw = {
-            "enable_model_override": "true",
-            "model_override_rules": json.dumps([{"from": "opus", "to": "GLM5"}]),
-            "model_override_default": "deepseek",
-            "enable_usage_sharing": "false",
+            "enable_nine_router_model_override": "true",
+            "nine_router_model_override_rules": json.dumps([{"from": "opus", "to": "GLM5"}]),
+            "nine_router_model_override_default": "deepseek",
         }
         resp = _to_response(raw)
-        assert resp.enable_model_override is True
-        assert len(resp.model_override_rules) == 1
-        assert resp.model_override_rules[0].from_ == "opus"
-        assert resp.model_override_rules[0].to == "GLM5"
-        assert resp.model_override_default == "deepseek"
+        assert resp.enable_nine_router_model_override is True
+        assert len(resp.nine_router_model_override_rules) == 1
+        assert resp.nine_router_model_override_rules[0].from_ == "opus"
+        assert resp.nine_router_model_override_rules[0].to == "GLM5"
+        assert resp.nine_router_model_override_default == "deepseek"
 
     def test_invalid_rules_json_falls_back_to_empty(self):
-        raw = {"model_override_rules": "not-json"}
+        raw = {"nine_router_model_override_rules": "not-json"}
         resp = _to_response(raw)
-        assert resp.model_override_rules == []
+        assert resp.nine_router_model_override_rules == []
 
     def test_non_list_rules_json_falls_back_to_empty(self):
-        raw = {"model_override_rules": json.dumps({"from": "opus", "to": "GLM5"})}
+        raw = {"nine_router_model_override_rules": json.dumps({"from": "opus", "to": "GLM5"})}
         resp = _to_response(raw)
-        assert resp.model_override_rules == []
+        assert resp.nine_router_model_override_rules == []

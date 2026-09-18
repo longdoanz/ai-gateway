@@ -310,43 +310,27 @@ class TestStreamingFlagHandling:
         """
         What it does: Checks that stream=true is accepted.
         Goal: Ensure streaming mode is available.
-        
-        Note: Streaming mode requires HTTP client mock,
-        as request is executed inside generator.
+
+        Note: NINE_ROUTER_URL is unconfigured in the test environment, so the
+        unconditional forward returns 503 here (see test_nine_router_client.py
+        for coverage of the actual forward/streaming behavior with a
+        configured URL) — this test only checks the request passes Pydantic
+        validation, matching test_stream_false_accepted below.
         """
         print("Request with stream=true...")
-        
-        # Create mock response for streaming
-        mock_response = AsyncMock()
-        mock_response.status_code = 200
-        
-        async def mock_aiter_bytes():
-            yield b'{"content":"Hello"}'
-            yield b'{"usage":0.5}'
-        
-        mock_response.aiter_bytes = mock_aiter_bytes
-        mock_response.aclose = AsyncMock()
-        
-        # Mock request_with_retry to return our mock response
-        with patch('kiro.routes_openai.KiroHttpClient') as MockHttpClient:
-            mock_client_instance = AsyncMock()
-            mock_client_instance.request_with_retry = AsyncMock(return_value=mock_response)
-            mock_client_instance.client = AsyncMock()
-            mock_client_instance.close = AsyncMock()
-            MockHttpClient.return_value = mock_client_instance
-            
-            response = test_client.post(
-                "/v1/chat/completions",
-                headers={"Authorization": f"Bearer {valid_proxy_api_key}"},
-                json={
-                    "model": "claude-sonnet-4-5",
-                    "messages": [{"role": "user", "content": "Hello"}],
-                    "stream": True
-                }
-            )
-        
-        # Validation should pass and streaming should work
-        assert response.status_code == 200
+
+        response = test_client.post(
+            "/v1/chat/completions",
+            headers={"Authorization": f"Bearer {valid_proxy_api_key}"},
+            json={
+                "model": "claude-sonnet-4-5",
+                "messages": [{"role": "user", "content": "Hello"}],
+                "stream": True
+            }
+        )
+
+        # Validation should pass
+        assert response.status_code != 422
         print(f"stream=true: {response.status_code}")
     
     def test_stream_false_accepted(self, test_client, valid_proxy_api_key):

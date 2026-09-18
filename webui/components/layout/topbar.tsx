@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { usePathname } from "next/navigation";
+import { Menu } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
 const pageTitles: Record<string, string> = {
@@ -12,7 +13,7 @@ const pageTitles: Record<string, string> = {
   "/settings": "Gateway Configuration",
 };
 
-export function Topbar() {
+export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const title = pageTitles[pathname] || "Dashboard";
@@ -32,7 +33,14 @@ export function Topbar() {
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-white/30 bg-white/70 backdrop-blur-2xl shadow-[0_1px_0_rgba(0,0,0,0.04),0_4px_16px_rgba(31,38,135,0.05)] flex justify-between items-center px-8 h-14 tracking-tight">
-      <div className="flex items-center gap-8 h-full">
+      <div className="flex items-center gap-3 md:gap-8 h-full">
+        <button
+          onClick={onMenuClick}
+          className="md:hidden p-1.5 -ml-1.5 text-on-surface-variant hover:text-primary hover:bg-surface-container rounded-full transition-colors"
+          aria-label="Open menu"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
         <h2 className="text-base font-semibold text-on-surface">{title}</h2>
       </div>
       <div className="flex items-center gap-3">

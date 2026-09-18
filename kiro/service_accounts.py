@@ -65,7 +65,7 @@ async def resolve_service_account(token: str | None) -> ServiceAccountContext | 
     is missing, does not carry the ``izisa_`` prefix, or no database is
     configured. Never raises — on any unexpected error this logs at debug
     level and returns None, mirroring the defensive style of
-    ``kiro.api_key_mode._resolve_gateway_key``.
+    ``kiro.api_key_mode._resolve_gateway_key_id_only``.
 
     Args:
         token: Raw bearer/x-api-key token value from the incoming request.

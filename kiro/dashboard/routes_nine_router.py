@@ -1,9 +1,6 @@
 """
 Dashboard endpoint: expose 9router's live model catalog for the admin UI's
 model picker (e.g. when configuring a Service Account's allowed_models).
-
-Kept separate from kiro/dashboard/routes_models.py, which lists Kiro-account
-models from Kiro's ListAvailableModels cache — a different source entirely.
 """
 
 from fastapi import APIRouter, Depends

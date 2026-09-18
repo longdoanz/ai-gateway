@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import {
   Bot,
   Plus,
@@ -21,13 +22,9 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
 import {
   useServiceAccounts,
   useCreateServiceAccount,
@@ -36,10 +33,10 @@ import {
   useServiceAccountKeys,
   useCreateServiceAccountKey,
   useRevokeServiceAccountKey,
-  useServiceAccountUsage,
 } from "@/hooks/use-service-accounts";
 import { useNineRouterModels } from "@/hooks/use-nine-router-models";
-import { maskKey, formatCredits, formatDate } from "@/lib/utils";
+import { AllowedModelsBadges } from "@/components/service-accounts/allowed-models";
+import { maskKey, formatDate } from "@/lib/utils";
 import type {
   ServiceAccountResponse,
   ServiceAccountKeyCreated,
@@ -432,119 +429,21 @@ function KeysTab({ accountId }: { accountId: number }) {
   );
 }
 
-function UsageTab({ accountId }: { accountId: number }) {
-  const [days, setDays] = useState("30");
-  const { data: usage, isLoading } = useServiceAccountUsage(accountId, parseInt(days, 10));
-
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <Label className="text-xs text-on-surface-variant">Daily breakdown window</Label>
-        <Select value={days} onValueChange={(v) => setDays(v ?? "30")}>
-          <SelectTrigger size="sm" className="w-28"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="7">7 days</SelectItem>
-            <SelectItem value="30">30 days</SelectItem>
-            <SelectItem value="90">90 days</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {isLoading ? (
-        <div className="space-y-2">{[1, 2, 3].map((i) => (<Skeleton key={i} className="h-8 rounded-lg" />))}</div>
-      ) : (
-        <>
-          <div>
-            <h4 className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-2">Monthly Rollup</h4>
-            {usage && usage.monthly.length > 0 ? (
-              <div className="border border-outline-variant/40 rounded-lg overflow-hidden">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-surface-container-low/50">
-                    <tr>
-                      <th className="py-2 px-3 font-medium text-on-surface-variant">Month</th>
-                      <th className="py-2 px-3 font-medium text-on-surface-variant text-right">Usage</th>
-                      <th className="py-2 px-3 font-medium text-on-surface-variant text-right">Last Used</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-outline-variant/20">
-                    {usage.monthly.map((m) => (
-                      <tr key={m.month}>
-                        <td className="py-2 px-3 font-mono">{m.month}</td>
-                        <td className="py-2 px-3 text-right font-mono">{formatCredits(m.current_usage)}</td>
-                        <td className="py-2 px-3 text-right text-on-surface-variant">
-                          {m.last_used_at ? formatDate(m.last_used_at) : "never"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p className="text-xs text-on-surface-variant py-3">No usage recorded yet.</p>
-            )}
-          </div>
-
-          <div>
-            <h4 className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-2">Daily Breakdown by Model</h4>
-            {usage && usage.daily.length > 0 ? (
-              <div className="border border-outline-variant/40 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-surface-container-low/50 sticky top-0">
-                    <tr>
-                      <th className="py-2 px-3 font-medium text-on-surface-variant">Date</th>
-                      <th className="py-2 px-3 font-medium text-on-surface-variant">Model</th>
-                      <th className="py-2 px-3 font-medium text-on-surface-variant text-right">Input</th>
-                      <th className="py-2 px-3 font-medium text-on-surface-variant text-right">Output</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-outline-variant/20">
-                    {usage.daily.map((d, i) => (
-                      <tr key={`${d.date}-${d.model}-${i}`}>
-                        <td className="py-2 px-3">{d.date}</td>
-                        <td className="py-2 px-3 font-mono">{d.model}</td>
-                        <td className="py-2 px-3 text-right font-mono">{formatCredits(d.input_tokens)}</td>
-                        <td className="py-2 px-3 text-right font-mono">{formatCredits(d.output_tokens)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p className="text-xs text-on-surface-variant py-3">No daily usage in this window.</p>
-            )}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function ManageServiceAccountDialog({ account }: { account: ServiceAccountResponse }) {
+function ManageKeysDialog({ account }: { account: ServiceAccountResponse }) {
   const [open, setOpen] = useState(false);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button variant="ghost" size="icon-sm" title="Manage keys & usage" />}>
+      <DialogTrigger render={<Button variant="ghost" size="icon-sm" title="Manage keys" />}>
         <KeyRound className="w-4 h-4" />
       </DialogTrigger>
       <DialogContent className="glass-panel-elevated max-w-xl w-full">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Bot className="w-5 h-5 text-primary" /> {account.name}
+            <Bot className="w-5 h-5 text-primary" /> {account.name} &mdash; Keys
           </DialogTitle>
         </DialogHeader>
-        <Tabs defaultValue="keys" className="w-full">
-          <TabsList className="w-full">
-            <TabsTrigger value="keys" className="flex-1 gap-1.5"><KeyRound className="w-3.5 h-3.5" /> Keys</TabsTrigger>
-            <TabsTrigger value="usage" className="flex-1 gap-1.5"><BarChart3 className="w-3.5 h-3.5" /> Usage</TabsTrigger>
-          </TabsList>
-          <TabsContent value="keys" className="mt-4">
-            {open && <KeysTab accountId={account.id} />}
-          </TabsContent>
-          <TabsContent value="usage" className="mt-4">
-            {open && <UsageTab accountId={account.id} />}
-          </TabsContent>
-        </Tabs>
+        {open && <KeysTab accountId={account.id} />}
       </DialogContent>
     </Dialog>
   );
@@ -585,11 +484,7 @@ function ServiceAccountRow({ account }: { account: ServiceAccountResponse }) {
       </td>
       <td className="py-4 px-6 font-mono text-sm">{account.key_count}</td>
       <td className="py-4 px-6">
-        {account.allowed_model_count === 0 ? (
-          <Badge variant="destructive" className="gap-1"><ShieldAlert className="w-3 h-3" /> 0 models</Badge>
-        ) : (
-          <span className="font-mono text-sm">{account.allowed_model_count}</span>
-        )}
+        <AllowedModelsBadges models={account.allowed_models} />
       </td>
       <td className="py-4 px-6">
         <Switch
@@ -601,7 +496,14 @@ function ServiceAccountRow({ account }: { account: ServiceAccountResponse }) {
       <td className="py-4 px-6 text-on-surface-variant text-xs">{formatDate(account.created_at)}</td>
       <td className="py-4 px-6 text-right">
         <div className="flex items-center justify-end gap-1">
-          <ManageServiceAccountDialog account={account} />
+          <Link
+            href={`/service-accounts/${account.id}`}
+            className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container-lowest transition-colors"
+            title="View usage"
+          >
+            <BarChart3 className="w-4 h-4" />
+          </Link>
+          <ManageKeysDialog account={account} />
           <EditServiceAccountDialog account={account} />
           <Button
             variant="ghost"
