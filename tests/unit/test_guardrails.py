@@ -6,11 +6,11 @@ import json
 
 import pytest
 
-from kiro.guardrails.apply import apply_findings
-from kiro.guardrails.detector import cache_stats, detect, reset_cache
-from kiro.guardrails.restore import restore_bytes
-from kiro.guardrails.scrubber import SecretFound, anonymize_payload
-from kiro.guardrails.vault import PiiVault
+from aigw.guardrails.apply import apply_findings
+from aigw.guardrails.detector import cache_stats, detect, reset_cache
+from aigw.guardrails.restore import restore_bytes
+from aigw.guardrails.scrubber import SecretFound, anonymize_payload
+from aigw.guardrails.vault import PiiVault
 
 ENTITIES = frozenset({"EMAIL", "PHONE_VN", "CCCD", "CARD", "IPV4", "IBAN"})
 
@@ -40,11 +40,11 @@ def _clear_cache():
     """
     from unittest.mock import patch
 
-    from kiro.guardrails import invalidate_pii_guard_cache
+    from aigw.guardrails import invalidate_pii_guard_cache
 
     reset_cache()
     invalidate_pii_guard_cache()
-    with patch("kiro.db.engine.async_session_factory", None):
+    with patch("aigw.db.engine.async_session_factory", None):
         yield
     reset_cache()
     invalidate_pii_guard_cache()
@@ -248,7 +248,7 @@ def test_keyword_gate_misses_nothing_a_full_regex_pass_would_find():
     directly over one realistic sample and compare its hit set against the
     windowed, gated scan — they must agree, or the gate is silently dropping
     real matches instead of just skipping irrelevant rules."""
-    from kiro.guardrails.patterns import LITERAL_SECRETS, secret_scan_windows
+    from aigw.guardrails.patterns import LITERAL_SECRETS, secret_scan_windows
 
     sample = (
         "commit message mentioning a token, a secret, and a key\n"
@@ -295,7 +295,7 @@ def _sse(*texts: str) -> list[bytes]:
 def _run_stream(vault, chunks, sse=True, restore_tool_args=None) -> bytes:
     import asyncio
 
-    from kiro.guardrails.restore import restore_stream
+    from aigw.guardrails.restore import restore_stream
 
     async def _source():
         for c in chunks:
@@ -434,7 +434,7 @@ def test_restore_bytes_escapes_for_json_context():
 
 def test_crossing_spans_do_not_leak_the_uncovered_tail():
     """Two spans that cross must both be fully covered, not partly dropped."""
-    from kiro.guardrails.findings import Finding
+    from aigw.guardrails.findings import Finding
 
     text = "abcdefghijklmnop"
     # IPV4 spans 2..8, EMAIL spans 5..12 — neither contains the other.
@@ -608,8 +608,8 @@ class TestForwardIntegration:
     async def test_pii_tokenized_upstream_and_restored_downstream(self):
         from unittest.mock import patch
 
-        import kiro.config as cfg
-        import kiro.nine_router_client as mod
+        import aigw.config as cfg
+        import aigw.nine_router_client as mod
 
         # The model echoes the surrogate back, split across two SSE frames.
         upstream_chunks = [
@@ -625,7 +625,7 @@ class TestForwardIntegration:
             patch.object(cfg, "PII_GUARD_MODE", "tokenize"),
             patch.object(cfg, "PII_ENTITIES", ENTITIES),
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             resp = await mod.forward_to_nine_router(self._request(), body)
             out = b"".join([c async for c in resp.body_iterator])
@@ -643,8 +643,8 @@ class TestForwardIntegration:
 
         from fastapi.responses import JSONResponse
 
-        import kiro.config as cfg
-        import kiro.nine_router_client as mod
+        import aigw.config as cfg
+        import aigw.nine_router_client as mod
 
         sent = []
         client = self._client(self._upstream([b""]), sent)
@@ -655,7 +655,7 @@ class TestForwardIntegration:
             patch.object(cfg, "PII_ENTITIES", ENTITIES),
             patch.object(cfg, "PII_SECRET_ACTION", "block"),
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             resp = await mod.forward_to_nine_router(self._request(), body)
 
@@ -667,8 +667,8 @@ class TestForwardIntegration:
     async def test_guard_off_leaves_the_payload_untouched(self):
         from unittest.mock import patch
 
-        import kiro.config as cfg
-        import kiro.nine_router_client as mod
+        import aigw.config as cfg
+        import aigw.nine_router_client as mod
 
         chunks = [b'data: {"delta":"hi"}\n\n', b"data: [DONE]\n\n"]
         sent = []
@@ -678,7 +678,7 @@ class TestForwardIntegration:
         with (
             patch.object(cfg, "PII_GUARD_MODE", "off"),
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             resp = await mod.forward_to_nine_router(self._request(), body)
             out = b"".join([c async for c in resp.body_iterator])
@@ -703,8 +703,8 @@ class TestForwardIntegration:
         """
         from unittest.mock import patch
 
-        import kiro.config as cfg
-        import kiro.nine_router_client as mod
+        import aigw.config as cfg
+        import aigw.nine_router_client as mod
 
         chunks = [b'data: {"delta":"hi"}\n\n', b"data: [DONE]\n\n"]
         sent = []
@@ -717,7 +717,7 @@ class TestForwardIntegration:
         with (
             patch.object(cfg, "PII_GUARD_MODE", "off"),
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             await mod.forward_to_nine_router(self._request(), body)
 
@@ -750,12 +750,12 @@ def _policy(mode="off", secret_action="warn", restore_tool_args=True):
     """Pin the resolved policy, bypassing both .env and the database."""
     from unittest.mock import patch
 
-    from kiro.guardrails import PiiPolicy
+    from aigw.guardrails import PiiPolicy
 
     async def _fake():
         return PiiPolicy(mode, secret_action, restore_tool_args)
 
-    return patch("kiro.guardrails.get_pii_policy", _fake)
+    return patch("aigw.guardrails.get_pii_policy", _fake)
 
 
 def test_guard_off_returns_body_unmodified_and_creates_no_vault():
@@ -765,7 +765,7 @@ def test_guard_off_returns_body_unmodified_and_creates_no_vault():
     not just an empty one — nothing about the request is even parsed."""
     import asyncio
 
-    from kiro.guardrails import scrub_request
+    from aigw.guardrails import scrub_request
 
     body = _body("mail an@example.com, the 4111 1111 1111 1111")
     with _policy(mode="off"):
@@ -787,7 +787,7 @@ def _policy_from_db(values: dict[str, str | None]):
     import asyncio
     from unittest.mock import patch
 
-    import kiro.guardrails as g
+    import aigw.guardrails as g
 
     class _Session:
         async def __aenter__(self):
@@ -801,8 +801,8 @@ def _policy_from_db(values: dict[str, str | None]):
 
     g.invalidate_pii_guard_cache()
     try:
-        with patch("kiro.db.engine.async_session_factory", _Session), \
-             patch("kiro.db.repositories.get_config", _get_config):
+        with patch("aigw.db.engine.async_session_factory", _Session), \
+             patch("aigw.db.repositories.get_config", _get_config):
             return asyncio.run(g.get_pii_policy())
     finally:
         g.invalidate_pii_guard_cache()
@@ -820,7 +820,7 @@ def test_dashboard_setting_overrides_the_env_default():
 
 
 def test_unset_dashboard_keys_fall_back_to_env():
-    from kiro.config import PII_GUARD_MODE, PII_SECRET_ACTION
+    from aigw.config import PII_GUARD_MODE, PII_SECRET_ACTION
 
     policy = _policy_from_db({
         "pii_guard_mode": None,
@@ -833,7 +833,7 @@ def test_unset_dashboard_keys_fall_back_to_env():
 
 def test_garbage_in_the_database_does_not_enable_the_guard():
     """A value this build does not recognise must be ignored, not guessed at."""
-    from kiro.config import PII_GUARD_MODE
+    from aigw.config import PII_GUARD_MODE
 
     policy = _policy_from_db({
         "pii_guard_mode": "tokenise",          # British spelling: not a mode
@@ -849,15 +849,15 @@ def test_database_failure_leaves_the_env_policy_in_force():
     import asyncio
     from unittest.mock import patch
 
-    import kiro.guardrails as g
-    from kiro.config import PII_GUARD_MODE
+    import aigw.guardrails as g
+    from aigw.config import PII_GUARD_MODE
 
     def _boom():
         raise RuntimeError("database is down")
 
     g.invalidate_pii_guard_cache()
     try:
-        with patch("kiro.db.engine.async_session_factory", _boom):
+        with patch("aigw.db.engine.async_session_factory", _boom):
             policy = asyncio.run(g.get_pii_policy())
     finally:
         g.invalidate_pii_guard_cache()
@@ -871,8 +871,8 @@ def test_config_route_shows_the_env_policy_when_nothing_is_stored():
     Both sides apply the same .env-as-floor rule, so an admin who has never
     touched the switch still sees the real mode rather than a hardcoded "off".
     """
-    from kiro.config import PII_GUARD_MODE, PII_RESTORE_TOOL_ARGS
-    from kiro.dashboard.routes_config import _to_response
+    from aigw.config import PII_GUARD_MODE, PII_RESTORE_TOOL_ARGS
+    from aigw.dashboard.routes_config import _to_response
 
     out = _to_response({})
     assert out.pii_guard_mode == PII_GUARD_MODE
@@ -880,7 +880,7 @@ def test_config_route_shows_the_env_policy_when_nothing_is_stored():
 
 
 def test_config_route_stored_value_wins_over_env():
-    from kiro.dashboard.routes_config import _to_response
+    from aigw.dashboard.routes_config import _to_response
 
     out = _to_response({"pii_guard_mode": "redact", "pii_restore_tool_args": "false"})
     assert out.pii_guard_mode == "redact"
@@ -893,7 +893,7 @@ def test_api_rejects_a_mode_the_gateway_cannot_honour():
     import pytest as _pytest
     from pydantic import ValidationError
 
-    from kiro.dashboard.schemas import SystemConfigUpdate
+    from aigw.dashboard.schemas import SystemConfigUpdate
 
     with _pytest.raises(ValidationError):
         SystemConfigUpdate(pii_guard_mode="tokenise")
@@ -904,7 +904,7 @@ def test_policy_is_cached_until_invalidated():
     import asyncio
     from unittest.mock import patch
 
-    import kiro.guardrails as g
+    import aigw.guardrails as g
 
     calls = {"n": 0}
 
@@ -921,8 +921,8 @@ def test_policy_is_cached_until_invalidated():
 
     g.invalidate_pii_guard_cache()
     try:
-        with patch("kiro.db.engine.async_session_factory", _Session), \
-             patch("kiro.db.repositories.get_config", _get_config):
+        with patch("aigw.db.engine.async_session_factory", _Session), \
+             patch("aigw.db.repositories.get_config", _get_config):
             asyncio.run(g.get_pii_policy())
             after_first = calls["n"]
             asyncio.run(g.get_pii_policy())
@@ -973,7 +973,7 @@ def test_restore_tool_args_defaults_to_config():
     PII_RESTORE_TOOL_ARGS itself (production callers pass nothing)."""
     from unittest.mock import patch
 
-    import kiro.config as cfg
+    import aigw.config as cfg
 
     vault = PiiVault()
     token = vault.token_for("EMAIL", "an@example.com")
@@ -994,7 +994,7 @@ def test_restore_stream_fails_open_on_unexpected_error():
     import asyncio
     from unittest.mock import patch
 
-    from kiro.guardrails.restore import SseRestorer, restore_stream
+    from aigw.guardrails.restore import SseRestorer, restore_stream
 
     vault = PiiVault()
     token = vault.token_for("EMAIL", "an@example.com")

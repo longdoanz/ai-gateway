@@ -15,7 +15,7 @@ import os
 import pytest
 from unittest.mock import patch
 
-from kiro.converters_core import (
+from aigw.converters_core import (
     extract_text_content,
     extract_images_from_content,
     convert_images_to_kiro_format,
@@ -179,7 +179,7 @@ class TestExtractTextContent:
         Pydantic TextContentBlock objects weren't being handled, causing MCP tool
         results to return "(empty result)" instead of actual data.
         """
-        from kiro.models_anthropic import TextContentBlock
+        from aigw.models_anthropic import TextContentBlock
         
         print("Setup: Pydantic TextContentBlock...")
         content = [
@@ -198,7 +198,7 @@ class TestExtractTextContent:
         What it does: Verifies extraction from multiple Pydantic TextContentBlock objects.
         Purpose: Ensure multiple Pydantic models are concatenated correctly.
         """
-        from kiro.models_anthropic import TextContentBlock
+        from aigw.models_anthropic import TextContentBlock
         
         print("Setup: Multiple Pydantic TextContentBlocks...")
         content = [
@@ -222,7 +222,7 @@ class TestExtractTextContent:
         This simulates real-world scenarios where some content is parsed as dict
         and some as Pydantic models.
         """
-        from kiro.models_anthropic import TextContentBlock
+        from aigw.models_anthropic import TextContentBlock
         
         print("Setup: Mixed dict and Pydantic content...")
         content = [
@@ -243,7 +243,7 @@ class TestExtractTextContent:
         What it does: Verifies handling of Pydantic TextContentBlock with empty text.
         Purpose: Ensure empty text in Pydantic models doesn't cause errors.
         """
-        from kiro.models_anthropic import TextContentBlock
+        from aigw.models_anthropic import TextContentBlock
         
         print("Setup: Pydantic TextContentBlock with empty text...")
         content = [
@@ -264,7 +264,7 @@ class TestExtractTextContent:
         
         This simulates MCP tool results that contain both text and tool_use blocks.
         """
-        from kiro.models_anthropic import TextContentBlock, ToolUseContentBlock
+        from aigw.models_anthropic import TextContentBlock, ToolUseContentBlock
         
         print("Setup: Mixed Pydantic content with text and tool_use...")
         content = [
@@ -558,7 +558,7 @@ class TestExtractImagesFromContent:
         This is the critical test for Issue #30 - the original bug was that
         Pydantic ImageContentBlock objects weren't being handled.
         """
-        from kiro.models_anthropic import ImageContentBlock, Base64ImageSource
+        from aigw.models_anthropic import ImageContentBlock, Base64ImageSource
         
         print("Setup: Pydantic ImageContentBlock...")
         content = [
@@ -590,7 +590,7 @@ class TestExtractImagesFromContent:
         What it does: Verifies handling of Pydantic URLImageSource objects.
         Purpose: Ensure Pydantic URL sources are skipped with warning.
         """
-        from kiro.models_anthropic import ImageContentBlock, URLImageSource
+        from aigw.models_anthropic import ImageContentBlock, URLImageSource
         
         print("Setup: Pydantic ImageContentBlock with URL source...")
         content = [
@@ -3223,7 +3223,7 @@ class TestProcessToolsWithLongDescriptions:
         )]
         
         print("Action: Processing tools...")
-        with patch('kiro.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
+        with patch('aigw.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
             processed, doc = process_tools_with_long_descriptions(tools)
         
         print(f"Comparing description: Expected 'Get weather for a location', Got '{processed[0].description}'")
@@ -3245,7 +3245,7 @@ class TestProcessToolsWithLongDescriptions:
         )]
         
         print("Action: Processing tools with limit 10000...")
-        with patch('kiro.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
+        with patch('aigw.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
             processed, doc = process_tools_with_long_descriptions(tools)
         
         print("Checking reference in description...")
@@ -3271,7 +3271,7 @@ class TestProcessToolsWithLongDescriptions:
         ]
         
         print("Action: Processing tools...")
-        with patch('kiro.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
+        with patch('aigw.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
             processed, doc = process_tools_with_long_descriptions(tools)
         
         print(f"Checking tools count: Expected 2, Got {len(processed)}")
@@ -3295,7 +3295,7 @@ class TestProcessToolsWithLongDescriptions:
         tools = [UnifiedTool(name="test_tool", description=long_desc, input_schema={})]
         
         print("Action: Processing tools with limit 0...")
-        with patch('kiro.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 0):
+        with patch('aigw.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 0):
             processed, doc = process_tools_with_long_descriptions(tools)
         
         print("Checking that description is unchanged...")
@@ -3315,7 +3315,7 @@ class TestProcessToolsWithLongDescriptions:
         ]
         
         print("Action: Processing tools...")
-        with patch('kiro.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
+        with patch('aigw.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
             processed, doc = process_tools_with_long_descriptions(tools)
         
         print("Checking all three tools...")
@@ -3337,7 +3337,7 @@ class TestProcessToolsWithLongDescriptions:
         tools = [UnifiedTool(name="empty_desc_tool", description="", input_schema={})]
         
         print("Action: Processing tools...")
-        with patch('kiro.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
+        with patch('aigw.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
             processed, doc = process_tools_with_long_descriptions(tools)
         
         print("Checking that empty description remains empty...")
@@ -3353,7 +3353,7 @@ class TestProcessToolsWithLongDescriptions:
         tools = [UnifiedTool(name="none_desc_tool", description=None, input_schema={})]
         
         print("Action: Processing tools...")
-        with patch('kiro.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
+        with patch('aigw.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
             processed, doc = process_tools_with_long_descriptions(tools)
         
         print("Checking that None description is handled correctly...")
@@ -3382,7 +3382,7 @@ class TestProcessToolsWithLongDescriptions:
         )]
         
         print("Action: Processing tools...")
-        with patch('kiro.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
+        with patch('aigw.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
             processed, doc = process_tools_with_long_descriptions(tools)
         
         print("Checking input_schema preservation...")
@@ -3522,7 +3522,7 @@ class TestInjectThinkingTags:
         content = "Hello, world!"
         
         print("Action: Inject thinking tags with FAKE_REASONING_ENABLED=False...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', False):
+        with patch('aigw.converters_core.FAKE_REASONING_ENABLED', False):
             result = inject_thinking_tags(content, ThinkingConfig())
         
         print(f"Comparing result: Expected 'Hello, world!', Got '{result}'")
@@ -3537,8 +3537,8 @@ class TestInjectThinkingTags:
         content = "What is 2+2?"
         
         print("Action: Inject thinking tags with FAKE_REASONING_ENABLED=True...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
+        with patch('aigw.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('aigw.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
                 result = inject_thinking_tags(content, ThinkingConfig())
         
         print(f"Result: {result[:200]}...")
@@ -3560,8 +3560,8 @@ class TestInjectThinkingTags:
         content = "Analyze this code"
         
         print("Action: Inject thinking tags...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 8000):
+        with patch('aigw.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('aigw.converters_core.FAKE_REASONING_MAX_TOKENS', 8000):
                 result = inject_thinking_tags(content, ThinkingConfig())
         
         print(f"Result length: {len(result)} chars")
@@ -3578,8 +3578,8 @@ class TestInjectThinkingTags:
         content = "Test"
         
         print("Action: Inject thinking tags...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
+        with patch('aigw.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('aigw.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
                 result = inject_thinking_tags(content, ThinkingConfig())
         
         print("Checking for English directive...")
@@ -3594,9 +3594,9 @@ class TestInjectThinkingTags:
         content = "Test"
         
         print("Action: Inject thinking tags with FAKE_REASONING_MAX_TOKENS=16000...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 16000):
-                with patch('kiro.converters_core.FAKE_REASONING_BUDGET_CAP', 0):  # Disable cap
+        with patch('aigw.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('aigw.converters_core.FAKE_REASONING_MAX_TOKENS', 16000):
+                with patch('aigw.converters_core.FAKE_REASONING_BUDGET_CAP', 0):  # Disable cap
                     result = inject_thinking_tags(content, ThinkingConfig())
         
         print(f"Result: {result[:300]}...")
@@ -3612,8 +3612,8 @@ class TestInjectThinkingTags:
         content = ""
         
         print("Action: Inject thinking tags...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
+        with patch('aigw.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('aigw.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
                 result = inject_thinking_tags(content, ThinkingConfig())
         
         print(f"Result length: {len(result)} chars")
@@ -3630,8 +3630,8 @@ class TestInjectThinkingTags:
         content = "Line 1\nLine 2\nLine 3"
         
         print("Action: Inject thinking tags...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
+        with patch('aigw.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('aigw.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
                 result = inject_thinking_tags(content, ThinkingConfig())
         
         print("Checking that multiline content is preserved...")
@@ -3646,8 +3646,8 @@ class TestInjectThinkingTags:
         content = "Check this <code>example</code> and {json: 'value'}"
         
         print("Action: Inject thinking tags...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
+        with patch('aigw.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('aigw.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
                 result = inject_thinking_tags(content, ThinkingConfig())
         
         print("Checking that special characters are preserved...")
@@ -3663,8 +3663,8 @@ class TestInjectThinkingTags:
         content = "Test"
         
         print("Action: Inject thinking tags...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
+        with patch('aigw.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('aigw.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
                 result = inject_thinking_tags(content, ThinkingConfig())
         
         print("Checking for systematic approach keywords...")
@@ -3679,8 +3679,8 @@ class TestInjectThinkingTags:
         content = "Test"
         
         print("Action: Inject thinking tags...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
+        with patch('aigw.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('aigw.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
                 result = inject_thinking_tags(content, ThinkingConfig())
         
         print("Checking for understanding step...")
@@ -3695,8 +3695,8 @@ class TestInjectThinkingTags:
         content = "Test"
         
         print("Action: Inject thinking tags...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
+        with patch('aigw.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('aigw.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
                 result = inject_thinking_tags(content, ThinkingConfig())
         
         print("Checking for verification step...")
@@ -3711,8 +3711,8 @@ class TestInjectThinkingTags:
         content = "Test"
         
         print("Action: Inject thinking tags...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
+        with patch('aigw.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('aigw.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
                 result = inject_thinking_tags(content, ThinkingConfig())
         
         print("Checking for quality emphasis...")
@@ -3727,8 +3727,8 @@ class TestInjectThinkingTags:
         content = "USER_CONTENT_HERE"
         
         print("Action: Inject thinking tags...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
+        with patch('aigw.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('aigw.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
                 result = inject_thinking_tags(content, ThinkingConfig())
         
         print("Checking tag order...")
@@ -5914,8 +5914,8 @@ class TestBuildKiroPayloadImages:
         ]
         
         print("Action: Building Kiro payload with thinking injection...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
+        with patch('aigw.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('aigw.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
                 result = build_kiro_payload(
                     messages=messages,
                     system_prompt="",
@@ -5960,7 +5960,7 @@ class TestValidateToolNames:
         
         print("Action: Validating tool names...")
         try:
-            from kiro.converters_core import validate_tool_names
+            from aigw.converters_core import validate_tool_names
             validate_tool_names(tools)
             print("Validation passed - OK")
         except ValueError as e:
@@ -5979,7 +5979,7 @@ class TestValidateToolNames:
         print(f"Tool name length: {len(name_64)}")
         print("Action: Validating tool names...")
         try:
-            from kiro.converters_core import validate_tool_names
+            from aigw.converters_core import validate_tool_names
             validate_tool_names(tools)
             print("Validation passed - OK")
         except ValueError as e:
@@ -5998,7 +5998,7 @@ class TestValidateToolNames:
         print(f"Tool name length: {len(name_65)}")
         print("Action: Validating tool names (should raise ValueError)...")
         try:
-            from kiro.converters_core import validate_tool_names
+            from aigw.converters_core import validate_tool_names
             validate_tool_names(tools)
             print("ERROR: Validation passed but should have failed")
             raise AssertionError("65-character names should be rejected")
@@ -6019,7 +6019,7 @@ class TestValidateToolNames:
         print(f"Tool name length: {len(name_100)}")
         print("Action: Validating tool names (should raise ValueError)...")
         try:
-            from kiro.converters_core import validate_tool_names
+            from aigw.converters_core import validate_tool_names
             validate_tool_names(tools)
             raise AssertionError("Very long names should be rejected")
         except ValueError as e:
@@ -6041,7 +6041,7 @@ class TestValidateToolNames:
         
         print("Action: Validating tool names (should raise ValueError)...")
         try:
-            from kiro.converters_core import validate_tool_names
+            from aigw.converters_core import validate_tool_names
             validate_tool_names(tools)
             raise AssertionError("Should reject multiple long names")
         except ValueError as e:
@@ -6061,7 +6061,7 @@ class TestValidateToolNames:
         
         print("Action: Validating None...")
         try:
-            from kiro.converters_core import validate_tool_names
+            from aigw.converters_core import validate_tool_names
             validate_tool_names(None)
             print("Validation passed - OK")
         except Exception as e:
@@ -6077,7 +6077,7 @@ class TestValidateToolNames:
         
         print("Action: Validating empty list...")
         try:
-            from kiro.converters_core import validate_tool_names
+            from aigw.converters_core import validate_tool_names
             validate_tool_names([])
             print("Validation passed - OK")
         except Exception as e:
@@ -6094,7 +6094,7 @@ class TestValidateToolNames:
         
         print("Action: Validating tool names (should raise ValueError)...")
         try:
-            from kiro.converters_core import validate_tool_names
+            from aigw.converters_core import validate_tool_names
             validate_tool_names(tools)
             raise AssertionError("Should reject long name")
         except ValueError as e:
@@ -6122,7 +6122,7 @@ class TestValidateToolNames:
         
         print("Action: Validating real MCP tool names (should raise ValueError)...")
         try:
-            from kiro.converters_core import validate_tool_names
+            from aigw.converters_core import validate_tool_names
             validate_tool_names(tools)
             raise AssertionError("Should reject real MCP tool names")
         except ValueError as e:
@@ -6162,10 +6162,10 @@ class TestGetTruncationRecoverySystemAddition:
         print("Action: Getting truncation recovery system addition...")
         with patch.dict(os.environ, {"TRUNCATION_RECOVERY": "true"}):
             from importlib import reload
-            from kiro import config
+            from aigw import config
             reload(config)
             
-            from kiro.converters_core import get_truncation_recovery_system_addition
+            from aigw.converters_core import get_truncation_recovery_system_addition
             addition = get_truncation_recovery_system_addition()
             print(f"Addition length: {len(addition)} chars")
         
@@ -6194,10 +6194,10 @@ class TestGetTruncationRecoverySystemAddition:
         print("Action: Getting truncation recovery system addition...")
         with patch.dict(os.environ, {"TRUNCATION_RECOVERY": "false"}):
             from importlib import reload
-            from kiro import config
+            from aigw import config
             reload(config)
             
-            from kiro.converters_core import get_truncation_recovery_system_addition
+            from aigw.converters_core import get_truncation_recovery_system_addition
             addition = get_truncation_recovery_system_addition()
             print(f"Addition: '{addition}'")
         
@@ -6214,10 +6214,10 @@ class TestGetTruncationRecoverySystemAddition:
         print("Action: Getting truncation recovery system addition...")
         with patch.dict(os.environ, {"TRUNCATION_RECOVERY": "true"}):
             from importlib import reload
-            from kiro import config
+            from aigw import config
             reload(config)
             
-            from kiro.converters_core import get_truncation_recovery_system_addition
+            from aigw.converters_core import get_truncation_recovery_system_addition
             addition = get_truncation_recovery_system_addition()
         
         print("Checking that addition starts with separator...")
@@ -6284,7 +6284,7 @@ class TestInjectThinkingTagsWithConfig:
         Purpose: Ensure global disable flag works regardless of config
         """
         print("Setting FAKE_REASONING_ENABLED=False...")
-        monkeypatch.setattr("kiro.converters_core.FAKE_REASONING_ENABLED", False)
+        monkeypatch.setattr("aigw.converters_core.FAKE_REASONING_ENABLED", False)
         
         config = ThinkingConfig(enabled=True, budget_tokens=8000)
         content = "Hello, world!"
@@ -6301,7 +6301,7 @@ class TestInjectThinkingTagsWithConfig:
         Purpose: Ensure client can disable thinking per-request
         """
         print("Setting FAKE_REASONING_ENABLED=True...")
-        monkeypatch.setattr("kiro.converters_core.FAKE_REASONING_ENABLED", True)
+        monkeypatch.setattr("aigw.converters_core.FAKE_REASONING_ENABLED", True)
         
         config = ThinkingConfig(enabled=False, budget_tokens=None)
         content = "Hello, world!"
@@ -6318,9 +6318,9 @@ class TestInjectThinkingTagsWithConfig:
         Purpose: Ensure default budget fallback works
         """
         print("Setting FAKE_REASONING_ENABLED=True, FAKE_REASONING_MAX_TOKENS=4000...")
-        monkeypatch.setattr("kiro.converters_core.FAKE_REASONING_ENABLED", True)
-        monkeypatch.setattr("kiro.converters_core.FAKE_REASONING_MAX_TOKENS", 4000)
-        monkeypatch.setattr("kiro.converters_core.FAKE_REASONING_BUDGET_CAP", 10000)
+        monkeypatch.setattr("aigw.converters_core.FAKE_REASONING_ENABLED", True)
+        monkeypatch.setattr("aigw.converters_core.FAKE_REASONING_MAX_TOKENS", 4000)
+        monkeypatch.setattr("aigw.converters_core.FAKE_REASONING_BUDGET_CAP", 10000)
         
         config = ThinkingConfig(enabled=True, budget_tokens=None)
         content = "Test content"
@@ -6339,8 +6339,8 @@ class TestInjectThinkingTagsWithConfig:
         Purpose: Ensure client-provided budget is respected
         """
         print("Setting FAKE_REASONING_ENABLED=True...")
-        monkeypatch.setattr("kiro.converters_core.FAKE_REASONING_ENABLED", True)
-        monkeypatch.setattr("kiro.converters_core.FAKE_REASONING_BUDGET_CAP", 10000)
+        monkeypatch.setattr("aigw.converters_core.FAKE_REASONING_ENABLED", True)
+        monkeypatch.setattr("aigw.converters_core.FAKE_REASONING_BUDGET_CAP", 10000)
         
         config = ThinkingConfig(enabled=True, budget_tokens=8000)
         content = "Test content"
@@ -6361,15 +6361,15 @@ class TestInjectThinkingTagsWithConfig:
         from unittest.mock import patch, call
         
         print("Setting FAKE_REASONING_ENABLED=True, cap=10000...")
-        monkeypatch.setattr("kiro.converters_core.FAKE_REASONING_ENABLED", True)
-        monkeypatch.setattr("kiro.converters_core.FAKE_REASONING_BUDGET_CAP", 10000)
+        monkeypatch.setattr("aigw.converters_core.FAKE_REASONING_ENABLED", True)
+        monkeypatch.setattr("aigw.converters_core.FAKE_REASONING_BUDGET_CAP", 10000)
         
         config = ThinkingConfig(enabled=True, budget_tokens=50000)
         content = "Test content"
         
         print(f"Calling inject_thinking_tags with budget=50000 (exceeds cap)...")
         # Mock logger.warning to verify it's called
-        with patch("kiro.converters_core.logger.warning") as mock_warning:
+        with patch("aigw.converters_core.logger.warning") as mock_warning:
             result = inject_thinking_tags(content, config)
             
             print(f"Checking for capped value <max_thinking_length>10000</max_thinking_length>...")
@@ -6391,8 +6391,8 @@ class TestInjectThinkingTagsWithConfig:
         Purpose: Ensure cap doesn't affect budgets below limit
         """
         print("Setting FAKE_REASONING_ENABLED=True, cap=10000...")
-        monkeypatch.setattr("kiro.converters_core.FAKE_REASONING_ENABLED", True)
-        monkeypatch.setattr("kiro.converters_core.FAKE_REASONING_BUDGET_CAP", 10000)
+        monkeypatch.setattr("aigw.converters_core.FAKE_REASONING_ENABLED", True)
+        monkeypatch.setattr("aigw.converters_core.FAKE_REASONING_BUDGET_CAP", 10000)
         
         config = ThinkingConfig(enabled=True, budget_tokens=5000)
         content = "Test content"
@@ -6409,8 +6409,8 @@ class TestInjectThinkingTagsWithConfig:
         Purpose: Ensure users can disable capping
         """
         print("Setting FAKE_REASONING_ENABLED=True, cap=0 (disabled)...")
-        monkeypatch.setattr("kiro.converters_core.FAKE_REASONING_ENABLED", True)
-        monkeypatch.setattr("kiro.converters_core.FAKE_REASONING_BUDGET_CAP", 0)
+        monkeypatch.setattr("aigw.converters_core.FAKE_REASONING_ENABLED", True)
+        monkeypatch.setattr("aigw.converters_core.FAKE_REASONING_BUDGET_CAP", 0)
         
         config = ThinkingConfig(enabled=True, budget_tokens=50000)
         content = "Test content"
@@ -6431,8 +6431,8 @@ class TestBuildKiroPayloadWithThinkingConfig:
         Purpose: Ensure thinking configuration flows through the pipeline
         """
         print("Setting up mocks...")
-        monkeypatch.setattr("kiro.converters_core.FAKE_REASONING_ENABLED", True)
-        monkeypatch.setattr("kiro.converters_core.FAKE_REASONING_BUDGET_CAP", 10000)
+        monkeypatch.setattr("aigw.converters_core.FAKE_REASONING_ENABLED", True)
+        monkeypatch.setattr("aigw.converters_core.FAKE_REASONING_BUDGET_CAP", 10000)
         
         messages = [UnifiedMessage(role="user", content="Test message")]
         thinking_config = ThinkingConfig(enabled=True, budget_tokens=7000)

@@ -22,14 +22,14 @@ import time
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from kiro.routes_openai import verify_api_key, router
-from kiro.config import PROXY_API_KEY, APP_VERSION
+from aigw.routes_openai import verify_api_key, router
+from aigw.config import PROXY_API_KEY, APP_VERSION
 
 
 @pytest.fixture(autouse=True)
 def force_standard_auth_mode():
     """Ensure API_KEY_MODE=False for all tests in this file regardless of .env."""
-    import kiro.routes_openai as _mod
+    import aigw.routes_openai as _mod
     original = _mod.API_KEY_MODE
     _mod.API_KEY_MODE = False
     yield
@@ -183,7 +183,7 @@ class TestRootEndpoint:
         
         print(f"Result: {response.json()}")
         assert response.status_code == 200
-        assert "Kiro Gateway" in response.json()["message"]
+        assert "AI Gateway" in response.json()["message"]
     
     def test_root_returns_version(self, test_client):
         """
@@ -339,7 +339,7 @@ class TestModelsEndpoint:
         """
         print("Action: GET /v1/models with valid auth, 9router catalog mocked...")
         with patch(
-            "kiro.nine_router_client.fetch_nine_router_models",
+            "aigw.nine_router_client.fetch_nine_router_models",
             new=AsyncMock(return_value=["kiro/claude-sonnet-4", "openai/gpt-5"]),
         ):
             response = test_client.get(
@@ -354,7 +354,32 @@ class TestModelsEndpoint:
         print(f"Model IDs: {model_ids}")
 
         assert model_ids == ["kiro/claude-sonnet-4", "openai/gpt-5"]
-    
+
+    def test_models_search_filters_case_insensitive_substring(self, test_client, valid_proxy_api_key):
+        """
+        What it does: Verifies ?search= filters the catalog by case-insensitive
+        substring match.
+        Purpose: The 9router catalog has hundreds of models — clients need a
+        way to narrow the list without fetching everything.
+        """
+        print("Action: GET /v1/models?search=... with valid auth, 9router catalog mocked...")
+        with patch(
+            "aigw.nine_router_client.fetch_nine_router_models",
+            new=AsyncMock(return_value=["kiro/claude-sonnet-4", "openai/gpt-5", "openai/gpt-5-mini"]),
+        ):
+            response = test_client.get(
+                "/v1/models?search=GPT-5",
+                headers={"Authorization": f"Bearer {valid_proxy_api_key}"}
+            )
+
+        print(f"Result: {response.json()}")
+        assert response.status_code == 200
+
+        model_ids = [m["id"] for m in response.json()["data"]]
+        print(f"Model IDs: {model_ids}")
+
+        assert model_ids == ["openai/gpt-5", "openai/gpt-5-mini"]
+
     def test_models_format_is_openai_compatible(self, test_client, valid_proxy_api_key):
         """
         What it does: Verifies model objects have OpenAI-compatible format.
@@ -906,8 +931,8 @@ class TestTruncationRecoveryMessageModification:
         Purpose: Ensure truncation notice is prepended to tool_result.
         """
         print("Setup: Saving truncation info to cache...")
-        from kiro.truncation_state import save_tool_truncation
-        from kiro.models_openai import ChatMessage
+        from aigw.truncation_state import save_tool_truncation
+        from aigw.models_openai import ChatMessage
         
         tool_call_id = "tooluse_test123"
         save_tool_truncation(tool_call_id, "write_to_file", {"size_bytes": 5000, "reason": "test"})
@@ -919,9 +944,9 @@ class TestTruncationRecoveryMessageModification:
         
         print("Action: Processing messages through truncation recovery logic...")
         # Import the function that modifies messages
-        from kiro.routes_openai import router
-        from kiro.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
-        from kiro.truncation_state import get_tool_truncation
+        from aigw.routes_openai import router
+        from aigw.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
+        from aigw.truncation_state import get_tool_truncation
         
         # Simulate the modification logic
         modified_messages = []
@@ -957,15 +982,15 @@ class TestTruncationRecoveryMessageModification:
         Purpose: Ensure normal messages pass through unchanged.
         """
         print("Setup: Creating request without truncation info in cache...")
-        from kiro.models_openai import ChatMessage
+        from aigw.models_openai import ChatMessage
         
         messages = [
             ChatMessage(role="tool", tool_call_id="tooluse_nonexistent", content="Success")
         ]
         
         print("Action: Processing messages...")
-        from kiro.truncation_recovery import should_inject_recovery
-        from kiro.truncation_state import get_tool_truncation
+        from aigw.truncation_recovery import should_inject_recovery
+        from aigw.truncation_state import get_tool_truncation
         
         modified_messages = []
         tool_results_modified = 0
@@ -994,8 +1019,8 @@ class TestTruncationRecoveryMessageModification:
         Purpose: Ensure Pydantic immutability is respected.
         """
         print("Setup: Saving truncation info and creating message...")
-        from kiro.truncation_state import save_tool_truncation
-        from kiro.models_openai import ChatMessage
+        from aigw.truncation_state import save_tool_truncation
+        from aigw.models_openai import ChatMessage
         
         tool_call_id = "test_immutable"
         save_tool_truncation(tool_call_id, "tool", {"size_bytes": 1000, "reason": "test truncation"})
@@ -1004,8 +1029,8 @@ class TestTruncationRecoveryMessageModification:
         original_content = original_msg.content
         
         print("Action: Processing message...")
-        from kiro.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
-        from kiro.truncation_state import get_tool_truncation
+        from aigw.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
+        from aigw.truncation_state import get_tool_truncation
         
         if original_msg.role == "tool" and original_msg.tool_call_id and should_inject_recovery():
             truncation_info = get_tool_truncation(original_msg.tool_call_id)
@@ -1047,15 +1072,15 @@ class TestTruncationRecoveryEdgeCases:
         Purpose: Ensure orphaned tool_result doesn't cause errors (Test Case 9.2).
         """
         print("Setup: Creating tool_result without prior truncation...")
-        from kiro.models_openai import ChatMessage
+        from aigw.models_openai import ChatMessage
         
         messages = [
             ChatMessage(role="tool", tool_call_id="tooluse_nonexistent_orphan", content="Result")
         ]
         
         print("Action: Processing messages (no truncation info in cache)...")
-        from kiro.truncation_recovery import should_inject_recovery
-        from kiro.truncation_state import get_tool_truncation
+        from aigw.truncation_recovery import should_inject_recovery
+        from aigw.truncation_state import get_tool_truncation
         
         modified_messages = []
         for msg in messages:
@@ -1078,8 +1103,8 @@ class TestTruncationRecoveryEdgeCases:
         Purpose: Ensure empty content doesn't cause errors (Test Case 9.4).
         """
         print("Setup: Saving truncation info and creating empty tool_result...")
-        from kiro.truncation_state import save_tool_truncation
-        from kiro.models_openai import ChatMessage
+        from aigw.truncation_state import save_tool_truncation
+        from aigw.models_openai import ChatMessage
         
         tool_call_id = "tooluse_empty_content"
         save_tool_truncation(tool_call_id, "tool", {"size_bytes": 1000, "reason": "test"})
@@ -1089,8 +1114,8 @@ class TestTruncationRecoveryEdgeCases:
         ]
         
         print("Action: Processing message with empty content...")
-        from kiro.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
-        from kiro.truncation_state import get_tool_truncation
+        from aigw.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
+        from aigw.truncation_state import get_tool_truncation
         
         modified_messages = []
         for msg in messages:
@@ -1123,7 +1148,7 @@ class TestTruncationRecoveryEdgeCases:
         Purpose: Ensure hash stability for long content (Test Case 9.3).
         """
         print("Setup: Creating very long content...")
-        from kiro.truncation_state import save_content_truncation, get_content_truncation
+        from aigw.truncation_state import save_content_truncation, get_content_truncation
         
         content_long = "A" * 10000
         content_same_prefix = "A" * 500 + "B" * 9500
@@ -1147,8 +1172,8 @@ class TestTruncationRecoveryEdgeCases:
         Purpose: Ensure disabling recovery doesn't clear cache (Test Case 9.5).
         """
         print("Setup: Enabling recovery and saving truncation...")
-        from kiro.truncation_state import save_tool_truncation, get_cache_stats
-        from kiro.models_openai import ChatMessage
+        from aigw.truncation_state import save_tool_truncation, get_cache_stats
+        from aigw.models_openai import ChatMessage
         import os
         
         tool_call_id = "tooluse_disabled_recovery"
@@ -1161,12 +1186,12 @@ class TestTruncationRecoveryEdgeCases:
         print("Action: Disabling recovery...")
         with patch.dict(os.environ, {"TRUNCATION_RECOVERY": "false"}):
             from importlib import reload
-            from kiro import config
+            from aigw import config
             reload(config)
             
             print("Action: Processing tool_result with recovery disabled...")
-            from kiro.truncation_recovery import should_inject_recovery
-            from kiro.truncation_state import get_tool_truncation
+            from aigw.truncation_recovery import should_inject_recovery
+            from aigw.truncation_state import get_tool_truncation
             
             messages = [
                 ChatMessage(role="tool", tool_call_id=tool_call_id, content="Result")
@@ -1188,7 +1213,7 @@ class TestTruncationRecoveryEdgeCases:
         # Restore config.TRUNCATION_RECOVERY — reload(config) inside the patch.dict
         # block set it to False; patch.dict only restores the env var, not the module.
         from importlib import reload
-        from kiro import config as _cfg
+        from aigw import config as _cfg
         reload(_cfg)
 
         print("Checking: Cache entry still exists (not cleaned up)...")
@@ -1216,8 +1241,8 @@ class TestContentTruncationRecovery:
         Purpose: Ensure content truncation recovery works (Test Case C.1).
         """
         print("Setup: Saving content truncation info...")
-        from kiro.truncation_state import save_content_truncation
-        from kiro.models_openai import ChatMessage
+        from aigw.truncation_state import save_content_truncation
+        from aigw.models_openai import ChatMessage
         
         truncated_content = "This is a very long response that was cut off mid-sentence"
         save_content_truncation(truncated_content)
@@ -1228,8 +1253,8 @@ class TestContentTruncationRecovery:
         ]
         
         print("Action: Processing messages through content truncation recovery...")
-        from kiro.truncation_recovery import should_inject_recovery, generate_truncation_user_message
-        from kiro.truncation_state import get_content_truncation
+        from aigw.truncation_recovery import should_inject_recovery, generate_truncation_user_message
+        from aigw.truncation_state import get_content_truncation
         
         modified_messages = []
         for msg in messages:
@@ -1266,14 +1291,14 @@ class TestContentTruncationRecovery:
         Purpose: Ensure false positives don't occur (Test Case C.3).
         """
         print("Setup: Creating normal assistant message (no truncation)...")
-        from kiro.models_openai import ChatMessage
+        from aigw.models_openai import ChatMessage
         
         messages = [
             ChatMessage(role="assistant", content="This is a complete response.")
         ]
         
         print("Action: Processing messages...")
-        from kiro.truncation_state import get_content_truncation
+        from aigw.truncation_state import get_content_truncation
         
         modified_messages = []
         for msg in messages:
@@ -1296,7 +1321,7 @@ class TestContentTruncationRecovery:
         Purpose: Ensure long messages can be matched by prefix.
         """
         print("Setup: Creating long content...")
-        from kiro.truncation_state import save_content_truncation, get_content_truncation
+        from aigw.truncation_state import save_content_truncation, get_content_truncation
         
         # Original content (what was saved during detection)
         original_content = "A" * 1000
@@ -1328,7 +1353,7 @@ class TestWebSearchAutoInjectionOpenAI:
         Purpose: Ensure WEB_SEARCH_ENABLED controls auto-injection for OpenAI format.
         """
         print("Setup: Testing OpenAI auto-injection logic...")
-        from kiro.models_openai import Tool, ToolFunction
+        from aigw.models_openai import Tool, ToolFunction
         
         # Simulate auto-injection logic for OpenAI
         WEB_SEARCH_ENABLED = True
@@ -1373,7 +1398,7 @@ class TestWebSearchAutoInjectionOpenAI:
         Purpose: Ensure auto-injection doesn't create duplicates for OpenAI.
         """
         print("Setup: Testing OpenAI duplicate detection...")
-        from kiro.models_openai import Tool, ToolFunction
+        from aigw.models_openai import Tool, ToolFunction
         
         # Simulate existing web_search tool
         existing_tools = [

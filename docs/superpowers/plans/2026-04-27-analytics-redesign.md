@@ -105,7 +105,7 @@ Add to `tests/unit/test_repositories.py`:
 ```python
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from kiro.db.repositories import increment_daily_usage
+from aigw.db.repositories import increment_daily_usage
 
 
 @pytest.mark.asyncio
@@ -132,7 +132,7 @@ Add after the `get_all_usage_for_month` function:
 
 ```python
 async def increment_daily_usage(session: AsyncSession, key_id: int, date: str, amount: int = 1) -> None:
-    from kiro.db.models import DailyUsage
+    from aigw.db.models import DailyUsage
     stmt = pg_insert(DailyUsage).values(key_id=key_id, date=date, credits=amount)
     stmt = stmt.on_conflict_do_update(
         constraint="uq_daily_usage_key_date",
@@ -173,7 +173,7 @@ Create `tests/unit/test_daily_buffer.py`:
 import asyncio
 import pytest
 from unittest.mock import AsyncMock, patch
-from kiro.usage.daily_buffer import DailyBuffer
+from aigw.usage.daily_buffer import DailyBuffer
 
 
 @pytest.mark.asyncio
@@ -191,11 +191,11 @@ async def test_flush_clears_buffer():
     buf = DailyBuffer()
     buf.record(1, "2026-04-27", 10)
 
-    with patch("kiro.usage.daily_buffer.async_session_factory") as mock_factory:
+    with patch("aigw.usage.daily_buffer.async_session_factory") as mock_factory:
         mock_session = AsyncMock()
         mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
-        with patch("kiro.usage.daily_buffer.increment_daily_usage", new_callable=AsyncMock):
+        with patch("aigw.usage.daily_buffer.increment_daily_usage", new_callable=AsyncMock):
             await buf.flush()
 
     assert len(buf._buffer) == 0
@@ -204,7 +204,7 @@ async def test_flush_clears_buffer():
 @pytest.mark.asyncio
 async def test_flush_empty_buffer_is_noop():
     buf = DailyBuffer()
-    with patch("kiro.usage.daily_buffer.async_session_factory") as mock_factory:
+    with patch("aigw.usage.daily_buffer.async_session_factory") as mock_factory:
         await buf.flush()
     mock_factory.assert_not_called()
 
@@ -230,7 +230,7 @@ async def test_graceful_shutdown_drains():
 pytest tests/unit/test_daily_buffer.py -v
 ```
 
-Expected: `FAILED` — `ModuleNotFoundError: No module named 'kiro.usage.daily_buffer'`
+Expected: `FAILED` — `ModuleNotFoundError: No module named 'aigw.usage.daily_buffer'`
 
 - [ ] **Step 3: Implement `kiro/usage/daily_buffer.py`**
 
@@ -241,8 +241,8 @@ from datetime import date
 
 from loguru import logger
 
-from kiro.db.engine import async_session_factory
-from kiro.db.repositories import increment_daily_usage
+from aigw.db.engine import async_session_factory
+from aigw.db.repositories import increment_daily_usage
 
 _FLUSH_INTERVAL = 60
 
@@ -326,7 +326,7 @@ git commit -m "feat: add DailyBuffer in-memory credit buffer with graceful shutd
 In `kiro/usage/tracker.py`, add the import at the top:
 
 ```python
-from kiro.usage.daily_buffer import daily_buffer
+from aigw.usage.daily_buffer import daily_buffer
 ```
 
 Then in `track_usage`, after the `await usage_cache.increment(key_id, amount)` line, add:
@@ -361,7 +361,7 @@ async def track_usage(key_id: int, credits_used: int | None = None) -> None:
 In `kiro/usage/scheduler.py`, add the import:
 
 ```python
-from kiro.usage.daily_buffer import daily_buffer
+from aigw.usage.daily_buffer import daily_buffer
 ```
 
 In `startup()`, after `_sync_task = asyncio.create_task(run_sync_loop())`, add:
@@ -473,9 +473,9 @@ import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 from httpx import AsyncClient
 from fastapi import FastAPI
-from kiro.dashboard.routes_analytics import router
-from kiro.dashboard.deps import get_current_user
-from kiro.db.engine import get_session
+from aigw.dashboard.routes_analytics import router
+from aigw.dashboard.deps import get_current_user
+from aigw.db.engine import get_session
 
 app = FastAPI()
 app.include_router(router)  # router already has prefix="/overview"
@@ -488,8 +488,8 @@ app.dependency_overrides[get_session] = lambda: AsyncMock()
 
 @pytest.mark.asyncio
 async def test_analytics_returns_all_fields():
-    with patch("kiro.dashboard.routes_analytics._aggregate_analytics", new_callable=AsyncMock) as mock_agg:
-        from kiro.dashboard.schemas import AnalyticsResponse
+    with patch("aigw.dashboard.routes_analytics._aggregate_analytics", new_callable=AsyncMock) as mock_agg:
+        from aigw.dashboard.schemas import AnalyticsResponse
         mock_agg.return_value = AnalyticsResponse(
             range="7d",
             daily_series=[],
@@ -517,8 +517,8 @@ async def test_analytics_invalid_range_returns_422():
 
 @pytest.mark.asyncio
 async def test_analytics_default_range_is_7d():
-    with patch("kiro.dashboard.routes_analytics._aggregate_analytics", new_callable=AsyncMock) as mock_agg:
-        from kiro.dashboard.schemas import AnalyticsResponse
+    with patch("aigw.dashboard.routes_analytics._aggregate_analytics", new_callable=AsyncMock) as mock_agg:
+        from aigw.dashboard.schemas import AnalyticsResponse
         mock_agg.return_value = AnalyticsResponse(
             range="7d", daily_series=[], user_credits=[], top_users=[], credit_share=[]
         )
@@ -536,7 +536,7 @@ async def test_analytics_default_range_is_7d():
 pytest tests/unit/test_routes_analytics.py -v
 ```
 
-Expected: `FAILED` — `ModuleNotFoundError: No module named 'kiro.dashboard.routes_analytics'`
+Expected: `FAILED` — `ModuleNotFoundError: No module named 'aigw.dashboard.routes_analytics'`
 
 - [ ] **Step 3: Implement `kiro/dashboard/routes_analytics.py`**
 
@@ -547,12 +547,12 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiro.dashboard.deps import get_current_user
-from kiro.dashboard.schemas import (
+from aigw.dashboard.deps import get_current_user
+from aigw.dashboard.schemas import (
     AnalyticsResponse, CreditShare, DailySeries, TopUser, UserCredit,
 )
-from kiro.db.engine import get_session
-from kiro.db.models import ApiKey, DailyUsage, User
+from aigw.db.engine import get_session
+from aigw.db.models import ApiKey, DailyUsage, User
 
 router = APIRouter(prefix="/overview", tags=["analytics"])
 
@@ -666,7 +666,7 @@ git commit -m "feat: add GET /overview/analytics endpoint with 7d/30d/90d aggreg
 In `kiro/dashboard/__init__.py`, add the import:
 
 ```python
-from kiro.dashboard.routes_analytics import router as analytics_router
+from aigw.dashboard.routes_analytics import router as analytics_router
 ```
 
 Then add the include line after the existing routers:
@@ -680,13 +680,13 @@ Full file after change:
 ```python
 from fastapi import APIRouter
 
-from kiro.dashboard.routes_auth import router as auth_router
-from kiro.dashboard.routes_users import router as users_router
-from kiro.dashboard.routes_keys import router as keys_router
-from kiro.dashboard.routes_overview import router as overview_router
-from kiro.dashboard.routes_config import router as config_router
-from kiro.dashboard.routes_import import router as import_router
-from kiro.dashboard.routes_analytics import router as analytics_router
+from aigw.dashboard.routes_auth import router as auth_router
+from aigw.dashboard.routes_users import router as users_router
+from aigw.dashboard.routes_keys import router as keys_router
+from aigw.dashboard.routes_overview import router as overview_router
+from aigw.dashboard.routes_config import router as config_router
+from aigw.dashboard.routes_import import router as import_router
+from aigw.dashboard.routes_analytics import router as analytics_router
 
 dashboard_router = APIRouter(prefix="/api", tags=["dashboard"])
 dashboard_router.include_router(auth_router)

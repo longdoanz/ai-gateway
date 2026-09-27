@@ -9,7 +9,7 @@ Tests the classify_error() function that determines whether an error is:
 """
 
 import pytest
-from kiro.account_errors import classify_error, ErrorType
+from aigw.account_errors import classify_error, ErrorType
 
 
 class TestClassifyErrorRecoverable:

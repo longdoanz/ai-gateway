@@ -113,8 +113,8 @@ shapes and allows these safe forms — extend its `RULES` if a new shape appears
 - `AGENTS.md` — Comprehensive AI agent guide — **read for full details**
 - `.env.example` — Configuration template
 - `tests/conftest.py` — Shared test fixtures
-- `kiro/config.py` — Centralized configuration
-- `kiro/auth.py` — Authentication manager
+- `aigw/config.py` — Centralized configuration
+- `aigw/auth.py` — Authentication manager
 - `webui/lib/api-client.ts` — Frontend API client
 
 ## Webui Notes

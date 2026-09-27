@@ -13,7 +13,7 @@ from datetime import datetime, timezone, timedelta
 from fastapi.testclient import TestClient
 import httpx
 
-from kiro.config import PROXY_API_KEY
+from aigw.config import PROXY_API_KEY
 
 
 class TestFullChatCompletionFlow:
@@ -269,7 +269,7 @@ class TestModelsEndpointIntegration:
         """
         print("Getting models list...")
         with patch(
-            "kiro.nine_router_client.fetch_nine_router_models",
+            "aigw.nine_router_client.fetch_nine_router_models",
             new=AsyncMock(return_value=["kiro/claude-sonnet-4", "openai/gpt-5"]),
         ):
             response = test_client.get(

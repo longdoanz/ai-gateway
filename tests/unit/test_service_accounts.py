@@ -18,7 +18,7 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.dialects import postgresql
 
-from kiro.db.repositories import (
+from aigw.db.repositories import (
     SERVICE_ACCOUNT_KEY_PREFIX,
     create_service_account,
     create_service_account_key,
@@ -361,15 +361,15 @@ def _fake_service_account(**overrides):
 class TestServiceAccountRoutes:
     @pytest.mark.asyncio
     async def test_create_conflicts_on_duplicate_name(self):
-        from kiro.dashboard.routes_service_accounts import create_service_account_endpoint
-        from kiro.dashboard.schemas import ServiceAccountCreate
+        from aigw.dashboard.routes_service_accounts import create_service_account_endpoint
+        from aigw.dashboard.schemas import ServiceAccountCreate
 
         session = AsyncMock()
         admin = MagicMock(id=1)
         body = ServiceAccountCreate(name="ci-bot", allowed_models=[])
 
         with patch(
-            "kiro.dashboard.routes_service_accounts.get_service_account_by_name",
+            "aigw.dashboard.routes_service_accounts.get_service_account_by_name",
             AsyncMock(return_value=_fake_service_account()),
         ):
             with pytest.raises(HTTPException) as exc_info:
@@ -379,8 +379,8 @@ class TestServiceAccountRoutes:
 
     @pytest.mark.asyncio
     async def test_create_returns_key_and_model_counts(self):
-        from kiro.dashboard.routes_service_accounts import create_service_account_endpoint
-        from kiro.dashboard.schemas import ServiceAccountCreate
+        from aigw.dashboard.routes_service_accounts import create_service_account_endpoint
+        from aigw.dashboard.schemas import ServiceAccountCreate
 
         session = AsyncMock()
         admin = MagicMock(id=1)
@@ -388,8 +388,8 @@ class TestServiceAccountRoutes:
         created = _fake_service_account(allowed_models='["kiro/claude-sonnet-4"]', keys=[SimpleNamespace(id=1)])
 
         with (
-            patch("kiro.dashboard.routes_service_accounts.get_service_account_by_name", AsyncMock(return_value=None)),
-            patch("kiro.dashboard.routes_service_accounts.create_service_account", AsyncMock(return_value=created)),
+            patch("aigw.dashboard.routes_service_accounts.get_service_account_by_name", AsyncMock(return_value=None)),
+            patch("aigw.dashboard.routes_service_accounts.create_service_account", AsyncMock(return_value=created)),
         ):
             response = await create_service_account_endpoint(body, admin=admin, session=session)
 
@@ -399,13 +399,13 @@ class TestServiceAccountRoutes:
 
     @pytest.mark.asyncio
     async def test_update_returns_404_when_missing(self):
-        from kiro.dashboard.routes_service_accounts import update_service_account_endpoint
-        from kiro.dashboard.schemas import ServiceAccountUpdate
+        from aigw.dashboard.routes_service_accounts import update_service_account_endpoint
+        from aigw.dashboard.schemas import ServiceAccountUpdate
 
         session = AsyncMock()
         admin = MagicMock(id=1)
 
-        with patch("kiro.dashboard.routes_service_accounts.get_service_account_by_id", AsyncMock(return_value=None)):
+        with patch("aigw.dashboard.routes_service_accounts.get_service_account_by_id", AsyncMock(return_value=None)):
             with pytest.raises(HTTPException) as exc_info:
                 await update_service_account_endpoint(999, ServiceAccountUpdate(is_active=False), admin=admin, session=session)
 
@@ -413,12 +413,12 @@ class TestServiceAccountRoutes:
 
     @pytest.mark.asyncio
     async def test_delete_returns_404_when_missing(self):
-        from kiro.dashboard.routes_service_accounts import delete_service_account_endpoint
+        from aigw.dashboard.routes_service_accounts import delete_service_account_endpoint
 
         session = AsyncMock()
         admin = MagicMock(id=1)
 
-        with patch("kiro.dashboard.routes_service_accounts.delete_service_account", AsyncMock(return_value=False)):
+        with patch("aigw.dashboard.routes_service_accounts.delete_service_account", AsyncMock(return_value=False)):
             with pytest.raises(HTTPException) as exc_info:
                 await delete_service_account_endpoint(999, admin=admin, session=session)
 
@@ -426,7 +426,7 @@ class TestServiceAccountRoutes:
 
     @pytest.mark.asyncio
     async def test_issue_key_returns_raw_key_once(self):
-        from kiro.dashboard.routes_service_accounts import issue_service_account_key
+        from aigw.dashboard.routes_service_accounts import issue_service_account_key
 
         session = AsyncMock()
         admin = MagicMock(id=1)
@@ -436,9 +436,9 @@ class TestServiceAccountRoutes:
         )
 
         with (
-            patch("kiro.dashboard.routes_service_accounts.get_service_account_by_id", AsyncMock(return_value=existing)),
+            patch("aigw.dashboard.routes_service_accounts.get_service_account_by_id", AsyncMock(return_value=existing)),
             patch(
-                "kiro.dashboard.routes_service_accounts.create_service_account_key",
+                "aigw.dashboard.routes_service_accounts.create_service_account_key",
                 AsyncMock(return_value=(new_key, "izisa_rawvalue")),
             ),
         ):
@@ -449,12 +449,12 @@ class TestServiceAccountRoutes:
 
     @pytest.mark.asyncio
     async def test_issue_key_returns_404_when_account_missing(self):
-        from kiro.dashboard.routes_service_accounts import issue_service_account_key
+        from aigw.dashboard.routes_service_accounts import issue_service_account_key
 
         session = AsyncMock()
         admin = MagicMock(id=1)
 
-        with patch("kiro.dashboard.routes_service_accounts.get_service_account_by_id", AsyncMock(return_value=None)):
+        with patch("aigw.dashboard.routes_service_accounts.get_service_account_by_id", AsyncMock(return_value=None)):
             with pytest.raises(HTTPException) as exc_info:
                 await issue_service_account_key(999, admin=admin, session=session)
 
@@ -462,12 +462,12 @@ class TestServiceAccountRoutes:
 
     @pytest.mark.asyncio
     async def test_revoke_key_returns_404_when_not_found(self):
-        from kiro.dashboard.routes_service_accounts import revoke_service_account_key_endpoint
+        from aigw.dashboard.routes_service_accounts import revoke_service_account_key_endpoint
 
         session = AsyncMock()
         admin = MagicMock(id=1)
 
-        with patch("kiro.dashboard.routes_service_accounts.revoke_service_account_key", AsyncMock(return_value=False)):
+        with patch("aigw.dashboard.routes_service_accounts.revoke_service_account_key", AsyncMock(return_value=False)):
             with pytest.raises(HTTPException) as exc_info:
                 await revoke_service_account_key_endpoint(1, 999, admin=admin, session=session)
 
@@ -475,7 +475,7 @@ class TestServiceAccountRoutes:
 
     @pytest.mark.asyncio
     async def test_usage_endpoint_returns_monthly_and_daily(self):
-        from kiro.dashboard.routes_service_accounts import get_service_account_usage
+        from aigw.dashboard.routes_service_accounts import get_service_account_usage
 
         session = AsyncMock()
         admin = MagicMock(id=1)
@@ -484,9 +484,9 @@ class TestServiceAccountRoutes:
         daily = [SimpleNamespace(date="2026-09-17", model="kiro/claude-sonnet-4", input_tokens=10, output_tokens=20)]
 
         with (
-            patch("kiro.dashboard.routes_service_accounts.get_service_account_by_id", AsyncMock(return_value=existing)),
-            patch("kiro.dashboard.routes_service_accounts.get_service_account_usage_history", AsyncMock(return_value=monthly)),
-            patch("kiro.dashboard.routes_service_accounts.get_service_account_daily_usage", AsyncMock(return_value=daily)),
+            patch("aigw.dashboard.routes_service_accounts.get_service_account_by_id", AsyncMock(return_value=existing)),
+            patch("aigw.dashboard.routes_service_accounts.get_service_account_usage_history", AsyncMock(return_value=monthly)),
+            patch("aigw.dashboard.routes_service_accounts.get_service_account_daily_usage", AsyncMock(return_value=daily)),
         ):
             response = await get_service_account_usage(1, days=30, admin=admin, session=session)
 

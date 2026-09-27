@@ -36,13 +36,13 @@
 # tests/unit/test_config.py — add to existing file
 def test_api_key_mode_default_false(monkeypatch):
     monkeypatch.delenv("API_KEY_MODE", raising=False)
-    import importlib, kiro.config as cfg
+    import importlib, aigw.config as cfg
     importlib.reload(cfg)
     assert cfg.API_KEY_MODE is False
 
 def test_api_key_mode_true_when_set(monkeypatch):
     monkeypatch.setenv("API_KEY_MODE", "true")
-    import importlib, kiro.config as cfg
+    import importlib, aigw.config as cfg
     importlib.reload(cfg)
     assert cfg.API_KEY_MODE is True
 ```
@@ -52,7 +52,7 @@ def test_api_key_mode_true_when_set(monkeypatch):
 ```bash
 .venv/bin/pytest tests/unit/test_config.py::test_api_key_mode_default_false -v
 ```
-Expected: `AttributeError: module 'kiro.config' has no attribute 'API_KEY_MODE'`
+Expected: `AttributeError: module 'aigw.config' has no attribute 'API_KEY_MODE'`
 
 - [ ] **Step 3: Add to config.py after PROXY_API_KEY line (~line 99)**
 
@@ -63,7 +63,7 @@ Expected: `AttributeError: module 'kiro.config' has no attribute 'API_KEY_MODE'`
 API_KEY_MODE: bool = os.getenv("API_KEY_MODE", "false").lower() in ("true", "1", "yes")
 ```
 
-Also add `API_KEY_MODE` to the imports in `main.py` (just add to the existing import block from `kiro.config`).
+Also add `API_KEY_MODE` to the imports in `main.py` (just add to the existing import block from `aigw.config`).
 
 - [ ] **Step 4: Run tests**
 
@@ -97,22 +97,22 @@ from fastapi import HTTPException
 # --- test build_kiro_headers_api_key ---
 
 def test_build_headers_has_tokentype():
-    from kiro.api_key_mode import build_kiro_headers_api_key
+    from aigw.api_key_mode import build_kiro_headers_api_key
     headers = build_kiro_headers_api_key("mykey", "SomeTarget")
     assert headers["tokentype"] == "API_KEY"
 
 def test_build_headers_authorization():
-    from kiro.api_key_mode import build_kiro_headers_api_key
+    from aigw.api_key_mode import build_kiro_headers_api_key
     headers = build_kiro_headers_api_key("mykey", "SomeTarget")
     assert headers["Authorization"] == "Bearer mykey"
 
 def test_build_headers_x_amz_target():
-    from kiro.api_key_mode import build_kiro_headers_api_key
+    from aigw.api_key_mode import build_kiro_headers_api_key
     headers = build_kiro_headers_api_key("mykey", "SomeTarget")
     assert headers["x-amz-target"] == "SomeTarget"
 
 def test_build_headers_has_invocation_id():
-    from kiro.api_key_mode import build_kiro_headers_api_key
+    from aigw.api_key_mode import build_kiro_headers_api_key
     headers = build_kiro_headers_api_key("mykey", "SomeTarget")
     # Must be a valid UUID
     uuid.UUID(headers["amz-sdk-invocation-id"])
@@ -121,27 +121,27 @@ def test_build_headers_has_invocation_id():
 
 @pytest.mark.asyncio
 async def test_extract_api_key_valid():
-    from kiro.api_key_mode import extract_api_key
+    from aigw.api_key_mode import extract_api_key
     key = await extract_api_key("Bearer mytoken123")
     assert key == "mytoken123"
 
 @pytest.mark.asyncio
 async def test_extract_api_key_missing_raises_401():
-    from kiro.api_key_mode import extract_api_key
+    from aigw.api_key_mode import extract_api_key
     with pytest.raises(HTTPException) as exc:
         await extract_api_key(None)
     assert exc.value.status_code == 401
 
 @pytest.mark.asyncio
 async def test_extract_api_key_no_bearer_raises_401():
-    from kiro.api_key_mode import extract_api_key
+    from aigw.api_key_mode import extract_api_key
     with pytest.raises(HTTPException) as exc:
         await extract_api_key("mytoken123")
     assert exc.value.status_code == 401
 
 @pytest.mark.asyncio
 async def test_extract_api_key_empty_token_raises_401():
-    from kiro.api_key_mode import extract_api_key
+    from aigw.api_key_mode import extract_api_key
     with pytest.raises(HTTPException) as exc:
         await extract_api_key("Bearer ")
     assert exc.value.status_code == 401
@@ -150,8 +150,8 @@ async def test_extract_api_key_empty_token_raises_401():
 
 @pytest.mark.asyncio
 async def test_get_models_cached_returns_fallback_on_fetch_failure():
-    from kiro.api_key_mode import get_models_cached
-    from kiro.config import FALLBACK_MODELS
+    from aigw.api_key_mode import get_models_cached
+    from aigw.config import FALLBACK_MODELS
 
     mock_state = MagicMock()
     mock_state.api_key_model_cache = None  # no cache yet
@@ -171,7 +171,7 @@ async def test_get_models_cached_returns_fallback_on_fetch_failure():
 ```bash
 .venv/bin/pytest tests/unit/test_api_key_mode.py -v 2>&1 | head -30
 ```
-Expected: `ModuleNotFoundError: No module named 'kiro.api_key_mode'`
+Expected: `ModuleNotFoundError: No module named 'aigw.api_key_mode'`
 
 - [ ] **Step 3: Create kiro/api_key_mode.py**
 
@@ -192,7 +192,7 @@ from fastapi import HTTPException, Security
 from fastapi.security import APIKeyHeader
 from loguru import logger
 
-from kiro.config import (
+from aigw.config import (
     FALLBACK_MODELS,
     HIDDEN_MODELS,
     MODEL_CACHE_TTL,
@@ -201,7 +201,7 @@ from kiro.config import (
     BASE_RETRY_DELAY,
     MAX_RETRIES,
 )
-from kiro.utils import generate_conversation_id
+from aigw.utils import generate_conversation_id
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
@@ -361,19 +361,19 @@ The handlers reuse existing converters and streaming functions. An `ApiKeyAuthAd
 
 @pytest.mark.asyncio
 async def test_api_key_auth_adapter_get_access_token():
-    from kiro.api_key_mode import ApiKeyAuthAdapter
+    from aigw.api_key_mode import ApiKeyAuthAdapter
     adapter = ApiKeyAuthAdapter("mykey123")
     token = await adapter.get_access_token()
     assert token == "mykey123"
 
 def test_api_key_auth_adapter_hosts():
-    from kiro.api_key_mode import ApiKeyAuthAdapter, KIRO_API_HOST
+    from aigw.api_key_mode import ApiKeyAuthAdapter, KIRO_API_HOST
     adapter = ApiKeyAuthAdapter("mykey123")
     assert adapter.api_host == KIRO_API_HOST
     assert adapter.q_host == KIRO_API_HOST
 
 def test_api_key_auth_adapter_profile_arn_none():
-    from kiro.api_key_mode import ApiKeyAuthAdapter
+    from aigw.api_key_mode import ApiKeyAuthAdapter
     adapter = ApiKeyAuthAdapter("mykey123")
     assert adapter.profile_arn is None
 ```
@@ -423,11 +423,11 @@ async def handle_chat_openai(request, request_data):
     import json
     from fastapi import HTTPException
     from fastapi.responses import JSONResponse, StreamingResponse
-    from kiro.converters_openai import build_kiro_payload
-    from kiro.streaming_openai import stream_with_first_token_retry, collect_stream_response
-    from kiro.utils import generate_conversation_id
-    from kiro.config import WEB_SEARCH_ENABLED
-    from kiro.cache import ModelInfoCache
+    from aigw.converters_openai import build_kiro_payload
+    from aigw.streaming_openai import stream_with_first_token_retry, collect_stream_response
+    from aigw.utils import generate_conversation_id
+    from aigw.config import WEB_SEARCH_ENABLED
+    from aigw.cache import ModelInfoCache
 
     auth_header = request.headers.get("Authorization")
     api_key = await extract_api_key(auth_header)
@@ -443,7 +443,7 @@ async def handle_chat_openai(request, request_data):
             for t in request_data.tools
         )
         if not has_ws:
-            from kiro.models_openai import Tool, ToolFunction
+            from aigw.models_openai import Tool, ToolFunction
             request_data.tools.append(Tool(
                 type="function",
                 function=ToolFunction(
@@ -514,10 +514,10 @@ async def handle_chat_anthropic(request, request_data):
     import json
     from fastapi import HTTPException
     from fastapi.responses import JSONResponse, StreamingResponse
-    from kiro.converters_anthropic import anthropic_to_kiro
-    from kiro.streaming_anthropic import stream_with_first_token_retry_anthropic, collect_anthropic_response
-    from kiro.utils import generate_conversation_id
-    from kiro.cache import ModelInfoCache
+    from aigw.converters_anthropic import anthropic_to_kiro
+    from aigw.streaming_anthropic import stream_with_first_token_retry_anthropic, collect_anthropic_response
+    from aigw.utils import generate_conversation_id
+    from aigw.cache import ModelInfoCache
 
     # Anthropic clients use x-api-key header
     api_key = request.headers.get("x-api-key")
@@ -605,10 +605,10 @@ git add kiro/api_key_mode.py tests/unit/test_api_key_mode.py && git commit -m "f
 
 - [ ] **Step 1: Add API_KEY_MODE to imports in main.py**
 
-Find the existing import block from `kiro.config` (around line 59) and add `API_KEY_MODE`:
+Find the existing import block from `aigw.config` (around line 59) and add `API_KEY_MODE`:
 
 ```python
-from kiro.config import (
+from aigw.config import (
     APP_TITLE,
     APP_DESCRIPTION,
     APP_VERSION,
@@ -706,9 +706,9 @@ git add main.py && git commit -m "feat(api-key-mode): skip auth_manager init and
 
 - [ ] **Step 1: Add API_KEY_MODE to imports**
 
-In the existing `from kiro.config import (...)` block (around line 38), add:
+In the existing `from aigw.config import (...)` block (around line 38), add:
 ```python
-from kiro.config import (
+from aigw.config import (
     PROXY_API_KEY,
     APP_VERSION,
     API_KEY_MODE,   # ← add
@@ -737,8 +737,8 @@ Find the `@router.get("/v1/models", ...)` handler (around line 121). Add dispatc
 @router.get("/v1/models", response_model=ModelList, dependencies=[Depends(verify_api_key)])
 async def list_models(request: Request):
     if API_KEY_MODE:
-        from kiro.api_key_mode import get_models_cached, extract_api_key
-        from kiro.config import MODEL_ALIASES, HIDDEN_FROM_LIST
+        from aigw.api_key_mode import get_models_cached, extract_api_key
+        from aigw.config import MODEL_ALIASES, HIDDEN_FROM_LIST
         auth_header = request.headers.get("Authorization")
         api_key = await extract_api_key(auth_header)
         raw_models = await get_models_cached(api_key, request.app.state)
@@ -755,7 +755,7 @@ Find `@router.post("/v1/chat/completions", ...)` handler (around line 155). Add 
 @router.post("/v1/chat/completions", dependencies=[Depends(verify_api_key)])
 async def chat_completions(request: Request, request_data: ChatCompletionRequest):
     if API_KEY_MODE:
-        from kiro.api_key_mode import handle_chat_openai
+        from aigw.api_key_mode import handle_chat_openai
         return await handle_chat_openai(request, request_data)
     # ... existing code unchanged below ...
 ```
@@ -781,9 +781,9 @@ git add kiro/routes_openai.py && git commit -m "feat(api-key-mode): make verify_
 
 - [ ] **Step 1: Add API_KEY_MODE to imports**
 
-In the existing `from kiro.config import PROXY_API_KEY` line (around line 37), expand to:
+In the existing `from aigw.config import PROXY_API_KEY` line (around line 37), expand to:
 ```python
-from kiro.config import PROXY_API_KEY, API_KEY_MODE
+from aigw.config import PROXY_API_KEY, API_KEY_MODE
 ```
 
 - [ ] **Step 2: Make verify_anthropic_api_key mode-aware**
@@ -826,7 +826,7 @@ async def messages(
     anthropic_version: Optional[str] = Header(None, alias="anthropic-version")
 ):
     if API_KEY_MODE:
-        from kiro.api_key_mode import handle_chat_anthropic
+        from aigw.api_key_mode import handle_chat_anthropic
         return await handle_chat_anthropic(request, request_data)
     # ... existing code unchanged below ...
 ```
@@ -921,7 +921,7 @@ os.environ["KIRO_CREDS_FILE"] = ""
 os.environ["KIRO_CLI_DB_FILE"] = ""
 
 import importlib
-import kiro.config as cfg
+import aigw.config as cfg
 importlib.reload(cfg)
 
 assert cfg.API_KEY_MODE is True
@@ -932,7 +932,7 @@ Run:
 ```bash
 .venv/bin/python -c "
 import os; os.environ['API_KEY_MODE']='true'
-import importlib, kiro.config as cfg; importlib.reload(cfg)
+import importlib, aigw.config as cfg; importlib.reload(cfg)
 assert cfg.API_KEY_MODE is True
 print('API_KEY_MODE flag: OK')
 "
@@ -944,7 +944,7 @@ Expected: `API_KEY_MODE flag: OK`
 ```bash
 .venv/bin/python -c "
 import asyncio
-from kiro.api_key_mode import extract_api_key
+from aigw.api_key_mode import extract_api_key
 from fastapi import HTTPException
 async def test():
     try:

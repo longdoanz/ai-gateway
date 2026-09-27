@@ -101,102 +101,34 @@ test.describe("Screen 2: Usage Analytics", () => {
 });
 
 // ============================================================
-// Screen 3: User Mapping Import (now in Accounts > Kiro Users tab)
-// ============================================================
-test.describe("Screen 3: User Mapping Import", () => {
-  test("should display import UI in Kiro Users tab", async ({ page }) => {
-    await page.goto("/accounts");
-    const main = page.locator("main");
-    await main.getByRole("tab", { name: "Kiro Users" }).click({ timeout: 10000 });
-
-    // If users are already imported, the table view is shown — click "Edit Import" to reach the upload UI
-    const editImportBtn = main.getByRole("button", { name: "Edit Import" });
-    if (await editImportBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await editImportBtn.click();
-    }
-
-    await expect(main.getByText("drop")).toBeVisible({ timeout: 5000 });
-    await expect(main.getByText("kiro_user_id").first()).toBeVisible();
-    await expect(main.getByText("or click to browse")).toBeVisible();
-  });
-
-  test("should accept CSV file and show preview", async ({ page }) => {
-    await page.goto("/accounts");
-    const main = page.locator("main");
-    await main.getByRole("tab", { name: "Kiro Users" }).click({ timeout: 10000 });
-
-    // If users are already imported, click "Edit Import" to reach the upload UI
-    const editImportBtn = main.getByRole("button", { name: "Edit Import" });
-    if (await editImportBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await editImportBtn.click();
-    }
-
-    await expect(main.getByText("or click to browse")).toBeVisible({ timeout: 5000 });
-
-    const csvContent = "kiro_user_id,email,username\nuser-001,test@example.com,testuser\nuser-002,test2@example.com,testuser2";
-    const buffer = Buffer.from(csvContent, "utf-8");
-
-    const fileChooserPromise = page.waitForEvent("filechooser");
-    await page.getByText("or click to browse").click({ timeout: 10000 });
-    const fileChooser = await fileChooserPromise;
-    await fileChooser.setFiles({
-      name: "users.csv",
-      mimeType: "text/csv",
-      buffer,
-    });
-
-    await expect(page.getByText("2 valid", { exact: true }).first()).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText("user-001")).toBeVisible();
-    await expect(page.getByText("user-002")).toBeVisible();
-    await expect(page.getByText("Import 2 rows")).toBeVisible();
-  });
-});
-
-// ============================================================
-// Screen 4: Account Management (now with 3 tabs)
+// Screen 4: Account Management
 // ============================================================
 test.describe("Screen 4: Account Management", () => {
-  test("should display account management page with tabs", async ({ page }) => {
+  test("should display account management page", async ({ page }) => {
     await page.goto("/accounts");
     const main = page.locator("main");
     await expect(main.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 10000 });
-    await expect(main.getByRole("tab", { name: "Access & Overrides" })).toBeVisible();
-    await expect(main.getByRole("tab", { name: "Kiro Users" })).toBeVisible();
-    await expect(main.getByRole("tab", { name: "Account Management" })).toBeVisible();
-  });
-
-  test("Access & Overrides tab should show user table and Register Key", async ({ page }) => {
-    await page.goto("/accounts");
-    await expect(page.locator("th >> text=USER DETAILS")).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText("Register Key")).toBeVisible();
-  });
-
-  test("should open Register Key dialog on click", async ({ page }) => {
-    await page.goto("/accounts");
-    await page.getByText("Register Key").click({ timeout: 10000 });
-    await expect(page.getByText("Register API Key")).toBeVisible({ timeout: 5000 });
-  });
-
-  test("Account Management tab should show accounts table", async ({ page }) => {
-    await page.goto("/accounts");
-    await page.getByRole("tab", { name: "Account Management" }).click({ timeout: 10000 });
-    await expect(page.locator("th >> text=ACCOUNT")).toBeVisible({ timeout: 10000 });
-    await expect(page.locator("th >> text=ACTIONS")).toBeVisible();
-    await expect(page.getByText("Create Account")).toBeVisible();
+    await expect(main.locator("th >> text=Account")).toBeVisible({ timeout: 10000 });
+    await expect(main.locator("th >> text=Actions")).toBeVisible();
   });
 
   test("should show admin user with Reset Password button", async ({ page }) => {
     await page.goto("/accounts");
-    await page.getByRole("tab", { name: "Account Management" }).click({ timeout: 10000 });
-    await expect(page.locator("td >> text=admin").first()).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText("Reset Password").first()).toBeVisible();
+    const main = page.locator("main");
+    await expect(main.locator("td >> text=admin").first()).toBeVisible({ timeout: 10000 });
+    await expect(main.getByText("Reset Password").first()).toBeVisible();
   });
 
   test("should open Create Account dialog", async ({ page }) => {
     await page.goto("/accounts");
-    await page.getByRole("tab", { name: "Account Management" }).click({ timeout: 10000 });
     await page.locator("main").getByText("Create Account").click({ timeout: 10000 });
     await expect(page.getByText("Create Dashboard Account")).toBeVisible({ timeout: 5000 });
+  });
+
+  test("should open Allow by Email dialog", async ({ page }) => {
+    await page.goto("/accounts");
+    await page.locator("main").getByText("Allow by Email").click({ timeout: 10000 });
+    await expect(page.getByText("Allow Gateway Key by Email")).toBeVisible({ timeout: 5000 });
   });
 });
 

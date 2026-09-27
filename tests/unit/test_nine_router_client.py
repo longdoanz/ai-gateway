@@ -67,12 +67,12 @@ def _mock_client(response=None, send_side_effect=None):
 
 class TestIsNineRouterEnabled:
     def test_enabled_when_url_set(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         with patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"):
             assert mod.is_nine_router_enabled() is True
 
     def test_disabled_when_url_empty(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         with patch.object(mod, "NINE_ROUTER_URL", ""):
             assert mod.is_nine_router_enabled() is False
 
@@ -84,7 +84,7 @@ class TestIsNineRouterEnabled:
 class TestForwardToNineRouter:
     @pytest.mark.asyncio
     async def test_returns_503_when_not_configured(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         with patch.object(mod, "NINE_ROUTER_URL", ""):
             req = _mock_request()
             resp = await mod.forward_to_nine_router(req, b"{}")
@@ -93,13 +93,13 @@ class TestForwardToNineRouter:
 
     @pytest.mark.asyncio
     async def test_streams_response_on_success(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         resp_mock = _mock_stream_response(200)
         client = _mock_client(response=resp_mock)
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             req = _mock_request()
             resp = await mod.forward_to_nine_router(req, b"{}")
@@ -108,14 +108,14 @@ class TestForwardToNineRouter:
 
     @pytest.mark.asyncio
     async def test_adds_api_key_header_when_configured(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         resp_mock = _mock_stream_response(200)
         client = _mock_client(response=resp_mock)
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
             patch.object(mod, "NINE_ROUTER_API_KEY", "secret-key"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             req = _mock_request()
             await mod.forward_to_nine_router(req, b"{}")
@@ -124,14 +124,14 @@ class TestForwardToNineRouter:
 
     @pytest.mark.asyncio
     async def test_strips_original_authorization_header(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         resp_mock = _mock_stream_response(200)
         client = _mock_client(response=resp_mock)
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
             patch.object(mod, "NINE_ROUTER_API_KEY", ""),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             req = _mock_request(headers={"authorization": "Bearer gateway-user-token"})
             await mod.forward_to_nine_router(req, b"{}")
@@ -141,13 +141,13 @@ class TestForwardToNineRouter:
 
     @pytest.mark.asyncio
     async def test_non_200_upstream_returns_json_error(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         resp_mock = _mock_stream_response(429)
         client = _mock_client(response=resp_mock)
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             req = _mock_request()
             resp = await mod.forward_to_nine_router(req, b"{}")
@@ -156,14 +156,14 @@ class TestForwardToNineRouter:
 
     @pytest.mark.asyncio
     async def test_connect_error_returns_503(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         import httpx
 
         client = _mock_client(send_side_effect=httpx.ConnectError("refused"))
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             req = _mock_request()
             resp = await mod.forward_to_nine_router(req, b"{}")
@@ -172,14 +172,14 @@ class TestForwardToNineRouter:
 
     @pytest.mark.asyncio
     async def test_timeout_returns_504(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         import httpx
 
         client = _mock_client(send_side_effect=httpx.TimeoutException("timed out"))
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             req = _mock_request()
             resp = await mod.forward_to_nine_router(req, b"{}")
@@ -188,13 +188,13 @@ class TestForwardToNineRouter:
 
     @pytest.mark.asyncio
     async def test_correct_target_url_built(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         resp_mock = _mock_stream_response(200)
         client = _mock_client(response=resp_mock)
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             req = _mock_request(path="/v1/chat/completions")
             await mod.forward_to_nine_router(req, b"{}")
@@ -203,13 +203,13 @@ class TestForwardToNineRouter:
 
     @pytest.mark.asyncio
     async def test_query_string_forwarded(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         resp_mock = _mock_stream_response(200)
         client = _mock_client(response=resp_mock)
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             req = _mock_request(path="/v1/models", query="foo=bar")
             await mod.forward_to_nine_router(req, b"")
@@ -219,7 +219,7 @@ class TestForwardToNineRouter:
     @pytest.mark.asyncio
     async def test_shared_client_reused_and_not_closed(self):
         """When app.state.http_client exists, it's used directly and never closed."""
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         resp_mock = _mock_stream_response(200)
         shared = _mock_client(response=resp_mock)
 
@@ -237,13 +237,13 @@ class TestForwardToNineRouter:
     @pytest.mark.asyncio
     async def test_private_client_closed_after_stream(self):
         """When no shared client, a private client is created and closed after stream."""
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         resp_mock = _mock_stream_response(200)
         private = _mock_client(response=resp_mock)
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=private),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=private),
         ):
             req = _mock_request()  # shared_http_client=None (default)
             resp = await mod.forward_to_nine_router(req, b"{}")
@@ -269,7 +269,7 @@ async def _drain(streaming_response) -> list[bytes]:
 class TestOnUsageCallback:
     @pytest.mark.asyncio
     async def test_callback_fired_with_openai_usage(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         chunks = [
             b'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n',
             b'data: {"model":"gpt-4o","usage":{"prompt_tokens":12,"completion_tokens":7}}\n\n',
@@ -284,7 +284,7 @@ class TestOnUsageCallback:
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             req = _mock_request()
             resp = await mod.forward_to_nine_router(req, b"{}", on_usage=on_usage)
@@ -295,7 +295,7 @@ class TestOnUsageCallback:
 
     @pytest.mark.asyncio
     async def test_callback_fired_with_anthropic_usage(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         chunks = [
             b'event: message_start\ndata: {"type":"message_start","message":{"model":"claude-opus-4-8","usage":{"input_tokens":30}}}\n\n',
             b'event: message_delta\ndata: {"type":"message_delta","usage":{"output_tokens":15}}\n\n',
@@ -309,7 +309,7 @@ class TestOnUsageCallback:
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             req = _mock_request(path="/v1/messages")
             resp = await mod.forward_to_nine_router(req, b"{}", on_usage=on_usage)
@@ -319,7 +319,7 @@ class TestOnUsageCallback:
 
     @pytest.mark.asyncio
     async def test_callback_fired_with_zeroes_when_no_usage(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         chunks = [b"data: chunk1\n\n", b"data: [DONE]\n\n"]
         resp_mock = _mock_stream_response(200, chunks=chunks)
         client = _mock_client(response=resp_mock)
@@ -330,7 +330,7 @@ class TestOnUsageCallback:
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             req = _mock_request()
             resp = await mod.forward_to_nine_router(req, b"{}", on_usage=on_usage)
@@ -340,7 +340,7 @@ class TestOnUsageCallback:
 
     @pytest.mark.asyncio
     async def test_callback_exception_does_not_break_stream(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         chunks = [
             b'data: {"model":"gpt-4o","usage":{"prompt_tokens":1,"completion_tokens":1}}\n\n',
             b"data: [DONE]\n\n",
@@ -353,7 +353,7 @@ class TestOnUsageCallback:
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             req = _mock_request()
             resp = await mod.forward_to_nine_router(req, b"{}", on_usage=on_usage)
@@ -370,19 +370,19 @@ class TestOnUsageCallback:
 
 class TestContextWindowSuffixStripping:
     def test_strip_1m_suffix(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         assert mod._strip_context_window_suffix("claude-opus-5[1m]") == "claude-opus-5"
 
     def test_strip_200k_suffix_case_insensitive(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         assert mod._strip_context_window_suffix("claude-haiku-4-5-20251001[200K]") == "claude-haiku-4-5-20251001"
 
     def test_no_suffix_unchanged(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         assert mod._strip_context_window_suffix("claude-opus-5") == "claude-opus-5"
 
     def test_none_returns_none(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         assert mod._strip_context_window_suffix(None) is None
 
     @pytest.mark.asyncio
@@ -390,7 +390,7 @@ class TestContextWindowSuffixStripping:
         """A model with a [1m] suffix must be normalized before override matching,
         so a rule keyed on the clean name (e.g. "opus") still matches, and the
         suffix is never forwarded to 9router."""
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
 
         resp_ok = _mock_stream_response(200)
         client = _mock_client(response=resp_ok)
@@ -400,7 +400,7 @@ class TestContextWindowSuffixStripping:
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
             patch.object(mod, "_get_nine_router_override", AsyncMock(return_value=(True, rules, "auto"))),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             req = _mock_request()
             resp = await mod.forward_to_nine_router(req, body)
@@ -414,7 +414,7 @@ class TestContextWindowSuffixStripping:
     async def test_forward_strips_suffix_when_override_disabled(self):
         """Even with override disabled, the [1m] suffix must be stripped so the
         forwarded body carries the clean model name."""
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
 
         resp_ok = _mock_stream_response(200)
         client = _mock_client(response=resp_ok)
@@ -423,7 +423,7 @@ class TestContextWindowSuffixStripping:
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
             patch.object(mod, "_get_nine_router_override", AsyncMock(return_value=(False, [], "auto"))),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             req = _mock_request()
             resp = await mod.forward_to_nine_router(req, body)
@@ -441,7 +441,7 @@ class TestContextWindowSuffixStripping:
 class TestMultiLevelFailover:
     @pytest.mark.asyncio
     async def test_fails_over_to_next_candidate_on_non_200(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
 
         # First candidate returns 503, second returns 200 streaming.
         resp_fail = _mock_stream_response(503)
@@ -454,7 +454,7 @@ class TestMultiLevelFailover:
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
             patch.object(mod, "_get_nine_router_override", AsyncMock(return_value=(True, rules, "auto"))),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             req = _mock_request()
             resp = await mod.forward_to_nine_router(req, body)
@@ -469,7 +469,7 @@ class TestMultiLevelFailover:
 
     @pytest.mark.asyncio
     async def test_all_candidates_failed_returns_last_error(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
 
         resp_fail1 = _mock_stream_response(502)
         resp_fail2 = _mock_stream_response(503)
@@ -481,7 +481,7 @@ class TestMultiLevelFailover:
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
             patch.object(mod, "_get_nine_router_override", AsyncMock(return_value=(True, rules, "auto"))),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             req = _mock_request()
             resp = await mod.forward_to_nine_router(req, body)
@@ -492,7 +492,7 @@ class TestMultiLevelFailover:
 
     @pytest.mark.asyncio
     async def test_string_rule_still_single_attempt(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
 
         resp_ok = _mock_stream_response(200)
         client = _mock_client(response=resp_ok)
@@ -502,7 +502,7 @@ class TestMultiLevelFailover:
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
             patch.object(mod, "_get_nine_router_override", AsyncMock(return_value=(True, rules, "auto"))),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             req = _mock_request()
             resp = await mod.forward_to_nine_router(req, body)
@@ -513,7 +513,7 @@ class TestMultiLevelFailover:
 
     @pytest.mark.asyncio
     async def test_usage_callback_fires_once_for_winning_candidate(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
 
         resp_fail = _mock_stream_response(500)
         resp_ok = _mock_stream_response(
@@ -531,7 +531,7 @@ class TestMultiLevelFailover:
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
             patch.object(mod, "_get_nine_router_override", AsyncMock(return_value=(True, rules, "auto"))),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             req = _mock_request()
             resp = await mod.forward_to_nine_router(req, body, on_usage=on_usage)
@@ -560,7 +560,7 @@ def _mock_models_response(status_code: int = 200, payload: dict | None = None):
 class TestFetchNineRouterModels:
     @pytest.mark.asyncio
     async def test_parses_documented_response_shape(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         mod.invalidate_nine_router_models_cache()
 
         mock_client = MagicMock()
@@ -571,7 +571,7 @@ class TestFetchNineRouterModels:
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
             patch.object(mod, "NINE_ROUTER_API_KEY", ""),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=mock_client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=mock_client),
         ):
             models = await mod.fetch_nine_router_models()
 
@@ -583,7 +583,7 @@ class TestFetchNineRouterModels:
         """A 9router with requireApiKey enabled answers 401 to an anonymous GET,
         which would silently empty the catalog and lock every service account
         out (fail-closed). The key must be sent."""
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         mod.invalidate_nine_router_models_cache()
 
         mock_client = MagicMock()
@@ -594,7 +594,7 @@ class TestFetchNineRouterModels:
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
             patch.object(mod, "NINE_ROUTER_API_KEY", "secret-key"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=mock_client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=mock_client),
         ):
             models = await mod.fetch_nine_router_models()
 
@@ -606,7 +606,7 @@ class TestFetchNineRouterModels:
 
     @pytest.mark.asyncio
     async def test_returns_empty_list_when_not_configured(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         mod.invalidate_nine_router_models_cache()
 
         with patch.object(mod, "NINE_ROUTER_URL", ""):
@@ -614,7 +614,7 @@ class TestFetchNineRouterModels:
 
     @pytest.mark.asyncio
     async def test_returns_empty_list_on_non_200(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         mod.invalidate_nine_router_models_cache()
 
         mock_client = MagicMock()
@@ -624,13 +624,13 @@ class TestFetchNineRouterModels:
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=mock_client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=mock_client),
         ):
             assert await mod.fetch_nine_router_models() == []
 
     @pytest.mark.asyncio
     async def test_never_raises_on_connection_error(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         mod.invalidate_nine_router_models_cache()
 
         mock_client = MagicMock()
@@ -640,13 +640,13 @@ class TestFetchNineRouterModels:
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=mock_client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=mock_client),
         ):
             assert await mod.fetch_nine_router_models() == []
 
     @pytest.mark.asyncio
     async def test_ignores_malformed_entries(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         mod.invalidate_nine_router_models_cache()
 
         mock_client = MagicMock()
@@ -664,13 +664,13 @@ class TestFetchNineRouterModels:
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=mock_client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=mock_client),
         ):
             assert await mod.fetch_nine_router_models() == ["kiro/claude-sonnet-4"]
 
     @pytest.mark.asyncio
     async def test_result_is_cached_until_ttl_expires(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         mod.invalidate_nine_router_models_cache()
 
         mock_client = MagicMock()
@@ -680,7 +680,7 @@ class TestFetchNineRouterModels:
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=mock_client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=mock_client),
         ):
             first = await mod.fetch_nine_router_models()
             second = await mod.fetch_nine_router_models()
@@ -690,7 +690,7 @@ class TestFetchNineRouterModels:
 
     @pytest.mark.asyncio
     async def test_invalidate_forces_refetch(self):
-        import kiro.nine_router_client as mod
+        import aigw.nine_router_client as mod
         mod.invalidate_nine_router_models_cache()
 
         mock_client = MagicMock()
@@ -700,7 +700,7 @@ class TestFetchNineRouterModels:
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
-            patch("kiro.nine_router_client.httpx.AsyncClient", return_value=mock_client),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=mock_client),
         ):
             await mod.fetch_nine_router_models()
             mod.invalidate_nine_router_models_cache()

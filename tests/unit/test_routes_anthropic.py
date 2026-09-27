@@ -18,14 +18,14 @@ import json
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from kiro.routes_anthropic import verify_anthropic_api_key, router
-from kiro.config import PROXY_API_KEY
+from aigw.routes_anthropic import verify_anthropic_api_key, router
+from aigw.config import PROXY_API_KEY
 
 
 @pytest.fixture(autouse=True)
 def force_standard_auth_mode():
     """Ensure API_KEY_MODE=False for all tests in this file regardless of .env."""
-    import kiro.routes_anthropic as _mod
+    import aigw.routes_anthropic as _mod
     original = _mod.API_KEY_MODE
     _mod.API_KEY_MODE = False
     yield
@@ -1011,8 +1011,8 @@ class TestTruncationRecoveryMessageModification:
         Purpose: Ensure truncation notice is prepended to tool_result.
         """
         print("Setup: Saving truncation info to cache...")
-        from kiro.truncation_state import save_tool_truncation
-        from kiro.models_anthropic import AnthropicMessage
+        from aigw.truncation_state import save_tool_truncation
+        from aigw.models_anthropic import AnthropicMessage
         
         tool_use_id = "tooluse_test_dict"
         save_tool_truncation(tool_use_id, "write_to_file", {"size_bytes": 5000, "reason": "test"})
@@ -1028,8 +1028,8 @@ class TestTruncationRecoveryMessageModification:
         ]
         
         print("Action: Processing messages through truncation recovery logic...")
-        from kiro.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
-        from kiro.truncation_state import get_tool_truncation
+        from aigw.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
+        from aigw.truncation_state import get_tool_truncation
         
         modified_messages = []
         for msg in messages:
@@ -1088,8 +1088,8 @@ class TestTruncationRecoveryMessageModification:
         Purpose: Ensure truncation notice works with Pydantic ToolResultContentBlock.
         """
         print("Setup: Saving truncation info to cache...")
-        from kiro.truncation_state import save_tool_truncation
-        from kiro.models_anthropic import AnthropicMessage, ToolResultContentBlock
+        from aigw.truncation_state import save_tool_truncation
+        from aigw.models_anthropic import AnthropicMessage, ToolResultContentBlock
         
         tool_use_id = "tooluse_test_pydantic"
         save_tool_truncation(tool_use_id, "write_to_file", {"size_bytes": 5000, "reason": "test"})
@@ -1106,8 +1106,8 @@ class TestTruncationRecoveryMessageModification:
         ]
         
         print("Action: Processing messages through truncation recovery logic...")
-        from kiro.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
-        from kiro.truncation_state import get_tool_truncation
+        from aigw.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
+        from aigw.truncation_state import get_tool_truncation
         
         modified_messages = []
         for msg in messages:
@@ -1166,8 +1166,8 @@ class TestTruncationRecoveryMessageModification:
         Purpose: Ensure selective modification of content blocks.
         """
         print("Setup: Saving truncation info to cache...")
-        from kiro.truncation_state import save_tool_truncation
-        from kiro.models_anthropic import AnthropicMessage
+        from aigw.truncation_state import save_tool_truncation
+        from aigw.models_anthropic import AnthropicMessage
         
         tool_use_id = "tooluse_test_mixed"
         save_tool_truncation(tool_use_id, "write_to_file", {"size_bytes": 5000, "reason": "test"})
@@ -1184,8 +1184,8 @@ class TestTruncationRecoveryMessageModification:
         ]
         
         print("Action: Processing messages through truncation recovery logic...")
-        from kiro.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
-        from kiro.truncation_state import get_tool_truncation
+        from aigw.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
+        from aigw.truncation_state import get_tool_truncation
         
         modified_messages = []
         for msg in messages:
@@ -1249,7 +1249,7 @@ class TestTruncationRecoveryMessageModification:
         Purpose: Ensure normal messages pass through unchanged.
         """
         print("Setup: Creating request without truncation info in cache...")
-        from kiro.models_anthropic import AnthropicMessage
+        from aigw.models_anthropic import AnthropicMessage
         
         messages = [
             AnthropicMessage(
@@ -1261,8 +1261,8 @@ class TestTruncationRecoveryMessageModification:
         ]
         
         print("Action: Processing messages...")
-        from kiro.truncation_recovery import should_inject_recovery
-        from kiro.truncation_state import get_tool_truncation
+        from aigw.truncation_recovery import should_inject_recovery
+        from aigw.truncation_state import get_tool_truncation
         
         modified_messages = []
         tool_results_modified = 0
@@ -1306,8 +1306,8 @@ class TestTruncationRecoveryMessageModification:
         Purpose: Ensure Pydantic immutability is respected.
         """
         print("Setup: Saving truncation info and creating message...")
-        from kiro.truncation_state import save_tool_truncation
-        from kiro.models_anthropic import AnthropicMessage
+        from aigw.truncation_state import save_tool_truncation
+        from aigw.models_anthropic import AnthropicMessage
         
         tool_use_id = "test_immutable_anthropic"
         save_tool_truncation(tool_use_id, "tool", {"size_bytes": 1000, "reason": "test truncation"})
@@ -1321,8 +1321,8 @@ class TestTruncationRecoveryMessageModification:
         original_content = self._get_block_value(original_msg.content[0], "content")
         
         print("Action: Processing message...")
-        from kiro.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
-        from kiro.truncation_state import get_tool_truncation
+        from aigw.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
+        from aigw.truncation_state import get_tool_truncation
         
         if original_msg.role == "user" and original_msg.content and isinstance(original_msg.content, list):
             modified_content_blocks = []
@@ -1396,8 +1396,8 @@ class TestContentTruncationRecovery:
         Purpose: Ensure content truncation recovery works for Anthropic API (Test Case C.2).
         """
         print("Setup: Saving content truncation info...")
-        from kiro.truncation_state import save_content_truncation
-        from kiro.models_anthropic import AnthropicMessage
+        from aigw.truncation_state import save_content_truncation
+        from aigw.models_anthropic import AnthropicMessage
         
         # For Anthropic, content can be string or list of blocks
         truncated_content_text = "This is a very long response that was cut off mid-sentence"
@@ -1409,8 +1409,8 @@ class TestContentTruncationRecovery:
         ]
         
         print("Action: Processing messages through content truncation recovery...")
-        from kiro.truncation_recovery import should_inject_recovery, generate_truncation_user_message
-        from kiro.truncation_state import get_content_truncation
+        from aigw.truncation_recovery import should_inject_recovery, generate_truncation_user_message
+        from aigw.truncation_state import get_content_truncation
         
         modified_messages = []
         for msg in messages:
@@ -1457,14 +1457,14 @@ class TestContentTruncationRecovery:
         Purpose: Ensure false positives don't occur.
         """
         print("Setup: Creating normal assistant message (no truncation)...")
-        from kiro.models_anthropic import AnthropicMessage
+        from aigw.models_anthropic import AnthropicMessage
         
         messages = [
             AnthropicMessage(role="assistant", content=[{"type": "text", "text": "This is a complete response."}])
         ]
         
         print("Action: Processing messages...")
-        from kiro.truncation_state import get_content_truncation
+        from aigw.truncation_state import get_content_truncation
         
         modified_messages = []
         for msg in messages:
@@ -1505,7 +1505,7 @@ class TestWebSearchAutoInjection:
         Purpose: Ensure WEB_SEARCH_ENABLED controls auto-injection.
         """
         print("Setup: Testing auto-injection logic...")
-        from kiro.models_anthropic import AnthropicTool
+        from aigw.models_anthropic import AnthropicTool
         
         # Simulate auto-injection logic
         WEB_SEARCH_ENABLED = True
@@ -1542,7 +1542,7 @@ class TestWebSearchAutoInjection:
         Purpose: Ensure auto-injection doesn't create duplicates.
         """
         print("Setup: Testing duplicate detection...")
-        from kiro.models_anthropic import AnthropicTool
+        from aigw.models_anthropic import AnthropicTool
         
         # Simulate existing web_search tool
         existing_tools = [
@@ -1584,7 +1584,7 @@ class TestWebSearchNativeDetection:
         Purpose: Ensure Path A detection logic works.
         """
         print("Setup: Creating tools list with native server-side tool...")
-        from kiro.models_anthropic import AnthropicTool
+        from aigw.models_anthropic import AnthropicTool
         
         tools = [
             AnthropicTool(
@@ -1611,7 +1611,7 @@ class TestWebSearchNativeDetection:
         Purpose: Ensure Path A detection doesn't trigger for regular tools.
         """
         print("Setup: Creating tools list with user-defined tool...")
-        from kiro.models_anthropic import AnthropicTool
+        from aigw.models_anthropic import AnthropicTool
         
         tools = [
             AnthropicTool(

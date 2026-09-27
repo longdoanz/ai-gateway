@@ -12,8 +12,8 @@ from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock, Mock, patch
 import httpx
 
-from kiro.auth import KiroAuthManager, AuthType
-from kiro.config import TOKEN_REFRESH_THRESHOLD, get_aws_sso_oidc_url
+from aigw.auth import KiroAuthManager, AuthType
+from aigw.config import TOKEN_REFRESH_THRESHOLD, get_aws_sso_oidc_url
 
 
 class TestKiroAuthManagerInitialization:
@@ -205,7 +205,7 @@ class TestKiroAuthManagerTokenRefresh:
         mock_response.json = Mock(return_value=mock_kiro_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -240,7 +240,7 @@ class TestKiroAuthManagerTokenRefresh:
         mock_response.json = Mock(return_value=mock_kiro_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -269,7 +269,7 @@ class TestKiroAuthManagerTokenRefresh:
         mock_response.json = Mock(return_value={"expiresIn": 3600})  # No accessToken!
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -321,7 +321,7 @@ class TestKiroAuthManagerGetAccessToken:
         mock_response.json = Mock(return_value=mock_kiro_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -351,7 +351,7 @@ class TestKiroAuthManagerGetAccessToken:
         manager._expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
         
         print("Setup: Mocking httpx to track calls...")
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock()
             mock_client_class.return_value = mock_client
@@ -421,7 +421,7 @@ class TestKiroAuthManagerForceRefresh:
         mock_response.json = Mock(return_value=mock_kiro_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -849,7 +849,7 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -948,7 +948,7 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -983,7 +983,7 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1017,7 +1017,7 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1051,7 +1051,7 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1085,7 +1085,7 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response(expires_in=7200))
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1124,7 +1124,7 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1165,7 +1165,7 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1344,7 +1344,7 @@ class TestKiroAuthManagerSsoRegionSeparation:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1384,7 +1384,7 @@ class TestKiroAuthManagerSsoRegionSeparation:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1443,7 +1443,7 @@ class TestKiroAuthManagerSsoRegionSeparation:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1572,7 +1572,7 @@ class TestKiroAuthManagerSsoRegionSeparation:
                 return mock_error_response
             return mock_success_response
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = mock_post
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1623,7 +1623,7 @@ class TestKiroAuthManagerSsoRegionSeparation:
             )
         )
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_error_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1671,7 +1671,7 @@ class TestKiroAuthManagerSsoRegionSeparation:
             )
         )
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_error_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1900,7 +1900,7 @@ class TestKiroAuthManagerGracefulDegradation:
             )
         )
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_error_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1980,7 +1980,7 @@ class TestKiroAuthManagerGracefulDegradation:
             )
         )
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_error_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -2025,7 +2025,7 @@ class TestKiroAuthManagerGracefulDegradation:
             )
         )
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_error_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -2215,7 +2215,7 @@ class TestKiroAuthManagerTokenPersistence:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -2291,7 +2291,7 @@ class TestKiroAuthManagerTokenPersistence:
         mock_response.json = Mock(return_value=mock_kiro_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -2472,7 +2472,7 @@ class TestKiroAuthManagerSocialLogin:
         mock_response.json = Mock(return_value=mock_kiro_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -2801,7 +2801,7 @@ class TestKiroAuthManagerEnterpriseIDE:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -2842,7 +2842,7 @@ class TestKiroAuthManagerEnterpriseIDE:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -2887,7 +2887,7 @@ class TestKiroAuthManagerEnterpriseIDE:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -2934,7 +2934,7 @@ class TestKiroAuthManagerEnterpriseIDE:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -3235,7 +3235,7 @@ class TestKiroAuthManagerSqliteWriteBackPreservation:
         conn.close()
         
         print("Setup: Enabling SQLITE_READONLY flag...")
-        monkeypatch.setattr('kiro.auth.SQLITE_READONLY', True)
+        monkeypatch.setattr('aigw.auth.SQLITE_READONLY', True)
         
         print("Setup: Creating KiroAuthManager...")
         manager = KiroAuthManager(sqlite_db=str(db_file))
@@ -3752,7 +3752,7 @@ class TestKiroAuthManagerSqliteWriteBackPreservation:
         mock_response.json = Mock(return_value=mock_kiro_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -3843,7 +3843,7 @@ class TestKiroAuthManagerSqliteWriteBackPreservation:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('aigw.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)

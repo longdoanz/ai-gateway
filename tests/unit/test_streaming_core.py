@@ -18,7 +18,7 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from dataclasses import asdict
 
-from kiro.streaming_core import (
+from aigw.streaming_core import (
     KiroEvent,
     StreamResult,
     FirstTokenTimeoutError,
@@ -331,8 +331,8 @@ class TestParseKiroStream:
         print("Action: Parsing stream...")
         events = []
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', False):
+        with patch('aigw.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('aigw.streaming_core.FAKE_REASONING_ENABLED', False):
                 async for event in parse_kiro_stream(mock_response, first_token_timeout=30):
                     events.append(event)
         
@@ -364,8 +364,8 @@ class TestParseKiroStream:
         print("Action: Parsing stream...")
         events = []
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', False):
+        with patch('aigw.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('aigw.streaming_core.FAKE_REASONING_ENABLED', False):
                 async for event in parse_kiro_stream(mock_response, first_token_timeout=30):
                     events.append(event)
         
@@ -395,8 +395,8 @@ class TestParseKiroStream:
         print("Action: Parsing stream...")
         events = []
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', False):
+        with patch('aigw.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('aigw.streaming_core.FAKE_REASONING_ENABLED', False):
                 async for event in parse_kiro_stream(mock_response, first_token_timeout=30):
                     events.append(event)
         
@@ -427,8 +427,8 @@ class TestParseKiroStream:
         print("Action: Parsing stream...")
         events = []
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', False):
+        with patch('aigw.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('aigw.streaming_core.FAKE_REASONING_ENABLED', False):
                 async for event in parse_kiro_stream(mock_response, first_token_timeout=30):
                     events.append(event)
         
@@ -457,7 +457,7 @@ class TestParseKiroStream:
         
         print("Action: Parsing stream with timeout...")
         
-        with patch('kiro.streaming_core.asyncio.wait_for', side_effect=mock_wait_for_timeout):
+        with patch('aigw.streaming_core.asyncio.wait_for', side_effect=mock_wait_for_timeout):
             with pytest.raises(FirstTokenTimeoutError) as exc_info:
                 async for event in parse_kiro_stream(mock_response, first_token_timeout=30):
                     pass
@@ -487,7 +487,7 @@ class TestParseKiroStream:
         print("Action: Parsing empty stream...")
         events = []
         
-        with patch('kiro.streaming_core.asyncio.wait_for', side_effect=mock_wait_for_empty):
+        with patch('aigw.streaming_core.asyncio.wait_for', side_effect=mock_wait_for_empty):
             async for event in parse_kiro_stream(mock_response, first_token_timeout=30):
                 events.append(event)
         
@@ -514,8 +514,8 @@ class TestParseKiroStream:
         events = []
         generator_exit_raised = False
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', False):
+        with patch('aigw.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('aigw.streaming_core.FAKE_REASONING_ENABLED', False):
                 try:
                     async for event in parse_kiro_stream(mock_response, first_token_timeout=30):
                         events.append(event)
@@ -704,9 +704,9 @@ class TestCollectStreamToResult:
         
         print("Action: Collecting stream...")
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', False):
-                with patch('kiro.streaming_core.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('aigw.streaming_core.FAKE_REASONING_ENABLED', False):
+                with patch('aigw.streaming_core.parse_bracket_tool_calls', return_value=[]):
                     result = await collect_stream_to_result(mock_response, first_token_timeout=30)
         
         print(f"Collected content: '{result.content}'")
@@ -732,9 +732,9 @@ class TestCollectStreamToResult:
         
         print("Action: Collecting stream...")
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', False):
-                with patch('kiro.streaming_core.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('aigw.streaming_core.FAKE_REASONING_ENABLED', False):
+                with patch('aigw.streaming_core.parse_bracket_tool_calls', return_value=[]):
                     result = await collect_stream_to_result(mock_response, first_token_timeout=30)
         
         print(f"Collected tool calls: {len(result.tool_calls)}")
@@ -762,9 +762,9 @@ class TestCollectStreamToResult:
         
         print("Action: Collecting stream...")
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', False):
-                with patch('kiro.streaming_core.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('aigw.streaming_core.FAKE_REASONING_ENABLED', False):
+                with patch('aigw.streaming_core.parse_bracket_tool_calls', return_value=[]):
                     result = await collect_stream_to_result(mock_response, first_token_timeout=30)
         
         print(f"Collected usage: {result.usage}")
@@ -791,9 +791,9 @@ class TestCollectStreamToResult:
         
         print("Action: Collecting stream...")
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', False):
-                with patch('kiro.streaming_core.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('aigw.streaming_core.FAKE_REASONING_ENABLED', False):
+                with patch('aigw.streaming_core.parse_bracket_tool_calls', return_value=[]):
                     result = await collect_stream_to_result(mock_response, first_token_timeout=30)
         
         print(f"Collected context_usage_percentage: {result.context_usage_percentage}")
@@ -828,8 +828,8 @@ class TestCollectStreamToResult:
         
         print("Action: Collecting stream with thinking...")
         
-        with patch('kiro.streaming_core.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_core.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_core.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_core.parse_bracket_tool_calls', return_value=[]):
                 result = await collect_stream_to_result(mock_response, first_token_timeout=30)
         
         print(f"Collected thinking_content: '{result.thinking_content}'")
@@ -862,10 +862,10 @@ class TestCollectStreamToResult:
         
         print("Action: Collecting stream with duplicates...")
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', False):
-                with patch('kiro.streaming_core.parse_bracket_tool_calls', return_value=bracket_tool_calls):
-                    with patch('kiro.streaming_core.deduplicate_tool_calls') as mock_dedup:
+        with patch('aigw.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('aigw.streaming_core.FAKE_REASONING_ENABLED', False):
+                with patch('aigw.streaming_core.parse_bracket_tool_calls', return_value=bracket_tool_calls):
+                    with patch('aigw.streaming_core.deduplicate_tool_calls') as mock_dedup:
                         mock_dedup.return_value = [
                             {"id": "call_1", "function": {"name": "func1", "arguments": "{}"}},
                             {"id": "call_2", "function": {"name": "func2", "arguments": "{}"}}
@@ -1063,9 +1063,9 @@ class TestThinkingParserIntegration:
         print("Action: Parsing stream with fake reasoning enabled...")
         events = []
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', True):
-                with patch('kiro.streaming_core.ThinkingParser') as mock_thinking_parser_class:
+        with patch('aigw.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('aigw.streaming_core.FAKE_REASONING_ENABLED', True):
+                with patch('aigw.streaming_core.ThinkingParser') as mock_thinking_parser_class:
                     mock_thinking_parser = MagicMock()
                     mock_thinking_parser.feed.return_value = MagicMock(
                         thinking_content=None,
@@ -1108,9 +1108,9 @@ class TestThinkingParserIntegration:
         print("Action: Parsing stream with fake reasoning disabled...")
         events = []
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', False):
-                with patch('kiro.streaming_core.ThinkingParser') as mock_thinking_parser_class:
+        with patch('aigw.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('aigw.streaming_core.FAKE_REASONING_ENABLED', False):
+                with patch('aigw.streaming_core.ThinkingParser') as mock_thinking_parser_class:
                     async for event in parse_kiro_stream(mock_response, first_token_timeout=30):
                         events.append(event)
                     
@@ -1137,9 +1137,9 @@ class TestThinkingParserIntegration:
         print("Action: Parsing stream with thinking parser disabled via parameter...")
         events = []
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', True):
-                with patch('kiro.streaming_core.ThinkingParser') as mock_thinking_parser_class:
+        with patch('aigw.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('aigw.streaming_core.FAKE_REASONING_ENABLED', True):
+                with patch('aigw.streaming_core.ThinkingParser') as mock_thinking_parser_class:
                     async for event in parse_kiro_stream(
                         mock_response,
                         first_token_timeout=30,
@@ -1178,7 +1178,7 @@ class TestStreamingCoreErrorHandling:
         
         print("Action: Parsing stream with timeout...")
         
-        with patch('kiro.streaming_core.asyncio.wait_for', side_effect=mock_wait_for_timeout):
+        with patch('aigw.streaming_core.asyncio.wait_for', side_effect=mock_wait_for_timeout):
             with pytest.raises(FirstTokenTimeoutError):
                 async for event in parse_kiro_stream(mock_response, first_token_timeout=30):
                     pass
@@ -1202,8 +1202,8 @@ class TestStreamingCoreErrorHandling:
         
         print("Action: Parsing stream with GeneratorExit...")
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', False):
+        with patch('aigw.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('aigw.streaming_core.FAKE_REASONING_ENABLED', False):
                 with pytest.raises(GeneratorExit):
                     async for event in parse_kiro_stream(mock_response, first_token_timeout=30):
                         pass
@@ -1227,8 +1227,8 @@ class TestStreamingCoreErrorHandling:
         
         print("Action: Parsing stream with RuntimeError...")
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', False):
+        with patch('aigw.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('aigw.streaming_core.FAKE_REASONING_ENABLED', False):
                 with pytest.raises(RuntimeError) as exc_info:
                     async for event in parse_kiro_stream(mock_response, first_token_timeout=30):
                         pass

@@ -14,7 +14,7 @@ import pytest
 from unittest.mock import AsyncMock, Mock, patch, MagicMock
 from datetime import datetime
 
-from kiro.mcp_tools import (
+from aigw.mcp_tools import (
     generate_random_id,
     call_kiro_mcp_api,
     generate_search_summary,
@@ -127,7 +127,7 @@ class TestCallKiroMCPAPI:
         mock_client.__aenter__.return_value.post = mock_post
         
         print("Action: Calling call_kiro_mcp_api...")
-        with patch("kiro.mcp_tools.httpx.AsyncClient", return_value=mock_client):
+        with patch("aigw.mcp_tools.httpx.AsyncClient", return_value=mock_client):
             tool_use_id, results = await call_kiro_mcp_api(query, mock_auth_manager)
         
         print(f"Comparing tool_use_id: Got '{tool_use_id}'")
@@ -165,7 +165,7 @@ class TestCallKiroMCPAPI:
         mock_client.__aenter__.return_value.post = mock_post
         
         print("Action: Calling call_kiro_mcp_api...")
-        with patch("kiro.mcp_tools.httpx.AsyncClient", return_value=mock_client):
+        with patch("aigw.mcp_tools.httpx.AsyncClient", return_value=mock_client):
             tool_use_id, results = await call_kiro_mcp_api(query, mock_auth_manager)
         
         print(f"Comparing result: Expected (None, None), Got ({tool_use_id}, {results})")
@@ -189,7 +189,7 @@ class TestCallKiroMCPAPI:
         mock_client.__aenter__.return_value.post = mock_post
         
         print("Action: Calling call_kiro_mcp_api...")
-        with patch("kiro.mcp_tools.httpx.AsyncClient", return_value=mock_client):
+        with patch("aigw.mcp_tools.httpx.AsyncClient", return_value=mock_client):
             tool_use_id, results = await call_kiro_mcp_api(query, mock_auth_manager)
         
         print(f"Comparing result: Expected (None, None), Got ({tool_use_id}, {results})")
@@ -212,7 +212,7 @@ class TestCallKiroMCPAPI:
         mock_client.__aenter__.return_value.post = mock_post
         
         print("Action: Calling call_kiro_mcp_api...")
-        with patch("kiro.mcp_tools.httpx.AsyncClient", return_value=mock_client):
+        with patch("aigw.mcp_tools.httpx.AsyncClient", return_value=mock_client):
             tool_use_id, results = await call_kiro_mcp_api(query, mock_auth_manager)
         
         print(f"Comparing result: Expected (None, None), Got ({tool_use_id}, {results})")
@@ -237,7 +237,7 @@ class TestCallKiroMCPAPI:
         mock_client.__aenter__.return_value.post = mock_post
         
         print("Action: Calling call_kiro_mcp_api...")
-        with patch("kiro.mcp_tools.httpx.AsyncClient", return_value=mock_client):
+        with patch("aigw.mcp_tools.httpx.AsyncClient", return_value=mock_client):
             tool_use_id, results = await call_kiro_mcp_api(query, mock_auth_manager)
         
         print(f"Comparing result: Expected (None, None), Got ({tool_use_id}, {results})")

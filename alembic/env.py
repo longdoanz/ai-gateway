@@ -4,14 +4,14 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from kiro.config import DATABASE_URL
-from kiro.db.models import Base
+from aigw.config import DATABASE_URL
+from aigw.db.models import Base
 
 config = context.config
 if config.config_file_name is not None:
     # disable_existing_loggers=False: alembic's fileConfig would otherwise switch
     # off every logger already created in the process. When migrations run from
-    # the app (kiro.db.engine.init_db) that includes the app's own loggers, so the
+    # the app (aigw.db.engine.init_db) that includes the app's own loggers, so the
     # recovery guidance logged on a failed upgrade was silently dropped.
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 

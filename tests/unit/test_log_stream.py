@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Unit tests for the real-time log stream (kiro.log_stream).
+Unit tests for the real-time log stream (aigw.log_stream).
 
 Verifies ring-buffer capture, level filtering, subscriber broadcast and the
 non-blocking contract of the loguru sink.
@@ -11,7 +11,7 @@ import asyncio
 import pytest
 from loguru import logger
 
-from kiro.log_stream import LogEntry, LogStream
+from aigw.log_stream import LogEntry, LogStream
 
 
 @pytest.fixture

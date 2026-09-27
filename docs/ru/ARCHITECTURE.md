@@ -1,4 +1,4 @@
-# Архитектурный Обзор: Kiro Gateway
+# Архитектурный Обзор: AI Gateway
 
 ## 1. Назначение и Цели Системы
 
@@ -27,7 +27,7 @@
               │                              │
               ▼                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Kiro Gateway                               │
+│                      AI Gateway                               │
 │  ┌─────────────────────┐       ┌─────────────────────┐         │
 │  │  OpenAI Adapter     │       │  Anthropic Adapter  │         │
 │  │  /v1/chat/...       │       │  /v1/messages       │         │
@@ -53,15 +53,15 @@
 
 ## 2. Структура Проекта
 
-Проект организован в виде модульного Python-пакета `kiro/`:
+Проект организован в виде модульного Python-пакета `aigw/`:
 
 ```
-kiro-gateway/
+ai-gateway/
 ├── main.py                    # Точка входа, создание FastAPI приложения
 ├── requirements.txt           # Зависимости Python
 ├── .env.example               # Пример конфигурации окружения
 │
-├── kiro/              # Основной пакет
+├── aigw/              # Основной пакет
 │   ├── __init__.py            # Экспорты пакета, версия
 │   │
 │   │   # ═══════════════════════════════════════════════════════
@@ -140,7 +140,7 @@ kiro-gateway/
 4. **Регистрация обработчиков ошибок** — `validation_exception_handler` для ошибок 422
 5. **Подключение роутов** — `app.include_router(router)`
 
-### 3.2. Модуль конфигурации (`kiro/config.py`)
+### 3.2. Модуль конфигурации (`aigw/config.py`)
 
 Централизованное хранение всех настроек:
 
@@ -167,7 +167,7 @@ kiro-gateway/
 - `get_kiro_q_host(region)` — хост Q API
 - `get_internal_model_id(external_model)` — конвертация имени модели
 
-### 3.3. Pydantic Модели (`kiro/models_openai.py`)
+### 3.3. Pydantic Модели (`aigw/models_openai.py`)
 
 #### Модели для `/v1/models`
 
@@ -198,7 +198,7 @@ kiro-gateway/
 
 ### 3.4. Управление Состоянием (State Management Layer)
 
-#### KiroAuthManager (`kiro/auth.py`)
+#### KiroAuthManager (`aigw/auth.py`)
 
 **Роль:** Stateful-синглтон, инкапсулирующий логику управления токенами Kiro.
 
@@ -234,7 +234,7 @@ auth_manager = KiroAuthManager(
 token = await auth_manager.get_access_token()
 ```
 
-#### ModelInfoCache (`kiro/cache.py`)
+#### ModelInfoCache (`aigw/cache.py`)
 
 **Роль:** Потокобезопасное хранилище конфигураций моделей.
 
@@ -250,7 +250,7 @@ token = await auth_manager.get_access_token()
 - `is_empty()` / `is_stale()` — проверка состояния кэша
 - `get_all_model_ids()` — список всех ID моделей
 
-### 3.5. Вспомогательные Утилиты (`kiro/utils.py`)
+### 3.5. Вспомогательные Утилиты (`aigw/utils.py`)
 
 | Функция | Описание |
 |---------|----------|
@@ -260,7 +260,7 @@ token = await auth_manager.get_access_token()
 | `generate_conversation_id()` | UUID для разговора |
 | `generate_tool_call_id()` | ID в формате `call_{uuid_hex[:8]}` |
 
-### 3.6. Слой Конвертации (`kiro/converters_openai.py`)
+### 3.6. Слой Конвертации (`aigw/converters_openai.py`)
 
 #### Конвертация сообщений
 
@@ -310,7 +310,7 @@ OpenAI messages преобразуются в Kiro conversationState:
 | `claude-3-7-sonnet-20250219` | `CLAUDE_3_7_SONNET_20250219_V1_0` |
 | `auto` | `claude-sonnet-4.5` (алиас) |
 
-### 3.7. Слой Парсинга (`kiro/parsers.py`)
+### 3.7. Слой Парсинга (`aigw/parsers.py`)
 
 #### AwsEventStreamParser
 
@@ -340,7 +340,7 @@ OpenAI messages преобразуются в Kiro conversationState:
 | `parse_bracket_tool_calls(response_text)` | Парсинг `[Called func with args: {...}]` |
 | `deduplicate_tool_calls(tool_calls)` | Удаление дубликатов tool calls |
 
-### 3.8. Streaming (`kiro/streaming_openai.py`)
+### 3.8. Streaming (`aigw/streaming_openai.py`)
 
 #### stream_kiro_to_openai
 
@@ -357,7 +357,7 @@ OpenAI messages преобразуются в Kiro conversationState:
 
 Собирает полный ответ из streaming потока для non-streaming режима.
 
-### 3.9. HTTP Клиент (`kiro/http_client.py`)
+### 3.9. HTTP Клиент (`aigw/http_client.py`)
 
 #### KiroHttpClient
 
@@ -378,7 +378,7 @@ OpenAI messages преобразуются в Kiro conversationState:
 
 Поддерживает async context manager (`async with`).
 
-### 3.10. Роуты (`kiro/routes_openai.py`)
+### 3.10. Роуты (`aigw/routes_openai.py`)
 
 | Endpoint | Метод | Описание |
 |----------|-------|----------|
@@ -389,14 +389,14 @@ OpenAI messages преобразуются в Kiro conversationState:
 
 **Аутентификация:** Bearer token в заголовке `Authorization`
 
-### 3.11. Обработка Исключений (`kiro/exceptions.py`)
+### 3.11. Обработка Исключений (`aigw/exceptions.py`)
 
 | Функция | Описание |
 |---------|----------|
 | `sanitize_validation_errors(errors)` | Конвертация bytes в строки для JSON-сериализации |
 | `validation_exception_handler(request, exc)` | Обработчик ошибок валидации Pydantic (422) |
 
-### 3.12. Отладочное Логирование (`kiro/debug_logger.py`)
+### 3.12. Отладочное Логирование (`aigw/debug_logger.py`)
 
 **Класс:** `DebugLogger` (синглтон)
 
@@ -417,7 +417,7 @@ OpenAI messages преобразуются в Kiro conversationState:
 - `response_stream_raw.txt` — сырой поток от Kiro
 - `response_stream_modified.txt` — преобразованный поток (OpenAI формат)
 
-### 3.13. Токенизатор (`kiro/tokenizer.py`)
+### 3.13. Токенизатор (`aigw/tokenizer.py`)
 
 **Проблема:** Kiro API не возвращает напрямую количество токенов. Вместо этого API предоставляет только `context_usage_percentage` — процент использования контекста модели.
 
@@ -749,7 +749,7 @@ data: [DONE]
 
 2. **Создать адаптер конвертации** — `converters_gemini.py`
    ```python
-   from kiro.converters_core import build_kiro_payload
+   from aigw.converters_core import build_kiro_payload
    
    def gemini_to_kiro(request: GeminiRequest, ...) -> dict:
        """Конвертирует Gemini запрос в Kiro payload."""
@@ -769,7 +769,7 @@ data: [DONE]
 
 3. **Создать форматтер streaming** — `streaming_gemini.py`
    ```python
-   from kiro.streaming_core import parse_kiro_stream
+   from aigw.streaming_core import parse_kiro_stream
    
    async def stream_to_gemini(response, ...) -> AsyncGenerator[str, None]:
        """Форматирует Kiro события в Gemini SSE."""
@@ -788,7 +788,7 @@ data: [DONE]
 
 5. **Подключить в main.py**
    ```python
-   from kiro.routes_gemini import router as gemini_router
+   from aigw.routes_gemini import router as gemini_router
    app.include_router(gemini_router)
    ```
 

@@ -12,7 +12,7 @@ Tests for OpenAI-specific conversion logic:
 import pytest
 from unittest.mock import patch
 
-from kiro.converters_openai import (
+from aigw.converters_openai import (
     build_kiro_payload,
     convert_openai_messages_to_unified,
     convert_openai_tools_to_unified,
@@ -20,7 +20,7 @@ from kiro.converters_openai import (
     reasoning_effort_to_budget,
     extract_thinking_config_from_openai,
 )
-from kiro.models_openai import ChatMessage, ChatCompletionRequest, Tool, ToolFunction
+from aigw.models_openai import ChatMessage, ChatCompletionRequest, Tool, ToolFunction
 
 
 # ==================================================================================================
@@ -785,8 +785,8 @@ class TestBuildKiroPayload:
         )
 
         print("Action: Building payload (with fake reasoning and truncation recovery disabled)...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', False):
-            with patch('kiro.config.TRUNCATION_RECOVERY', False):
+        with patch('aigw.converters_core.FAKE_REASONING_ENABLED', False):
+            with patch('aigw.config.TRUNCATION_RECOVERY', False):
                 result = build_kiro_payload(request, "conv-123", "")
 
         print(f"Result: {result}")
@@ -880,8 +880,8 @@ class TestBuildKiroPayload:
         )
         
         print("Action: Building payload with FAKE_REASONING_ENABLED=True...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
+        with patch('aigw.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('aigw.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
                 result = build_kiro_payload(request, "conv-123", "")
         
         current_msg = result["conversationState"]["currentMessage"]["userInputMessage"]
@@ -907,8 +907,8 @@ class TestBuildKiroPayload:
         )
         
         print("Action: Building payload with FAKE_REASONING_ENABLED=True...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
+        with patch('aigw.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('aigw.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
                 result = build_kiro_payload(request, "conv-123", "")
         
         current_msg = result["conversationState"]["currentMessage"]["userInputMessage"]
@@ -1352,7 +1352,7 @@ class TestBuildKiroPayloadToolCallsIntegration:
         )
         
         print("Action: Building payload...")
-        with patch('kiro.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
+        with patch('aigw.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
             result = build_kiro_payload(request, "conv-123", "")
         
         print("Checking that system prompt contains tool documentation...")
@@ -1846,8 +1846,8 @@ class TestBuildKiroPayloadIntegration:
         Purpose: Ensure end-to-end thinking configuration flow works
         """
         print("Setting up mocks...")
-        monkeypatch.setattr("kiro.converters_core.FAKE_REASONING_ENABLED", True)
-        monkeypatch.setattr("kiro.converters_core.FAKE_REASONING_BUDGET_CAP", 10000)
+        monkeypatch.setattr("aigw.converters_core.FAKE_REASONING_ENABLED", True)
+        monkeypatch.setattr("aigw.converters_core.FAKE_REASONING_BUDGET_CAP", 10000)
         
         print("Creating request with reasoning_effort='medium', max_tokens=8000...")
         request = ChatCompletionRequest(

@@ -7,7 +7,7 @@ Tests the parsing logic for AWS SSE stream from Kiro API.
 
 import pytest
 
-from kiro.parsers import (
+from aigw.parsers import (
     AwsEventStreamParser,
     find_matching_brace,
     parse_bracket_tool_calls,

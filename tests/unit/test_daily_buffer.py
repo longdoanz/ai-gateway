@@ -1,7 +1,7 @@
 import asyncio
 import pytest
 from unittest.mock import AsyncMock, patch
-from kiro.usage.daily_buffer import DailyBuffer
+from aigw.usage.daily_buffer import DailyBuffer
 
 
 @pytest.mark.asyncio
@@ -28,11 +28,11 @@ async def test_flush_clears_buffer():
     buf = DailyBuffer()
     buf.record(1, "2026-04-27", 80, 20, model="auto")
 
-    with patch("kiro.usage.daily_buffer.async_session_factory") as mock_factory:
+    with patch("aigw.usage.daily_buffer.async_session_factory") as mock_factory:
         mock_session = AsyncMock()
         mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
-        with patch("kiro.usage.daily_buffer.increment_daily_usage", new_callable=AsyncMock):
+        with patch("aigw.usage.daily_buffer.increment_daily_usage", new_callable=AsyncMock):
             await buf.flush()
 
     assert len(buf._buffer) == 0
@@ -41,7 +41,7 @@ async def test_flush_clears_buffer():
 @pytest.mark.asyncio
 async def test_flush_empty_buffer_is_noop():
     buf = DailyBuffer()
-    with patch("kiro.usage.daily_buffer.async_session_factory") as mock_factory:
+    with patch("aigw.usage.daily_buffer.async_session_factory") as mock_factory:
         await buf.flush()
     mock_factory.assert_not_called()
 
@@ -68,11 +68,11 @@ async def test_flush_restores_buffer_on_error():
     buf = DailyBuffer()
     buf.record(1, "2026-04-27", 100, 50, model="auto")
 
-    with patch("kiro.usage.daily_buffer.async_session_factory") as mock_factory:
+    with patch("aigw.usage.daily_buffer.async_session_factory") as mock_factory:
         mock_session = AsyncMock()
         mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
-        with patch("kiro.usage.daily_buffer.increment_daily_usage", new_callable=AsyncMock) as mock_inc:
+        with patch("aigw.usage.daily_buffer.increment_daily_usage", new_callable=AsyncMock) as mock_inc:
             mock_inc.side_effect = Exception("DB error")
             await buf.flush()
 

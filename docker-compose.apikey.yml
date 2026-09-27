@@ -15,12 +15,12 @@ services:
       timeout: 5s
       retries: 5
 
-  kiro-gateway-apikey:
+  aigw-gateway-apikey:
     build:
       context: .
       dockerfile: Dockerfile.apikey
-    image: kiro-gateway-apikey:latest
-    container_name: kiro-gateway-apikey
+    image: aigw-gateway-apikey:latest
+    container_name: aigw-gateway-apikey
     user: "1000:1000"
     ports:
       - "18000:18000"
@@ -42,7 +42,7 @@ services:
       - NINE_ROUTER_PASSWORD=${NINE_ROUTER_PASSWORD:-123456}
       - OIDC_CLIENT_SECRET=${NINE_ROUTER_OIDC_CLIENT_SECRET}
       # Internal URL for JWT iss claim, token endpoint, and jwks (server-to-server)
-      - OIDC_ISSUER_URL=${OIDC_ISSUER_URL:-http://kiro-gateway-apikey:18000}
+      - OIDC_ISSUER_URL=${OIDC_ISSUER_URL:-http://aigw-gateway-apikey:18000}
       # Public URL returned as authorization_endpoint in OIDC discovery (browser redirect)
       - OIDC_PUBLIC_URL=${OIDC_PUBLIC_URL:-http://localhost:3002}
     env_file:
@@ -81,7 +81,7 @@ services:
       # BASE_URL must match the public origin the browser uses (same origin as webui)
       # so OIDC state cookies are set and read on the same domain
       - BASE_URL=http://localhost:3002/9router
-      - OIDC_ISSUER_URL=http://kiro-gateway-apikey:18000
+      - OIDC_ISSUER_URL=http://aigw-gateway-apikey:18000
       - OIDC_CLIENT_ID=${NINE_ROUTER_OIDC_CLIENT_ID:-9router}
       - OIDC_CLIENT_SECRET=${NINE_ROUTER_OIDC_CLIENT_SECRET}
       - OIDC_SCOPES=openid profile email
@@ -92,7 +92,7 @@ services:
     volumes:
       - ninerouter_data:/app/data
     depends_on:
-      - kiro-gateway-apikey
+      - aigw-gateway-apikey
     restart: unless-stopped
     deploy:
       resources:
@@ -105,15 +105,15 @@ services:
       context: ./webui
       dockerfile: Dockerfile
       args:
-        - API_URL=http://kiro-gateway-apikey:18000
+        - API_URL=http://aigw-gateway-apikey:18000
         - NEXT_PUBLIC_NINE_ROUTER_ENABLED=${NINE_ROUTER_ENABLED:-true}
     ports:
       - "3002:3000"
     environment:
-      - API_URL=http://kiro-gateway-apikey:18000
+      - API_URL=http://aigw-gateway-apikey:18000
       - NEXT_PUBLIC_NINE_ROUTER_ENABLED=${NINE_ROUTER_ENABLED:-true}
     depends_on:
-      - kiro-gateway-apikey
+      - aigw-gateway-apikey
     restart: unless-stopped
     deploy:
       resources:
@@ -127,5 +127,5 @@ volumes:
 
 networks:
   default:
-    name: kiro-gateway-network
+    name: aigw-gateway-network
     driver: bridge

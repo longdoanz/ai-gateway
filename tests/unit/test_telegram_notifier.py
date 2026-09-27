@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Unit tests for the Telegram notifier (kiro.telegram_notifier).
+Unit tests for the Telegram notifier (aigw.telegram_notifier).
 
 Verifies enable/disable gating, deduplication, cooldown, queue overflow
 behaviour and the outbound HTTP payload.
@@ -13,11 +13,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from kiro.log_stream import LogEntry
-from kiro.telegram_notifier import TelegramNotifier, _signature, _DEDUP_WINDOW_SECONDS
+from aigw.log_stream import LogEntry
+from aigw.telegram_notifier import TelegramNotifier, _signature, _DEDUP_WINDOW_SECONDS
 
 
-def _entry(level: str = "ERROR", message: str = "boom", name: str = "kiro.test",
+def _entry(level: str = "ERROR", message: str = "boom", name: str = "aigw.test",
            function: str = "run", line: int = 1) -> LogEntry:
     return LogEntry(time="2026-08-23T00:00:00+00:00", level=level, name=name,
                     function=function, line=line, message=message)
@@ -29,8 +29,8 @@ def notifier(monkeypatch):
     n = TelegramNotifier.__new__(TelegramNotifier)
     n._initialized = False
     n.__init__()
-    monkeypatch.setattr("kiro.telegram_notifier.TELEGRAM_BOT_TOKEN", "test-bot-token")
-    monkeypatch.setattr("kiro.telegram_notifier.TELEGRAM_CHAT_ID", "test-chat-id")
+    monkeypatch.setattr("aigw.telegram_notifier.TELEGRAM_BOT_TOKEN", "test-bot-token")
+    monkeypatch.setattr("aigw.telegram_notifier.TELEGRAM_CHAT_ID", "test-chat-id")
     return n
 
 
@@ -46,16 +46,16 @@ class TestSignature:
 
 class TestEnablement:
     def test_disabled_when_token_missing(self, monkeypatch):
-        monkeypatch.setattr("kiro.telegram_notifier.TELEGRAM_BOT_TOKEN", "")
-        monkeypatch.setattr("kiro.telegram_notifier.TELEGRAM_CHAT_ID", "chat")
+        monkeypatch.setattr("aigw.telegram_notifier.TELEGRAM_BOT_TOKEN", "")
+        monkeypatch.setattr("aigw.telegram_notifier.TELEGRAM_CHAT_ID", "chat")
         n = TelegramNotifier.__new__(TelegramNotifier)
         n._initialized = False
         n.__init__()
         assert not n.is_enabled()
 
     def test_disabled_when_chat_missing(self, monkeypatch):
-        monkeypatch.setattr("kiro.telegram_notifier.TELEGRAM_BOT_TOKEN", "token")
-        monkeypatch.setattr("kiro.telegram_notifier.TELEGRAM_CHAT_ID", "")
+        monkeypatch.setattr("aigw.telegram_notifier.TELEGRAM_BOT_TOKEN", "token")
+        monkeypatch.setattr("aigw.telegram_notifier.TELEGRAM_CHAT_ID", "")
         n = TelegramNotifier.__new__(TelegramNotifier)
         n._initialized = False
         n.__init__()
@@ -65,7 +65,7 @@ class TestEnablement:
         assert notifier.is_enabled()
 
     def test_attach_sink_noop_when_disabled(self, monkeypatch):
-        monkeypatch.setattr("kiro.telegram_notifier.TELEGRAM_BOT_TOKEN", "")
+        monkeypatch.setattr("aigw.telegram_notifier.TELEGRAM_BOT_TOKEN", "")
         n = TelegramNotifier.__new__(TelegramNotifier)
         n._initialized = False
         n.__init__()
@@ -202,7 +202,7 @@ class TestPayload:
         assert payload["disable_web_page_preview"] is True
         assert "ERROR" in payload["text"]
         assert "hello <world>" in payload["text"]
-        assert "kiro.test:run:1" in payload["text"]
+        assert "aigw.test:run:1" in payload["text"]
 
     def test_format_message_truncates_long(self):
         notifier = TelegramNotifier.__new__(TelegramNotifier)
@@ -223,7 +223,7 @@ class TestStartStop:
 
     @pytest.mark.asyncio
     async def test_start_noop_when_disabled(self, monkeypatch):
-        monkeypatch.setattr("kiro.telegram_notifier.TELEGRAM_BOT_TOKEN", "")
+        monkeypatch.setattr("aigw.telegram_notifier.TELEGRAM_BOT_TOKEN", "")
         n = TelegramNotifier.__new__(TelegramNotifier)
         n._initialized = False
         n.__init__()

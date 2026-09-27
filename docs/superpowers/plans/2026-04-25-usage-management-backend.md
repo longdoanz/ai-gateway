@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement database layer, usage tracking engine, fallback routing, and Dashboard API for the Credit Management system integrated into Kiro Gateway.
+**Goal:** Implement database layer, usage tracking engine, fallback routing, and Dashboard API for the Credit Management system integrated into AI Gateway.
 
 **Architecture:** PostgreSQL-only (no Redis), SQLAlchemy 2.0 async + Alembic, in-process asyncio background tasks, JWT auth for dashboard. Single async worker model. Backward compatible — opt-in when `DATABASE_URL` is set.
 
@@ -93,7 +93,7 @@ git commit -m "feat(usage-mgmt): add dependencies and config for usage managemen
 - [ ] **Step 1: Create kiro/db/__init__.py**
 
 ```python
-from kiro.db.engine import get_session, init_db, close_db, engine
+from aigw.db.engine import get_session, init_db, close_db, engine
 
 __all__ = ["get_session", "init_db", "close_db", "engine"]
 ```
@@ -102,7 +102,7 @@ __all__ = ["get_session", "init_db", "close_db", "engine"]
 
 ```python
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from kiro.config import DATABASE_URL
+from aigw.config import DATABASE_URL
 
 engine = create_async_engine(DATABASE_URL, echo=False, pool_size=5, max_overflow=10) if DATABASE_URL else None
 
@@ -119,7 +119,7 @@ async def get_session():
 async def init_db():
     if engine is None:
         return
-    from kiro.db.models import Base
+    from aigw.db.models import Base
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
@@ -131,7 +131,7 @@ async def close_db():
 
 - [ ] **Step 3: Verify module imports**
 
-Run: `python -c "from kiro.db.engine import engine; print('engine:', engine)"`
+Run: `python -c "from aigw.db.engine import engine; print('engine:', engine)"`
 Expected: `engine: None` (no DATABASE_URL set)
 
 - [ ] **Step 4: Commit**
@@ -231,7 +231,7 @@ class SystemConfig(Base):
 
 - [ ] **Step 2: Verify models load**
 
-Run: `python -c "from kiro.db.models import User, ApiKey, KeyUsage, KiroUserMapping, SystemConfig; print('5 models loaded')"`
+Run: `python -c "from aigw.db.models import User, ApiKey, KeyUsage, KiroUserMapping, SystemConfig; print('5 models loaded')"`
 Expected: `5 models loaded`
 
 - [ ] **Step 3: Commit**
@@ -275,8 +275,8 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from kiro.config import DATABASE_URL
-from kiro.db.models import Base
+from aigw.config import DATABASE_URL
+from aigw.db.models import Base
 
 config = context.config
 if config.config_file_name is not None:
@@ -344,8 +344,8 @@ from sqlalchemy import select, update, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiro.config import ENCRYPTION_KEY
-from kiro.db.models import ApiKey, KeyUsage, KiroUserMapping, SystemConfig, User
+from aigw.config import ENCRYPTION_KEY
+from aigw.db.models import ApiKey, KeyUsage, KiroUserMapping, SystemConfig, User
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -530,7 +530,7 @@ async def get_all_config(session: AsyncSession) -> dict[str, str]:
 
 - [ ] **Step 2: Verify repository imports**
 
-Run: `python -c "from kiro.db.repositories import hash_api_key, mask_key; print(mask_key('sk-proj-abcdefghijklmnop1234')); print(hash_api_key('test'))"`
+Run: `python -c "from aigw.db.repositories import hash_api_key, mask_key; print(mask_key('sk-proj-abcdefghijklmnop1234')); print(hash_api_key('test'))"`
 Expected: `('sk-proj-abc', '1234')` and a SHA256 hex string.
 
 - [ ] **Step 3: Commit**
@@ -564,7 +564,7 @@ from datetime import datetime, timedelta, timezone
 
 from jose import JWTError, jwt
 
-from kiro.config import JWT_SECRET, JWT_ACCESS_EXPIRY, JWT_REFRESH_EXPIRY
+from aigw.config import JWT_SECRET, JWT_ACCESS_EXPIRY, JWT_REFRESH_EXPIRY
 
 ALGORITHM = "HS256"
 
@@ -596,10 +596,10 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiro.dashboard.jwt_auth import decode_token
-from kiro.db.engine import get_session
-from kiro.db.models import User
-from kiro.db.repositories import get_user_by_id
+from aigw.dashboard.jwt_auth import decode_token
+from aigw.db.engine import get_session
+from aigw.db.models import User
+from aigw.db.repositories import get_user_by_id
 
 security = HTTPBearer()
 
@@ -625,7 +625,7 @@ async def require_admin(user: User = Depends(get_current_user)) -> User:
 
 - [ ] **Step 4: Verify imports**
 
-Run: `python -c "from kiro.dashboard.deps import get_current_user, require_admin; print('OK')"`
+Run: `python -c "from aigw.dashboard.deps import get_current_user, require_admin; print('OK')"`
 Expected: `OK`
 
 - [ ] **Step 5: Commit**
@@ -767,7 +767,7 @@ class ImportResult(BaseModel):
 
 - [ ] **Step 2: Verify schemas**
 
-Run: `python -c "from kiro.dashboard.schemas import LoginRequest, UserResponse, OverviewResponse; print('OK')"`
+Run: `python -c "from aigw.dashboard.schemas import LoginRequest, UserResponse, OverviewResponse; print('OK')"`
 Expected: `OK`
 
 - [ ] **Step 3: Commit**
@@ -790,10 +790,10 @@ git commit -m "feat(usage-mgmt): add Pydantic schemas for dashboard API"
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiro.dashboard.jwt_auth import create_access_token, create_refresh_token, decode_token
-from kiro.dashboard.schemas import LoginRequest, RefreshRequest, TokenResponse
-from kiro.db.engine import get_session
-from kiro.db.repositories import get_user_by_id, get_user_by_username, verify_password
+from aigw.dashboard.jwt_auth import create_access_token, create_refresh_token, decode_token
+from aigw.dashboard.schemas import LoginRequest, RefreshRequest, TokenResponse
+from aigw.db.engine import get_session
+from aigw.db.repositories import get_user_by_id, get_user_by_username, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -825,7 +825,7 @@ async def refresh(body: RefreshRequest, session: AsyncSession = Depends(get_sess
 
 - [ ] **Step 2: Verify route imports**
 
-Run: `python -c "from kiro.dashboard.routes_auth import router; print(len(router.routes), 'routes')"`
+Run: `python -c "from aigw.dashboard.routes_auth import router; print(len(router.routes), 'routes')"`
 Expected: `2 routes`
 
 - [ ] **Step 3: Commit**
@@ -848,11 +848,11 @@ git commit -m "feat(usage-mgmt): add auth routes (login, refresh)"
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiro.dashboard.deps import require_admin, get_current_user
-from kiro.dashboard.schemas import UserCreate, UserDetailResponse, UserResponse, UserUpdate
-from kiro.db.engine import get_session
-from kiro.db.models import User
-from kiro.db.repositories import create_user, get_user_by_id, get_user_by_username, list_users, update_user
+from aigw.dashboard.deps import require_admin, get_current_user
+from aigw.dashboard.schemas import UserCreate, UserDetailResponse, UserResponse, UserUpdate
+from aigw.db.engine import get_session
+from aigw.db.models import User
+from aigw.db.repositories import create_user, get_user_by_id, get_user_by_username, list_users, update_user
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -893,7 +893,7 @@ async def update_existing_user(user_id: int, body: UserUpdate, admin: User = Dep
 
 - [ ] **Step 2: Verify**
 
-Run: `python -c "from kiro.dashboard.routes_users import router; print(len(router.routes), 'routes')"`
+Run: `python -c "from aigw.dashboard.routes_users import router; print(len(router.routes), 'routes')"`
 Expected: `4 routes`
 
 - [ ] **Step 3: Commit**
@@ -916,11 +916,11 @@ git commit -m "feat(usage-mgmt): add user management routes"
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiro.dashboard.deps import get_current_user, require_admin
-from kiro.dashboard.schemas import ApiKeyCreate, ApiKeyResponse, ApiKeyToggle, KeyUsageResponse
-from kiro.db.engine import get_session
-from kiro.db.models import User
-from kiro.db.repositories import (
+from aigw.dashboard.deps import get_current_user, require_admin
+from aigw.dashboard.schemas import ApiKeyCreate, ApiKeyResponse, ApiKeyToggle, KeyUsageResponse
+from aigw.db.engine import get_session
+from aigw.db.models import User
+from aigw.db.repositories import (
     create_api_key,
     get_api_key_by_hash,
     get_all_usage_for_month,
@@ -974,14 +974,14 @@ async def get_key_usage(key_id: int, caller: User = Depends(get_current_user), s
     if key is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Key not found")
     from sqlalchemy import select
-    from kiro.db.models import KeyUsage
+    from aigw.db.models import KeyUsage
     result = await session.execute(select(KeyUsage).where(KeyUsage.key_id == key_id).order_by(KeyUsage.month.desc()))
     return list(result.scalars().all())
 ```
 
 - [ ] **Step 2: Verify**
 
-Run: `python -c "from kiro.dashboard.routes_keys import router; print(len(router.routes), 'routes')"`
+Run: `python -c "from aigw.dashboard.routes_keys import router; print(len(router.routes), 'routes')"`
 Expected: `5 routes`
 
 - [ ] **Step 3: Commit**
@@ -1007,10 +1007,10 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiro.dashboard.deps import get_current_user
-from kiro.dashboard.schemas import DailyUsage, OverviewResponse
-from kiro.db.engine import get_session
-from kiro.db.models import ApiKey, KeyUsage, User
+from aigw.dashboard.deps import get_current_user
+from aigw.dashboard.schemas import DailyUsage, OverviewResponse
+from aigw.db.engine import get_session
+from aigw.db.models import ApiKey, KeyUsage, User
 
 router = APIRouter(prefix="/overview", tags=["overview"])
 
@@ -1048,7 +1048,7 @@ async def get_overview(caller: User = Depends(get_current_user), session: AsyncS
 
 - [ ] **Step 2: Verify**
 
-Run: `python -c "from kiro.dashboard.routes_overview import router; print(len(router.routes), 'routes')"`
+Run: `python -c "from aigw.dashboard.routes_overview import router; print(len(router.routes), 'routes')"`
 Expected: `1 routes`
 
 - [ ] **Step 3: Commit**
@@ -1071,11 +1071,11 @@ git commit -m "feat(usage-mgmt): add overview/KPI route"
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiro.dashboard.deps import require_admin
-from kiro.dashboard.schemas import SystemConfigResponse, SystemConfigUpdate
-from kiro.db.engine import get_session
-from kiro.db.models import User
-from kiro.db.repositories import get_all_config, set_config
+from aigw.dashboard.deps import require_admin
+from aigw.dashboard.schemas import SystemConfigResponse, SystemConfigUpdate
+from aigw.db.engine import get_session
+from aigw.db.models import User
+from aigw.db.repositories import get_all_config, set_config
 
 router = APIRouter(prefix="/config", tags=["config"])
 
@@ -1113,7 +1113,7 @@ async def update_config_route(body: SystemConfigUpdate, admin: User = Depends(re
 
 - [ ] **Step 2: Verify**
 
-Run: `python -c "from kiro.dashboard.routes_config import router; print(len(router.routes), 'routes')"`
+Run: `python -c "from aigw.dashboard.routes_config import router; print(len(router.routes), 'routes')"`
 Expected: `2 routes`
 
 - [ ] **Step 3: Commit**
@@ -1140,11 +1140,11 @@ import json
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiro.dashboard.deps import require_admin
-from kiro.dashboard.schemas import ImportResult
-from kiro.db.engine import get_session
-from kiro.db.models import User
-from kiro.db.repositories import upsert_kiro_user_mappings
+from aigw.dashboard.deps import require_admin
+from aigw.dashboard.schemas import ImportResult
+from aigw.db.engine import get_session
+from aigw.db.models import User
+from aigw.db.repositories import upsert_kiro_user_mappings
 
 router = APIRouter(prefix="/import", tags=["import"])
 
@@ -1197,7 +1197,7 @@ async def import_users(
 
 - [ ] **Step 2: Verify**
 
-Run: `python -c "from kiro.dashboard.routes_import import router; print(len(router.routes), 'routes')"`
+Run: `python -c "from aigw.dashboard.routes_import import router; print(len(router.routes), 'routes')"`
 Expected: `1 routes`
 
 - [ ] **Step 3: Commit**
@@ -1243,7 +1243,7 @@ class UsageCache:
         self._lock = asyncio.Lock()
 
     async def load_from_db(self, session) -> None:
-        from kiro.db.models import ApiKey, KeyUsage
+        from aigw.db.models import ApiKey, KeyUsage
         from sqlalchemy import select
         from datetime import datetime
 
@@ -1309,8 +1309,8 @@ usage_cache = UsageCache()
 
 - [ ] **Step 3: Verify**
 
-Run: `python -c "from kiro.usage.usage_cache import usage_cache, UsageEntry; print(type(usage_cache))"`
-Expected: `<class 'kiro.usage.usage_cache.UsageCache'>`
+Run: `python -c "from aigw.usage.usage_cache import usage_cache, UsageEntry; print(type(usage_cache))"`
+Expected: `<class 'aigw.usage.usage_cache.UsageCache'>`
 
 - [ ] **Step 4: Commit**
 
@@ -1333,9 +1333,9 @@ from datetime import datetime
 
 from loguru import logger
 
-from kiro.db.engine import async_session_factory
-from kiro.db.repositories import increment_usage
-from kiro.usage.usage_cache import usage_cache
+from aigw.db.engine import async_session_factory
+from aigw.db.repositories import increment_usage
+from aigw.usage.usage_cache import usage_cache
 
 
 async def track_usage(key_id: int, credits_used: int | None = None) -> None:
@@ -1376,7 +1376,7 @@ def extract_credits_from_response(response_data: dict | bytes | None) -> int | N
 
 - [ ] **Step 2: Verify**
 
-Run: `python -c "from kiro.usage.tracker import extract_credits_from_response; print(extract_credits_from_response({'creditsUsed': 5}))"`
+Run: `python -c "from aigw.usage.tracker import extract_credits_from_response; print(extract_credits_from_response({'creditsUsed': 5}))"`
 Expected: `5`
 
 - [ ] **Step 3: Commit**
@@ -1400,9 +1400,9 @@ import asyncio
 
 from loguru import logger
 
-from kiro.db.engine import async_session_factory
-from kiro.db.repositories import decrypt_api_key, get_all_config
-from kiro.usage.usage_cache import usage_cache
+from aigw.db.engine import async_session_factory
+from aigw.db.repositories import decrypt_api_key, get_all_config
+from aigw.usage.usage_cache import usage_cache
 
 
 class NoAvailableKeyError(Exception):
@@ -1455,7 +1455,7 @@ class FallbackRouter:
 
         if async_session_factory is None:
             raise NoAvailableKeyError("Database not configured")
-        from kiro.db.models import ApiKey
+        from aigw.db.models import ApiKey
         from sqlalchemy import select
         async with async_session_factory() as session:
             result = await session.execute(select(ApiKey.key_encrypted).where(ApiKey.id == picked_key_id))
@@ -1473,8 +1473,8 @@ fallback_router = FallbackRouter()
 
 - [ ] **Step 2: Verify**
 
-Run: `python -c "from kiro.usage.fallback import fallback_router, NoAvailableKeyError; print(type(fallback_router))"`
-Expected: `<class 'kiro.usage.fallback.FallbackRouter'>`
+Run: `python -c "from aigw.usage.fallback import fallback_router, NoAvailableKeyError; print(type(fallback_router))"`
+Expected: `<class 'aigw.usage.fallback.FallbackRouter'>`
 
 - [ ] **Step 3: Commit**
 
@@ -1497,18 +1497,18 @@ import asyncio
 
 from loguru import logger
 
-from kiro.config import REGION, USAGE_SYNC_INTERVAL
-from kiro.db.engine import async_session_factory
-from kiro.db.models import ApiKey
-from kiro.db.repositories import decrypt_api_key, upsert_usage_limits, update_api_key
-from kiro.usage.usage_cache import usage_cache
+from aigw.config import REGION, USAGE_SYNC_INTERVAL
+from aigw.db.engine import async_session_factory
+from aigw.db.models import ApiKey
+from aigw.db.repositories import decrypt_api_key, upsert_usage_limits, update_api_key
+from aigw.usage.usage_cache import usage_cache
 
 
 async def sync_usage_limits() -> None:
     if async_session_factory is None:
         return
 
-    from kiro.api_key_mode import get_usage_limits, build_api_key_headers
+    from aigw.api_key_mode import get_usage_limits, build_api_key_headers
     from sqlalchemy import select
 
     async with async_session_factory() as session:
@@ -1579,7 +1579,7 @@ async def run_sync_loop() -> None:
 
 - [ ] **Step 2: Verify**
 
-Run: `python -c "from kiro.usage.sync_worker import run_sync_loop; print('OK')"`
+Run: `python -c "from aigw.usage.sync_worker import run_sync_loop; print('OK')"`
 Expected: `OK`
 
 - [ ] **Step 3: Commit**
@@ -1603,11 +1603,11 @@ import asyncio
 
 from loguru import logger
 
-from kiro.config import DATABASE_URL
-from kiro.db.engine import async_session_factory, init_db, close_db
-from kiro.db.repositories import create_user, get_user_by_username
-from kiro.usage.usage_cache import usage_cache
-from kiro.usage.sync_worker import run_sync_loop
+from aigw.config import DATABASE_URL
+from aigw.db.engine import async_session_factory, init_db, close_db
+from aigw.db.repositories import create_user, get_user_by_username
+from aigw.usage.usage_cache import usage_cache
+from aigw.usage.sync_worker import run_sync_loop
 
 
 _sync_task: asyncio.Task | None = None
@@ -1628,7 +1628,7 @@ async def startup() -> None:
     logger.info("Usage management: database initialized")
 
     # Seed admin user if configured and not exists
-    from kiro.config import ADMIN_USERNAME, ADMIN_PASSWORD
+    from aigw.config import ADMIN_USERNAME, ADMIN_PASSWORD
     if ADMIN_USERNAME and ADMIN_PASSWORD:
         async with async_session_factory() as session:
             existing = await get_user_by_username(session, ADMIN_USERNAME)
@@ -1665,7 +1665,7 @@ async def shutdown() -> None:
 
 - [ ] **Step 2: Verify**
 
-Run: `python -c "from kiro.usage.scheduler import is_db_configured; print('configured:', is_db_configured())"`
+Run: `python -c "from aigw.usage.scheduler import is_db_configured; print('configured:', is_db_configured())"`
 Expected: `configured: False`
 
 - [ ] **Step 3: Commit**
@@ -1688,12 +1688,12 @@ git commit -m "feat(usage-mgmt): add scheduler for lifespan integration"
 ```python
 from fastapi import APIRouter
 
-from kiro.dashboard.routes_auth import router as auth_router
-from kiro.dashboard.routes_users import router as users_router
-from kiro.dashboard.routes_keys import router as keys_router
-from kiro.dashboard.routes_overview import router as overview_router
-from kiro.dashboard.routes_config import router as config_router
-from kiro.dashboard.routes_import import router as import_router
+from aigw.dashboard.routes_auth import router as auth_router
+from aigw.dashboard.routes_users import router as users_router
+from aigw.dashboard.routes_keys import router as keys_router
+from aigw.dashboard.routes_overview import router as overview_router
+from aigw.dashboard.routes_config import router as config_router
+from aigw.dashboard.routes_import import router as import_router
 
 dashboard_router = APIRouter(prefix="/api", tags=["dashboard"])
 dashboard_router.include_router(auth_router)
@@ -1706,10 +1706,10 @@ dashboard_router.include_router(import_router)
 
 - [ ] **Step 2: Add usage management imports to main.py**
 
-Add after the existing imports (after `from kiro.debug_middleware import DebugLoggerMiddleware`):
+Add after the existing imports (after `from aigw.debug_middleware import DebugLoggerMiddleware`):
 
 ```python
-from kiro.usage.scheduler import is_db_configured, startup as usage_startup, shutdown as usage_shutdown
+from aigw.usage.scheduler import is_db_configured, startup as usage_startup, shutdown as usage_shutdown
 ```
 
 - [ ] **Step 3: Add usage management startup to lifespan function**
@@ -1720,7 +1720,7 @@ In the `lifespan` function in `main.py`, add after `logger.info("Model resolver 
     # --- Usage Management (opt-in when DATABASE_URL is set) ---
     if is_db_configured():
         await usage_startup()
-        from kiro.dashboard import dashboard_router
+        from aigw.dashboard import dashboard_router
         app.include_router(dashboard_router)
         logger.info("Usage management: dashboard API mounted at /api/")
 ```
@@ -1758,10 +1758,10 @@ This is the most sensitive task — modifying the existing proxy flow. Changes m
 
 - [ ] **Step 1: Add imports at top of api_key_mode.py**
 
-Add after the existing imports (after `from kiro.utils import get_machine_fingerprint`):
+Add after the existing imports (after `from aigw.utils import get_machine_fingerprint`):
 
 ```python
-from kiro.usage.scheduler import is_db_configured
+from aigw.usage.scheduler import is_db_configured
 ```
 
 - [ ] **Step 2: Add helper to resolve key_id from token**
@@ -1772,8 +1772,8 @@ Add after the `build_api_key_headers` function:
 async def _resolve_key_id(token: str) -> int | None:
     if not is_db_configured():
         return None
-    from kiro.db.engine import async_session_factory
-    from kiro.db.repositories import get_api_key_by_hash, hash_api_key
+    from aigw.db.engine import async_session_factory
+    from aigw.db.repositories import get_api_key_by_hash, hash_api_key
     try:
         async with async_session_factory() as session:
             api_key = await get_api_key_by_hash(session, hash_api_key(token))
@@ -1786,7 +1786,7 @@ async def _try_fallback_pre_check(token: str, key_id: int | None) -> tuple[str, 
     if key_id is None or not is_db_configured():
         return None
     try:
-        from kiro.usage.fallback import fallback_router
+        from aigw.usage.fallback import fallback_router
         result = await fallback_router.pre_check(key_id)
         if result:
             new_key_id, new_raw_key = result
@@ -1800,7 +1800,7 @@ async def _track_usage_background(key_id: int | None, credits: int | None) -> No
     if key_id is None or not is_db_configured():
         return
     try:
-        from kiro.usage.tracker import track_usage
+        from aigw.usage.tracker import track_usage
         await track_usage(key_id, credits)
     except Exception as e:
         logger.debug(f"Usage tracking failed: {e}")
@@ -1861,7 +1861,7 @@ In the non-streaming branch, after `anthropic_response = await collect_anthropic
 
 - [ ] **Step 5: Verify app still starts and proxy works without DB**
 
-Run: `python -c "from kiro.api_key_mode import handle_chat_openai, handle_chat_anthropic; print('OK')"`
+Run: `python -c "from aigw.api_key_mode import handle_chat_openai, handle_chat_anthropic; print('OK')"`
 Expected: `OK`
 
 - [ ] **Step 6: Commit**

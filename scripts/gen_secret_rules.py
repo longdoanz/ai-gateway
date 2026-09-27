@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Generator for ``kiro/guardrails/secret_rules.py``.
+Generator for ``aigw/guardrails/secret_rules.py``.
 
 Gitleaks (https://github.com/gitleaks/gitleaks) ships a community-maintained
 TOML ruleset of 200+ credential patterns. Hand-rolling and maintaining that
@@ -33,7 +33,7 @@ ruleset is actively maintained and new credential formats are added often):
 3. Re-run the false-positive regression (see
    ``tests/unit/test_guardrails.py``) against this repo before committing —
    a wider ruleset without a re-check of it is worse than not upgrading.
-4. Commit the regenerated ``kiro/guardrails/secret_rules.py`` alongside the
+4. Commit the regenerated ``aigw/guardrails/secret_rules.py`` alongside the
    version bump — it is checked into git; nothing reads the TOML at import
    time or over the network at runtime.
 
@@ -74,10 +74,10 @@ GITLEAKS_VERSION = "v8.30.1"
 GITLEAKS_GENERATED = "2026-09-18"
 
 _TOML_URL = f"https://raw.githubusercontent.com/gitleaks/gitleaks/{GITLEAKS_VERSION}/config/gitleaks.toml"
-_OUT_PATH = Path(__file__).resolve().parent.parent / "kiro" / "guardrails" / "secret_rules.py"
+_OUT_PATH = Path(__file__).resolve().parent.parent / "aigw" / "guardrails" / "secret_rules.py"
 
 # gitleaks id -> entity_type, for the handful of rules this codebase already
-# has second-stage validators for (kiro/guardrails/patterns.py
+# has second-stage validators for (aigw/guardrails/patterns.py
 # SECRET_VALIDATORS). Keeping these names stable means those validators keep
 # applying to the vendored rule without any change on the validator side.
 # Everything else gets an entity_type derived mechanically from its id.

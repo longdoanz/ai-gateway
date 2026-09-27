@@ -1,6 +1,6 @@
 <div align="center">
 
-# 👻 Kiro Gateway
+# 👻 AI Gateway
 
 **Gateway proxy untuk Kiro API (Amazon Q Developer / AWS CodeWhisperer)**
 

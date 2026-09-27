@@ -15,7 +15,7 @@ Comprehensive tests for all Anthropic API models:
 import pytest
 from pydantic import ValidationError
 
-from kiro.models_anthropic import (
+from aigw.models_anthropic import (
     # Content blocks
     TextContentBlock,
     ThinkingContentBlock,

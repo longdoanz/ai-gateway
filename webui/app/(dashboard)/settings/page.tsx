@@ -23,6 +23,11 @@ interface ModelSelectProps {
 
 function ModelSelect({ value, onChange, modelIds, placeholder = "Select model...", allowFreeText = false }: ModelSelectProps) {
   const [freeText, setFreeText] = useState(allowFreeText ? !modelIds.includes(value) && value !== "" : false);
+  const [query, setQuery] = useState("");
+
+  const filteredIds = query.trim()
+    ? modelIds.filter((id) => id.toLowerCase().includes(query.trim().toLowerCase()))
+    : modelIds;
 
   if (allowFreeText && freeText) {
     return (
@@ -48,15 +53,29 @@ function ModelSelect({ value, onChange, modelIds, placeholder = "Select model...
 
   return (
     <div className="flex items-center gap-1">
-      <Select value={value} onValueChange={(v) => onChange(v ?? "auto")}>
+      <Select value={value} onValueChange={(v) => onChange(v ?? "auto")} onOpenChange={(open) => !open && setQuery("")}>
         <SelectTrigger className="font-mono text-xs h-8 min-w-[200px]">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
+          <div className="sticky top-0 z-10 bg-popover p-1">
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.stopPropagation()}
+              placeholder="Search models..."
+              className="h-7 text-xs font-mono"
+              autoFocus
+            />
+          </div>
           <SelectItem value="auto">auto</SelectItem>
-          {modelIds.map((id) => (
-            <SelectItem key={id} value={id}>{id}</SelectItem>
-          ))}
+          {filteredIds.length === 0 ? (
+            <div className="px-3 py-2 text-xs text-on-surface-variant">No models match &quot;{query}&quot;</div>
+          ) : (
+            filteredIds.map((id) => (
+              <SelectItem key={id} value={id}>{id}</SelectItem>
+            ))
+          )}
         </SelectContent>
       </Select>
       {allowFreeText && (

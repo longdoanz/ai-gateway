@@ -127,7 +127,7 @@ Dispatch block at top of each handler:
 @router.post("/v1/chat/completions")
 async def chat_completions(request: Request, ...):
     if API_KEY_MODE:
-        from kiro.api_key_mode import handle_chat_api_key
+        from aigw.api_key_mode import handle_chat_api_key
         return await handle_chat_api_key(request, request_data)
     # ... existing code unchanged below ...
 ```

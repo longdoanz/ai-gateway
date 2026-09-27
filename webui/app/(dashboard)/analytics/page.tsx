@@ -95,7 +95,7 @@ export default function AnalyticsPage() {
               <EmptyState />
             ) : (
               data.top_users.map((u) => (
-                <div key={u.kiro_user_id} className="flex items-center justify-between p-3 rounded-xl hover:bg-surface-container transition-colors">
+                <div key={u.rank} className="flex items-center justify-between p-3 rounded-xl hover:bg-surface-container transition-colors">
                   <div className="flex items-center gap-3">
                     <span className="w-6 h-6 rounded-full bg-primary-container flex items-center justify-center text-[10px] font-bold text-on-primary-container">
                       {u.rank}
@@ -162,7 +162,7 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* Row 4: Kiro User Credit Usage — DEPRECATED, replaced by NineRouterUsageBanner (see top of file) */}
+      {/* Row 4: 9router Usage */}
       <NineRouterUsageBanner />
 
       {/* Row 5: Gateway Key Usage */}

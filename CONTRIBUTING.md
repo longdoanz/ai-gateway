@@ -1,10 +1,10 @@
-# Contributing to Kiro Gateway
+# Contributing to AI Gateway
 
 Thanks for your interest in contributing!
 
 ## Philosophy
 
-Kiro Gateway is a **transparent proxy** - we fix API-level issues while preserving user intent. When solving problems, we build systems that handle entire classes of issues, not one-off patches. We test paranoidly (happy path + edge cases + error scenarios), write clean code (type hints, docstrings, logging), and make errors actionable for users.
+AI Gateway is a **transparent proxy** - we fix API-level issues while preserving user intent. When solving problems, we build systems that handle entire classes of issues, not one-off patches. We test paranoidly (happy path + edge cases + error scenarios), write clean code (type hints, docstrings, logging), and make errors actionable for users.
 
 ## Getting Started
 

@@ -37,7 +37,7 @@ def _make_app(clients: dict | None = None, client_secret: str = "test-secret"):
         },
         clear=False,
     ):
-        import kiro.oidc_provider as mod
+        import aigw.oidc_provider as mod
         importlib.reload(mod)
 
         if clients is not None:
@@ -133,7 +133,7 @@ class TestAuthorize:
 
     def _make_valid_token(self, mod, user_id=1, role="admin"):
         """Create a real HS256 access token using the mod's decode_token logic."""
-        from kiro.dashboard.jwt_auth import create_access_token
+        from aigw.dashboard.jwt_auth import create_access_token
         return create_access_token(user_id=user_id, role=role, username="admin")
 
     def test_unknown_client_id_returns_400(self):
@@ -191,19 +191,19 @@ class TestAuthorize:
             yield mock_session
 
         with (
-            patch("kiro.dashboard.jwt_auth.JWT_SECRET", "test-secret"),
-            patch("kiro.config.JWT_SECRET", "test-secret"),
-            patch("kiro.config.JWT_ACCESS_EXPIRY", 900),
+            patch("aigw.dashboard.jwt_auth.JWT_SECRET", "test-secret"),
+            patch("aigw.config.JWT_SECRET", "test-secret"),
+            patch("aigw.config.JWT_ACCESS_EXPIRY", 900),
         ):
             import importlib
-            import kiro.dashboard.jwt_auth as jwt_mod
+            import aigw.dashboard.jwt_auth as jwt_mod
             importlib.reload(jwt_mod)
             token = jwt_mod.create_access_token(user_id=1, role="admin", username="admin")
 
         with (
-            patch("kiro.oidc_provider.decode_token", return_value={"sub": "1", "type": "access"}),
-            patch("kiro.oidc_provider._get_session", _fake_get_session),
-            patch("kiro.oidc_provider.get_user_by_id", new=AsyncMock(return_value=user)),
+            patch("aigw.oidc_provider.decode_token", return_value={"sub": "1", "type": "access"}),
+            patch("aigw.oidc_provider._get_session", _fake_get_session),
+            patch("aigw.oidc_provider.get_user_by_id", new=AsyncMock(return_value=user)),
         ):
             resp = http_client.get(
                 "/oauth/authorize",
@@ -226,9 +226,9 @@ class TestAuthorize:
             yield mock_session
 
         with (
-            patch("kiro.oidc_provider.decode_token", return_value={"sub": "1", "type": "access"}),
-            patch("kiro.oidc_provider._get_session", _fake_get_session),
-            patch("kiro.oidc_provider.get_user_by_id", new=AsyncMock(return_value=user)),
+            patch("aigw.oidc_provider.decode_token", return_value={"sub": "1", "type": "access"}),
+            patch("aigw.oidc_provider._get_session", _fake_get_session),
+            patch("aigw.oidc_provider.get_user_by_id", new=AsyncMock(return_value=user)),
         ):
             resp = http_client.get(
                 "/oauth/authorize",
@@ -248,9 +248,9 @@ class TestAuthorize:
             yield mock_session
 
         with (
-            patch("kiro.oidc_provider.decode_token", return_value={"sub": "1", "type": "access"}),
-            patch("kiro.oidc_provider._get_session", _fake_get_session),
-            patch("kiro.oidc_provider.get_user_by_id", new=AsyncMock(return_value=user)),
+            patch("aigw.oidc_provider.decode_token", return_value={"sub": "1", "type": "access"}),
+            patch("aigw.oidc_provider._get_session", _fake_get_session),
+            patch("aigw.oidc_provider.get_user_by_id", new=AsyncMock(return_value=user)),
         ):
             resp = http_client.get(
                 "/oauth/authorize",

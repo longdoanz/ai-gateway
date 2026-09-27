@@ -1,24 +1,7 @@
 # -*- coding: utf-8 -*-
 
-# Kiro Gateway
-# https://github.com/jwadow/kiro-gateway
-# Copyright (C) 2025 Jwadow
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU Affero General Public License for more details.
-#
-# You should have received a copy of the GNU Affero General Public License
-# along with this program. If not, see <https://www.gnu.org/licenses/>.
-
 """
-Kiro Gateway - OpenAI-compatible interface for Kiro API.
+AI Gateway - OpenAI-compatible interface for Kiro API.
 
 Application entry point. Creates FastAPI app and connects routes.
 
@@ -52,7 +35,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from kiro.config import (
+from aigw.config import (
     APP_TITLE,
     APP_DESCRIPTION,
     APP_VERSION,
@@ -72,13 +55,13 @@ from kiro.config import (
     API_KEY_MODE,
     _warn_timeout_configuration,
 )
-from kiro.routes_openai import router as openai_router
-from kiro.routes_anthropic import router as anthropic_router
-from kiro.oidc_provider import router as oidc_router
-from kiro.routes_nine_router import router as nine_router_proxy_router
-from kiro.exceptions import validation_exception_handler
-from kiro.debug_middleware import DebugLoggerMiddleware
-from kiro.usage.scheduler import is_db_configured, startup as usage_startup, shutdown as usage_shutdown
+from aigw.routes_openai import router as openai_router
+from aigw.routes_anthropic import router as anthropic_router
+from aigw.oidc_provider import router as oidc_router
+from aigw.routes_nine_router import router as nine_router_proxy_router
+from aigw.exceptions import validation_exception_handler
+from aigw.debug_middleware import DebugLoggerMiddleware
+from aigw.usage.scheduler import is_db_configured, startup as usage_startup, shutdown as usage_shutdown
 
 
 # --- Loguru Configuration ---
@@ -341,13 +324,13 @@ async def lifespan(app: FastAPI):
     # --- Usage Management (opt-in when DATABASE_URL is set) ---
     if is_db_configured():
         await usage_startup()
-        from kiro.dashboard import dashboard_router
+        from aigw.dashboard import dashboard_router
         app.include_router(dashboard_router)
         logger.info("Usage management: dashboard API mounted at /api/")
 
     # --- Real-time log capture + Telegram notifications ---
-    from kiro.log_stream import log_stream
-    from kiro.telegram_notifier import telegram_notifier
+    from aigw.log_stream import log_stream
+    from aigw.telegram_notifier import telegram_notifier
 
     log_stream.attach_sink()
     await log_stream.start()

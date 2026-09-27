@@ -1,6 +1,6 @@
-# Tests for Kiro Gateway
+# Tests for AI Gateway
 
-A comprehensive set of unit and integration tests for Kiro Gateway, providing full coverage of all system components.
+A comprehensive set of unit and integration tests for AI Gateway, providing full coverage of all system components.
 
 ## Testing Philosophy: Complete Network Isolation
 

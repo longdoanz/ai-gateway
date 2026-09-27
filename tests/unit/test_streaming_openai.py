@@ -16,14 +16,14 @@ import json
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from kiro.streaming_openai import (
+from aigw.streaming_openai import (
     stream_kiro_to_openai,
     stream_kiro_to_openai_internal,
     stream_with_first_token_retry,
     collect_stream_response,
     FirstTokenTimeoutError,
 )
-from kiro.streaming_core import KiroEvent
+from aigw.streaming_core import KiroEvent
 
 
 # ==================================================================================================
@@ -83,8 +83,8 @@ class TestStreamKiroToOpenai:
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 async for chunk in stream_kiro_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -112,8 +112,8 @@ class TestStreamKiroToOpenai:
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 async for chunk in stream_kiro_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -141,8 +141,8 @@ class TestStreamKiroToOpenai:
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 async for chunk in stream_kiro_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -170,8 +170,8 @@ class TestStreamKiroToOpenai:
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 async for chunk in stream_kiro_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -206,8 +206,8 @@ class TestStreamKiroToOpenai:
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 async for chunk in stream_kiro_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -243,8 +243,8 @@ class TestStreamKiroToOpenai:
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 async for chunk in stream_kiro_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -288,8 +288,8 @@ class TestStreamKiroToOpenai:
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 async for chunk in stream_kiro_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -318,8 +318,8 @@ class TestStreamKiroToOpenai:
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 async for chunk in stream_kiro_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -346,8 +346,8 @@ class TestStreamKiroToOpenai:
         
         print("Action: Streaming to OpenAI format...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 async for chunk in stream_kiro_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -372,8 +372,8 @@ class TestStreamKiroToOpenai:
         
         print("Action: Streaming to OpenAI format with error...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 try:
                     async for chunk in stream_kiro_to_openai(
                         mock_http_client, mock_response, "claude-sonnet-4",
@@ -410,9 +410,9 @@ class TestStreamingOpenaiThinkingContent:
         print("Action: Streaming to OpenAI format with reasoning mode...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
-                with patch('kiro.streaming_openai.FAKE_REASONING_HANDLING', 'as_reasoning_content'):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+                with patch('aigw.streaming_openai.FAKE_REASONING_HANDLING', 'as_reasoning_content'):
                     async for chunk in stream_kiro_to_openai(
                         mock_http_client, mock_response, "claude-sonnet-4",
                         mock_model_cache, mock_auth_manager
@@ -442,9 +442,9 @@ class TestStreamingOpenaiThinkingContent:
         print("Action: Streaming to OpenAI format with content mode...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
-                with patch('kiro.streaming_openai.FAKE_REASONING_HANDLING', 'include_as_text'):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+                with patch('aigw.streaming_openai.FAKE_REASONING_HANDLING', 'include_as_text'):
                     async for chunk in stream_kiro_to_openai(
                         mock_http_client, mock_response, "claude-sonnet-4",
                         mock_model_cache, mock_auth_manager
@@ -483,8 +483,8 @@ class TestStreamingOpenaiNoneProtection:
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 async for chunk in stream_kiro_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -528,8 +528,8 @@ class TestStreamingOpenaiNoneProtection:
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 async for chunk in stream_kiro_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -573,8 +573,8 @@ class TestStreamingOpenaiNoneProtection:
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 async for chunk in stream_kiro_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -628,8 +628,8 @@ class TestStreamWithFirstTokenRetry:
         print("Action: Running stream_with_first_token_retry...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream_with_retry):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream_with_retry):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 async for chunk in stream_with_first_token_retry(
                     mock_make_request,
                     mock_http_client,
@@ -677,7 +677,7 @@ class TestStreamWithFirstTokenRetry:
         
         print(f"Action: Running stream_with_first_token_retry with max_retries={max_retries}...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream_always_timeout):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream_always_timeout):
             with pytest.raises(HTTPException) as exc_info:
                 async for chunk in stream_with_first_token_retry(
                     mock_make_request,
@@ -759,7 +759,7 @@ class TestStreamWithFirstTokenRetry:
         
         print("Action: Running stream_with_first_token_retry with RuntimeError...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream_error):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream_error):
             with pytest.raises(RuntimeError) as exc_info:
                 async for chunk in stream_with_first_token_retry(
                     mock_make_request,
@@ -817,8 +817,8 @@ class TestStreamWithFirstTokenRetry:
         
         print("Action: Running stream_with_first_token_retry...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream_with_retry):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream_with_retry):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 async for chunk in stream_with_first_token_retry(
                     mock_make_request,
                     mock_http_client,
@@ -856,8 +856,8 @@ class TestCollectStreamResponse:
         
         print("Action: Collecting stream response...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 result = await collect_stream_response(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -882,9 +882,9 @@ class TestCollectStreamResponse:
         
         print("Action: Collecting stream response with reasoning mode...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
-                with patch('kiro.streaming_openai.FAKE_REASONING_HANDLING', 'as_reasoning_content'):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+                with patch('aigw.streaming_openai.FAKE_REASONING_HANDLING', 'as_reasoning_content'):
                     result = await collect_stream_response(
                         mock_http_client, mock_response, "claude-sonnet-4",
                         mock_model_cache, mock_auth_manager
@@ -913,8 +913,8 @@ class TestCollectStreamResponse:
         
         print("Action: Collecting stream response...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 result = await collect_stream_response(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -944,8 +944,8 @@ class TestCollectStreamResponse:
         
         print("Action: Collecting stream response...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 result = await collect_stream_response(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -973,8 +973,8 @@ class TestCollectStreamResponse:
         
         print("Action: Collecting stream response...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 result = await collect_stream_response(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -1004,8 +1004,8 @@ class TestCollectStreamResponse:
         
         print("Action: Collecting stream response...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 result = await collect_stream_response(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -1030,8 +1030,8 @@ class TestCollectStreamResponse:
         
         print("Action: Collecting stream response...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 result = await collect_stream_response(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -1055,8 +1055,8 @@ class TestCollectStreamResponse:
         
         print("Action: Collecting stream response...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 result = await collect_stream_response(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -1080,8 +1080,8 @@ class TestCollectStreamResponse:
         
         print("Action: Collecting stream response...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 result = await collect_stream_response(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -1105,8 +1105,8 @@ class TestCollectStreamResponse:
         
         print("Action: Collecting stream response...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 result = await collect_stream_response(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -1139,7 +1139,7 @@ class TestStreamingOpenaiErrorHandling:
         
         print("Action: Streaming to OpenAI format with timeout...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
             with pytest.raises(FirstTokenTimeoutError):
                 async for chunk in stream_kiro_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
@@ -1164,8 +1164,8 @@ class TestStreamingOpenaiErrorHandling:
         print("Action: Streaming to OpenAI format with GeneratorExit...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 # GeneratorExit is caught internally and not re-raised
                 # This is correct behavior - client disconnect should be handled gracefully
                 async for chunk in stream_kiro_to_openai(
@@ -1193,8 +1193,8 @@ class TestStreamingOpenaiErrorHandling:
         
         print("Action: Streaming to OpenAI format with RuntimeError...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 with pytest.raises(RuntimeError) as exc_info:
                     async for chunk in stream_kiro_to_openai(
                         mock_http_client, mock_response, "claude-sonnet-4",
@@ -1222,8 +1222,8 @@ class TestStreamingOpenaiErrorHandling:
         
         print("Action: Streaming to OpenAI format with error and aclose error...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 with pytest.raises(RuntimeError) as exc_info:
                     async for chunk in stream_kiro_to_openai(
                         mock_http_client, mock_response, "claude-sonnet-4",
@@ -1261,8 +1261,8 @@ class TestStreamingOpenaiBracketToolCalls:
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=bracket_tool_calls):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=bracket_tool_calls):
                 async for chunk in stream_kiro_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -1299,9 +1299,9 @@ class TestStreamingOpenaiBracketToolCalls:
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=bracket_tool_calls):
-                with patch('kiro.streaming_openai.deduplicate_tool_calls') as mock_dedup:
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=bracket_tool_calls):
+                with patch('aigw.streaming_openai.deduplicate_tool_calls') as mock_dedup:
                     mock_dedup.return_value = [
                         {"id": "call_1", "type": "function", "function": {"name": "func1", "arguments": "{}"}}
                     ]
@@ -1339,8 +1339,8 @@ class TestStreamingOpenaiMeteringData:
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 async for chunk in stream_kiro_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -1377,8 +1377,8 @@ class TestStreamingOpenaiTruncationDetection:
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 async for chunk in stream_kiro_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -1412,8 +1412,8 @@ class TestStreamingOpenaiTruncationDetection:
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 async for chunk in stream_kiro_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -1443,8 +1443,8 @@ class TestStreamingOpenaiTruncationDetection:
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 async for chunk in stream_kiro_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -1473,8 +1473,8 @@ class TestStreamingOpenaiTruncationDetection:
         
         print("Action: Collecting stream response...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 result = await collect_stream_response(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager

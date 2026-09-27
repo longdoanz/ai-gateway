@@ -2,9 +2,9 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from httpx import AsyncClient, ASGITransport
 from fastapi import FastAPI
-from kiro.dashboard.routes_analytics import router
-from kiro.dashboard.deps import get_current_user
-from kiro.db.engine import get_session
+from aigw.dashboard.routes_analytics import router
+from aigw.dashboard.deps import get_current_user
+from aigw.db.engine import get_session
 
 app = FastAPI()
 app.include_router(router)  # router already has prefix="/overview"
@@ -17,8 +17,8 @@ app.dependency_overrides[get_session] = lambda: AsyncMock()
 
 @pytest.mark.asyncio
 async def test_analytics_returns_all_fields():
-    with patch("kiro.dashboard.routes_analytics._aggregate_analytics", new_callable=AsyncMock) as mock_agg:
-        from kiro.dashboard.schemas import AnalyticsResponse
+    with patch("aigw.dashboard.routes_analytics._aggregate_analytics", new_callable=AsyncMock) as mock_agg:
+        from aigw.dashboard.schemas import AnalyticsResponse
         mock_agg.return_value = AnalyticsResponse(
             time_range="7d",
             daily_series=[],
@@ -46,8 +46,8 @@ async def test_analytics_invalid_range_returns_422():
 
 @pytest.mark.asyncio
 async def test_analytics_default_range_is_7d():
-    with patch("kiro.dashboard.routes_analytics._aggregate_analytics", new_callable=AsyncMock) as mock_agg:
-        from kiro.dashboard.schemas import AnalyticsResponse
+    with patch("aigw.dashboard.routes_analytics._aggregate_analytics", new_callable=AsyncMock) as mock_agg:
+        from aigw.dashboard.schemas import AnalyticsResponse
         mock_agg.return_value = AnalyticsResponse(
             time_range="7d", daily_series=[], user_tokens=[], top_users=[], token_share=[]
         )
@@ -62,7 +62,7 @@ async def test_analytics_default_range_is_7d():
 @pytest.mark.asyncio
 async def test_aggregate_analytics_zero_fills_missing_dates():
     """Verify zero-fill produces correct number of entries and fills gaps."""
-    from kiro.dashboard.routes_analytics import _aggregate_analytics
+    from aigw.dashboard.routes_analytics import _aggregate_analytics
 
     session = AsyncMock()
 
@@ -80,44 +80,24 @@ async def test_aggregate_analytics_zero_fills_missing_dates():
     # 2. gw_system_daily_rows (key_id IS NULL)
     gw_system_daily_result = _empty()
 
-    # 3. mapping_rows (KiroUserMapping)
-    mapping_result = MagicMock()
-    mapping_result.all.return_value = [
-        MagicMock(kiro_user_id="kiro-alice", username="alice", email="alice@test.com"),
+    # 3. gw_user_token_rows (gateway key users, totals over the range)
+    gw_user_token_result = MagicMock()
+    gw_user_token_result.all.return_value = [
+        MagicMock(username="alice", email="alice@test.com", input_tokens=80, output_tokens=20),
     ]
 
-    # 4. build_kiro_email_lookup
-    email_result = _empty()
-
-    # 5. kiro_rows (ApiKey + DailyUsage totals per kiro_user_id)
-    kiro_result = MagicMock()
-    kiro_result.all.return_value = [
-        MagicMock(kiro_user_id="kiro-alice", input_tokens=80, output_tokens=20),
+    # 4. gw_daily_rows (gateway key users, per date)
+    gw_daily_result = MagicMock()
+    gw_daily_result.all.return_value = [
+        MagicMock(username="alice", email="alice@test.com", date="2026-04-27", input_tokens=80, output_tokens=20),
     ]
-
-    # 6. gw_pool_user_rows (pool-key gateway usage per kiro_user_id)
-    gw_pool_user_result = _empty()
-
-    # 7. gw_user_token_rows (gateway key users)
-    gw_user_token_result = _empty()
-
-    # 8. kiro_daily_rows (per kiro_user_id per date)
-    kiro_daily_result = _empty()
-
-    # 9. gw_pool_daily_rows (pool-key gateway usage per kiro_user_id per date)
-    gw_pool_daily_result = _empty()
-
-    # 10. gw_daily_rows (gateway key users per date)
-    gw_daily_result = _empty()
 
     session.execute = AsyncMock(side_effect=[
-        daily_result, gw_system_daily_result, mapping_result, _empty(), email_result,
-        kiro_result, gw_pool_user_result, gw_user_token_result,
-        kiro_daily_result, gw_pool_daily_result, gw_daily_result,
+        daily_result, gw_system_daily_result, gw_user_token_result, gw_daily_result,
     ])
 
     from datetime import date
-    with patch("kiro.dashboard.routes_analytics.dt") as mock_dt:
+    with patch("aigw.dashboard.routes_analytics.dt") as mock_dt:
         mock_dt.now.return_value.date.return_value = date(2026, 4, 27)
         result = await _aggregate_analytics(session, "7d")
 

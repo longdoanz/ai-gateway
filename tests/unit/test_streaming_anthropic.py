@@ -16,7 +16,7 @@ import json
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from kiro.streaming_anthropic import (
+from aigw.streaming_anthropic import (
     generate_message_id,
     generate_thinking_signature,
     format_sse_event,
@@ -24,7 +24,7 @@ from kiro.streaming_anthropic import (
     collect_anthropic_response,
     stream_with_first_token_retry_anthropic,
 )
-from kiro.streaming_core import KiroEvent, StreamResult
+from aigw.streaming_core import KiroEvent, StreamResult
 
 
 # ==================================================================================================
@@ -236,7 +236,7 @@ class TestStreamKiroToAnthropic:
         print("Action: Streaming to Anthropic format...")
         events = []
         
-        with patch('kiro.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
+        with patch('aigw.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
             async for event in stream_kiro_to_anthropic(
                 mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
             ):
@@ -263,8 +263,8 @@ class TestStreamKiroToAnthropic:
         print("Action: Streaming to Anthropic format...")
         events = []
         
-        with patch('kiro.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
                 async for event in stream_kiro_to_anthropic(
                     mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
                 ):
@@ -292,8 +292,8 @@ class TestStreamKiroToAnthropic:
         print("Action: Streaming to Anthropic format...")
         events = []
         
-        with patch('kiro.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
                 async for event in stream_kiro_to_anthropic(
                     mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
                 ):
@@ -333,8 +333,8 @@ class TestStreamKiroToAnthropic:
         print("Action: Streaming to Anthropic format...")
         events = []
         
-        with patch('kiro.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
                 async for event in stream_kiro_to_anthropic(
                     mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
                 ):
@@ -365,8 +365,8 @@ class TestStreamKiroToAnthropic:
         print("Action: Streaming to Anthropic format...")
         events = []
         
-        with patch('kiro.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
                 async for event in stream_kiro_to_anthropic(
                     mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
                 ):
@@ -394,8 +394,8 @@ class TestStreamKiroToAnthropic:
         print("Action: Streaming to Anthropic format...")
         events = []
         
-        with patch('kiro.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
                 async for event in stream_kiro_to_anthropic(
                     mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
                 ):
@@ -426,8 +426,8 @@ class TestStreamKiroToAnthropic:
         print("Action: Streaming to Anthropic format...")
         events = []
         
-        with patch('kiro.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
                 async for event in stream_kiro_to_anthropic(
                     mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
                 ):
@@ -459,8 +459,8 @@ class TestStreamKiroToAnthropic:
         print("Action: Streaming to Anthropic format...")
         events = []
         
-        with patch('kiro.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_anthropic.parse_bracket_tool_calls', return_value=bracket_tool_calls):
+        with patch('aigw.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_anthropic.parse_bracket_tool_calls', return_value=bracket_tool_calls):
                 async for event in stream_kiro_to_anthropic(
                     mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
                 ):
@@ -486,8 +486,8 @@ class TestStreamKiroToAnthropic:
         
         print("Action: Streaming to Anthropic format...")
         
-        with patch('kiro.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
                 async for event in stream_kiro_to_anthropic(
                     mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
                 ):
@@ -511,8 +511,8 @@ class TestStreamKiroToAnthropic:
         
         print("Action: Streaming to Anthropic format with error...")
         
-        with patch('kiro.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
                 try:
                     async for event in stream_kiro_to_anthropic(
                         mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
@@ -551,7 +551,7 @@ class TestCollectAnthropicResponse:
         
         print("Action: Collecting Anthropic response...")
         
-        with patch('kiro.streaming_anthropic.collect_stream_to_result', return_value=mock_result):
+        with patch('aigw.streaming_anthropic.collect_stream_to_result', return_value=mock_result):
             result = await collect_anthropic_response(
                 mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
             )
@@ -591,7 +591,7 @@ class TestCollectAnthropicResponse:
         
         print("Action: Collecting Anthropic response...")
         
-        with patch('kiro.streaming_anthropic.collect_stream_to_result', return_value=mock_result):
+        with patch('aigw.streaming_anthropic.collect_stream_to_result', return_value=mock_result):
             result = await collect_anthropic_response(
                 mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
             )
@@ -628,7 +628,7 @@ class TestCollectAnthropicResponse:
         
         print("Action: Collecting Anthropic response...")
         
-        with patch('kiro.streaming_anthropic.collect_stream_to_result', return_value=mock_result):
+        with patch('aigw.streaming_anthropic.collect_stream_to_result', return_value=mock_result):
             result = await collect_anthropic_response(
                 mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
             )
@@ -655,7 +655,7 @@ class TestCollectAnthropicResponse:
         
         print("Action: Collecting Anthropic response...")
         
-        with patch('kiro.streaming_anthropic.collect_stream_to_result', return_value=mock_result):
+        with patch('aigw.streaming_anthropic.collect_stream_to_result', return_value=mock_result):
             result = await collect_anthropic_response(
                 mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
             )
@@ -682,9 +682,9 @@ class TestCollectAnthropicResponse:
         
         print("Action: Collecting Anthropic response...")
         
-        with patch('kiro.streaming_anthropic.collect_stream_to_result', return_value=mock_result):
-            with patch('kiro.streaming_anthropic.estimate_request_tokens', return_value={"total_tokens": 10}):
-                with patch('kiro.streaming_anthropic.count_tokens', return_value=5):
+        with patch('aigw.streaming_anthropic.collect_stream_to_result', return_value=mock_result):
+            with patch('aigw.streaming_anthropic.estimate_request_tokens', return_value={"total_tokens": 10}):
+                with patch('aigw.streaming_anthropic.count_tokens', return_value=5):
                     result = await collect_anthropic_response(
                         mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager,
                         request_messages=[{"role": "user", "content": "Hi"}]
@@ -713,7 +713,7 @@ class TestCollectAnthropicResponse:
         
         print("Action: Collecting Anthropic response...")
         
-        with patch('kiro.streaming_anthropic.collect_stream_to_result', return_value=mock_result):
+        with patch('aigw.streaming_anthropic.collect_stream_to_result', return_value=mock_result):
             result = await collect_anthropic_response(
                 mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
             )
@@ -740,7 +740,7 @@ class TestCollectAnthropicResponse:
         
         print("Action: Collecting Anthropic response...")
         
-        with patch('kiro.streaming_anthropic.collect_stream_to_result', return_value=mock_result):
+        with patch('aigw.streaming_anthropic.collect_stream_to_result', return_value=mock_result):
             result = await collect_anthropic_response(
                 mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
             )
@@ -775,7 +775,7 @@ class TestCollectAnthropicResponse:
         
         print("Action: Collecting Anthropic response...")
         
-        with patch('kiro.streaming_anthropic.collect_stream_to_result', return_value=mock_result):
+        with patch('aigw.streaming_anthropic.collect_stream_to_result', return_value=mock_result):
             result = await collect_anthropic_response(
                 mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
             )
@@ -815,7 +815,7 @@ class TestCollectAnthropicResponse:
         
         print("Action: Collecting Anthropic response...")
         
-        with patch('kiro.streaming_anthropic.collect_stream_to_result', return_value=mock_result):
+        with patch('aigw.streaming_anthropic.collect_stream_to_result', return_value=mock_result):
             result = await collect_anthropic_response(
                 mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
             )
@@ -846,7 +846,7 @@ class TestCollectAnthropicResponse:
         
         print("Action: Collecting Anthropic response...")
         
-        with patch('kiro.streaming_anthropic.collect_stream_to_result', return_value=mock_result):
+        with patch('aigw.streaming_anthropic.collect_stream_to_result', return_value=mock_result):
             result = await collect_anthropic_response(
                 mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
             )
@@ -871,7 +871,7 @@ class TestStreamingAnthropicErrorHandling:
         What it does: Propagates FirstTokenTimeoutError.
         Goal: Verify timeout error is not caught internally.
         """
-        from kiro.streaming_core import FirstTokenTimeoutError
+        from aigw.streaming_core import FirstTokenTimeoutError
         
         print("Setup: Mock stream that raises timeout...")
         
@@ -881,7 +881,7 @@ class TestStreamingAnthropicErrorHandling:
         
         print("Action: Streaming to Anthropic format with timeout...")
         
-        with patch('kiro.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
+        with patch('aigw.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
             with pytest.raises(FirstTokenTimeoutError):
                 async for event in stream_kiro_to_anthropic(
                     mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
@@ -904,8 +904,8 @@ class TestStreamingAnthropicErrorHandling:
         
         print("Action: Streaming to Anthropic format with GeneratorExit...")
         
-        with patch('kiro.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
                 with pytest.raises(GeneratorExit):
                     async for event in stream_kiro_to_anthropic(
                         mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
@@ -929,8 +929,8 @@ class TestStreamingAnthropicErrorHandling:
         print("Action: Streaming to Anthropic format with error...")
         events = []
         
-        with patch('kiro.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
                 try:
                     async for event in stream_kiro_to_anthropic(
                         mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
@@ -961,7 +961,7 @@ class TestStreamingAnthropicErrorHandling:
         
         print("Action: Streaming to Anthropic format with error...")
         
-        with patch('kiro.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
+        with patch('aigw.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
             try:
                 async for event in stream_kiro_to_anthropic(
                     mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
@@ -997,9 +997,9 @@ class TestStreamingAnthropicThinkingContent:
         print("Action: Streaming to Anthropic format with thinking...")
         events = []
         
-        with patch('kiro.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
-                with patch('kiro.streaming_anthropic.FAKE_REASONING_HANDLING', 'include_as_text'):
+        with patch('aigw.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
+                with patch('aigw.streaming_anthropic.FAKE_REASONING_HANDLING', 'include_as_text'):
                     async for event in stream_kiro_to_anthropic(
                         mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
                     ):
@@ -1028,9 +1028,9 @@ class TestStreamingAnthropicThinkingContent:
         print("Action: Streaming to Anthropic format with strip mode...")
         events = []
         
-        with patch('kiro.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
-                with patch('kiro.streaming_anthropic.FAKE_REASONING_HANDLING', 'strip'):
+        with patch('aigw.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
+                with patch('aigw.streaming_anthropic.FAKE_REASONING_HANDLING', 'strip'):
                     async for event in stream_kiro_to_anthropic(
                         mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
                     ):
@@ -1067,8 +1067,8 @@ class TestStreamingAnthropicContextUsage:
         print("Action: Streaming to Anthropic format...")
         events = []
         
-        with patch('kiro.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
                 async for event in stream_kiro_to_anthropic(
                     mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
                 ):
@@ -1100,9 +1100,9 @@ class TestStreamingAnthropicContextUsage:
         print("Action: Streaming to Anthropic format with request messages...")
         events = []
         
-        with patch('kiro.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
-                with patch('kiro.streaming_anthropic.estimate_request_tokens', return_value={"total_tokens": 10}) as mock_estimate:
+        with patch('aigw.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
+                with patch('aigw.streaming_anthropic.estimate_request_tokens', return_value={"total_tokens": 10}) as mock_estimate:
                     async for event in stream_kiro_to_anthropic(
                         mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager,
                         request_messages=request_messages
@@ -1134,9 +1134,9 @@ class TestStreamingAnthropicContextUsage:
         request_tools = [{"name": "get_weather", "input_schema": {"type": "object"}}]
         request_system = [{"type": "text", "text": "你是助手"}]
 
-        with patch('kiro.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
-                with patch('kiro.streaming_anthropic.estimate_request_tokens', return_value={"total_tokens": 12}) as mock_estimate:
+        with patch('aigw.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
+                with patch('aigw.streaming_anthropic.estimate_request_tokens', return_value={"total_tokens": 12}) as mock_estimate:
                     events = []
                     async for event in stream_kiro_to_anthropic(
                         mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager,
@@ -1166,9 +1166,9 @@ class TestStreamingAnthropicContextUsage:
             yield KiroEvent(type="context_usage", context_usage_percentage=0.0)
 
         events = []
-        with patch('kiro.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
-                with patch('kiro.streaming_anthropic.estimate_request_tokens', return_value={"total_tokens": 99}):
+        with patch('aigw.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
+                with patch('aigw.streaming_anthropic.estimate_request_tokens', return_value={"total_tokens": 99}):
                     async for event in stream_kiro_to_anthropic(
                         mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager,
                         request_messages=[{"role": "user", "content": "hi"}]
@@ -1192,8 +1192,8 @@ class TestStreamingAnthropicContextUsage:
             usage={"cacheReadInputTokens": 12, "cacheCreationInputTokens": 34},
         )
 
-        with patch('kiro.streaming_anthropic.collect_stream_to_result', return_value=mock_result):
-            with patch('kiro.streaming_anthropic.generate_message_id', return_value="msg_test"):
+        with patch('aigw.streaming_anthropic.collect_stream_to_result', return_value=mock_result):
+            with patch('aigw.streaming_anthropic.generate_message_id', return_value="msg_test"):
                 response_data = await collect_anthropic_response(
                     mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
                 )
@@ -1305,8 +1305,8 @@ class TestStreamWithFirstTokenRetryAnthropic:
         print("Action: Streaming with retry wrapper...")
         chunks = []
         
-        with patch('kiro.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
                 async for chunk in stream_with_first_token_retry_anthropic(
                     make_request=mock_make_request,
                     model="claude-sonnet-4",
@@ -1328,7 +1328,7 @@ class TestStreamWithFirstTokenRetryAnthropic:
         What it does: Retries on first token timeout.
         Goal: Verify retry logic is triggered.
         """
-        from kiro.streaming_core import FirstTokenTimeoutError
+        from aigw.streaming_core import FirstTokenTimeoutError
         
         print("Setup: Mock request that times out then succeeds...")
         
@@ -1352,7 +1352,7 @@ class TestStreamWithFirstTokenRetryAnthropic:
         print("Action: Streaming with retry on timeout...")
         chunks = []
         
-        with patch('kiro.streaming_anthropic.stream_kiro_to_anthropic', mock_stream_kiro_to_anthropic):
+        with patch('aigw.streaming_anthropic.stream_kiro_to_anthropic', mock_stream_kiro_to_anthropic):
             async for chunk in stream_with_first_token_retry_anthropic(
                 make_request=mock_make_request,
                 model="claude-sonnet-4",
@@ -1376,7 +1376,7 @@ class TestStreamWithFirstTokenRetryAnthropic:
         What it does: Raises Anthropic-formatted error after all retries exhausted.
         Goal: Verify error format matches Anthropic API.
         """
-        from kiro.streaming_core import FirstTokenTimeoutError
+        from aigw.streaming_core import FirstTokenTimeoutError
         
         print("Setup: Mock request that always times out...")
         
@@ -1392,7 +1392,7 @@ class TestStreamWithFirstTokenRetryAnthropic:
         
         print("Action: Streaming with all retries failing...")
         
-        with patch('kiro.streaming_anthropic.stream_kiro_to_anthropic', mock_stream_kiro_to_anthropic):
+        with patch('aigw.streaming_anthropic.stream_kiro_to_anthropic', mock_stream_kiro_to_anthropic):
             with pytest.raises(Exception) as exc_info:
                 async for chunk in stream_with_first_token_retry_anthropic(
                     make_request=mock_make_request,
@@ -1476,7 +1476,7 @@ class TestStreamWithFirstTokenRetryAnthropic:
         
         print("Action: Streaming with request_messages...")
         
-        with patch('kiro.streaming_anthropic.stream_kiro_to_anthropic', mock_stream_kiro_to_anthropic):
+        with patch('aigw.streaming_anthropic.stream_kiro_to_anthropic', mock_stream_kiro_to_anthropic):
             async for chunk in stream_with_first_token_retry_anthropic(
                 make_request=mock_make_request,
                 model="claude-sonnet-4",
@@ -1496,7 +1496,7 @@ class TestStreamWithFirstTokenRetryAnthropic:
         What it does: Uses configured max_retries value.
         Goal: Verify max_retries parameter is respected.
         """
-        from kiro.streaming_core import FirstTokenTimeoutError
+        from aigw.streaming_core import FirstTokenTimeoutError
         
         print("Setup: Mock request that always times out...")
         
@@ -1516,7 +1516,7 @@ class TestStreamWithFirstTokenRetryAnthropic:
         
         print("Action: Streaming with max_retries=5...")
         
-        with patch('kiro.streaming_anthropic.stream_kiro_to_anthropic', mock_stream_kiro_to_anthropic):
+        with patch('aigw.streaming_anthropic.stream_kiro_to_anthropic', mock_stream_kiro_to_anthropic):
             try:
                 async for chunk in stream_with_first_token_retry_anthropic(
                     make_request=mock_make_request,
@@ -1557,8 +1557,8 @@ class TestStreamingAnthropicTruncationDetection:
         print("Action: Streaming to Anthropic format...")
         events = []
         
-        with patch('kiro.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
                 async for event in stream_kiro_to_anthropic(
                     mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
                 ):
@@ -1592,8 +1592,8 @@ class TestStreamingAnthropicTruncationDetection:
         print("Action: Streaming to Anthropic format...")
         events = []
         
-        with patch('kiro.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
                 async for event in stream_kiro_to_anthropic(
                     mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
                 ):
@@ -1623,8 +1623,8 @@ class TestStreamingAnthropicTruncationDetection:
         print("Action: Streaming to Anthropic format...")
         events = []
         
-        with patch('kiro.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
+        with patch('aigw.streaming_anthropic.parse_kiro_stream', mock_parse_kiro_stream):
+            with patch('aigw.streaming_anthropic.parse_bracket_tool_calls', return_value=[]):
                 async for event in stream_kiro_to_anthropic(
                     mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
                 ):
@@ -1657,7 +1657,7 @@ class TestStreamingAnthropicTruncationDetection:
         
         print("Action: Collecting Anthropic response...")
         
-        with patch('kiro.streaming_anthropic.collect_stream_to_result', return_value=mock_result):
+        with patch('aigw.streaming_anthropic.collect_stream_to_result', return_value=mock_result):
             result = await collect_anthropic_response(
                 mock_response, "claude-sonnet-4", mock_model_cache, mock_auth_manager
             )

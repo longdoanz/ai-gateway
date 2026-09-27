@@ -1,11 +1,11 @@
 import pytest
 import json
 from pydantic import ValidationError
-from kiro.dashboard.schemas import (
+from aigw.dashboard.schemas import (
     UserCreate, UserUpdate, ApiKeyCreate, LoginRequest,
     SystemConfigUpdate, SystemConfigResponse, ModelOverrideRule,
 )
-from kiro.dashboard.routes_config import _to_response
+from aigw.dashboard.routes_config import _to_response
 
 
 class TestDashboardSchemas:

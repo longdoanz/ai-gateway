@@ -18,7 +18,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from kiro.db.models import User
+from aigw.db.models import User
 
 
 # ---------------------------------------------------------------------------
@@ -86,7 +86,7 @@ def _make_client_mock(stream_cm):
 
 class TestAccessControl:
     def test_no_auth_returns_403_or_401(self):
-        import kiro.routes_nine_router as mod
+        import aigw.routes_nine_router as mod
         app = FastAPI()
         app.include_router(mod.router)
         client = TestClient(app, raise_server_exceptions=False)
@@ -94,7 +94,7 @@ class TestAccessControl:
         assert resp.status_code in (401, 403)
 
     def test_non_admin_returns_403(self):
-        import kiro.routes_nine_router as mod
+        import aigw.routes_nine_router as mod
         app = FastAPI()
 
         async def _fake_require_admin():
@@ -108,7 +108,7 @@ class TestAccessControl:
         assert resp.status_code == 403
 
     def test_admin_passes_through(self):
-        import kiro.routes_nine_router as mod
+        import aigw.routes_nine_router as mod
         upstream = _mock_stream_response()
         mock_client = _make_client_mock(_make_stream_cm(upstream))
 
@@ -120,7 +120,7 @@ class TestAccessControl:
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
             patch.object(mod, "NINE_ROUTER_PASSWORD", ""),
-            patch("kiro.routes_nine_router.httpx.AsyncClient", return_value=mock_client),
+            patch("aigw.routes_nine_router.httpx.AsyncClient", return_value=mock_client),
         ):
             client = TestClient(app)
             resp = client.get("/9router/dashboard")
@@ -133,7 +133,7 @@ class TestAccessControl:
 
 class TestNotConfigured:
     def test_returns_503_when_url_empty(self):
-        import kiro.routes_nine_router as mod
+        import aigw.routes_nine_router as mod
         app = FastAPI()
         admin = _make_admin_user()
         app.dependency_overrides[mod.require_admin] = lambda: admin
@@ -151,7 +151,7 @@ class TestNotConfigured:
 
 class TestHeaderHandling:
     def test_strips_authorization_header(self):
-        import kiro.routes_nine_router as mod
+        import aigw.routes_nine_router as mod
         upstream = _mock_stream_response()
         stream_cm = _make_stream_cm(upstream)
         captured = {}
@@ -172,14 +172,14 @@ class TestHeaderHandling:
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
             patch.object(mod, "NINE_ROUTER_API_KEY", ""),
             patch.object(mod, "NINE_ROUTER_PASSWORD", ""),
-            patch("kiro.routes_nine_router.httpx.AsyncClient", return_value=mock_client),
+            patch("aigw.routes_nine_router.httpx.AsyncClient", return_value=mock_client),
         ):
             client = TestClient(app)
             client.get("/9router/dashboard", headers={"Authorization": "Bearer user-jwt"})
             assert "authorization" not in {k.lower() for k in captured.get("headers", {})}
 
     def test_adds_nine_router_api_key(self):
-        import kiro.routes_nine_router as mod
+        import aigw.routes_nine_router as mod
         upstream = _mock_stream_response()
         stream_cm = _make_stream_cm(upstream)
         captured = {}
@@ -200,14 +200,14 @@ class TestHeaderHandling:
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
             patch.object(mod, "NINE_ROUTER_API_KEY", "nr-secret"),
             patch.object(mod, "NINE_ROUTER_PASSWORD", ""),
-            patch("kiro.routes_nine_router.httpx.AsyncClient", return_value=mock_client),
+            patch("aigw.routes_nine_router.httpx.AsyncClient", return_value=mock_client),
         ):
             client = TestClient(app)
             client.get("/9router/dashboard")
             assert captured.get("headers", {}).get("Authorization") == "Bearer nr-secret"
 
     def test_rewrites_redirect_location(self):
-        import kiro.routes_nine_router as mod
+        import aigw.routes_nine_router as mod
         upstream = _mock_stream_response(
             status_code=302,
             body=b"",
@@ -227,7 +227,7 @@ class TestHeaderHandling:
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
             patch.object(mod, "NINE_ROUTER_PASSWORD", ""),
-            patch("kiro.routes_nine_router.httpx.AsyncClient", return_value=mock_client),
+            patch("aigw.routes_nine_router.httpx.AsyncClient", return_value=mock_client),
         ):
             client = TestClient(app, follow_redirects=False)
             resp = client.get("/9router/dashboard")
@@ -240,7 +240,7 @@ class TestHeaderHandling:
 
 class TestErrorHandling:
     def test_connect_error_returns_503(self):
-        import kiro.routes_nine_router as mod
+        import aigw.routes_nine_router as mod
         import httpx
 
         mock_client = _make_client_mock(MagicMock())
@@ -254,14 +254,14 @@ class TestErrorHandling:
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
             patch.object(mod, "NINE_ROUTER_PASSWORD", ""),
-            patch("kiro.routes_nine_router.httpx.AsyncClient", return_value=mock_client),
+            patch("aigw.routes_nine_router.httpx.AsyncClient", return_value=mock_client),
         ):
             client = TestClient(app, raise_server_exceptions=False)
             resp = client.get("/9router/dashboard")
             assert resp.status_code == 503
 
     def test_timeout_returns_504(self):
-        import kiro.routes_nine_router as mod
+        import aigw.routes_nine_router as mod
         import httpx
 
         mock_client = _make_client_mock(MagicMock())
@@ -275,7 +275,7 @@ class TestErrorHandling:
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
             patch.object(mod, "NINE_ROUTER_PASSWORD", ""),
-            patch("kiro.routes_nine_router.httpx.AsyncClient", return_value=mock_client),
+            patch("aigw.routes_nine_router.httpx.AsyncClient", return_value=mock_client),
         ):
             client = TestClient(app, raise_server_exceptions=False)
             resp = client.get("/9router/dashboard")

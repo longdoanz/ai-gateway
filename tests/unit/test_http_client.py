@@ -14,9 +14,9 @@ from datetime import datetime, timezone, timedelta
 import httpx
 from fastapi import HTTPException
 
-from kiro.http_client import KiroHttpClient
-from kiro.auth import KiroAuthManager
-from kiro.config import MAX_RETRIES, BASE_RETRY_DELAY, FIRST_TOKEN_MAX_RETRIES, STREAMING_READ_TIMEOUT
+from aigw.http_client import KiroHttpClient
+from aigw.auth import KiroAuthManager
+from aigw.config import MAX_RETRIES, BASE_RETRY_DELAY, FIRST_TOKEN_MAX_RETRIES, STREAMING_READ_TIMEOUT
 
 
 @pytest.fixture
@@ -69,7 +69,7 @@ class TestKiroHttpClientGetClient:
         http_client = KiroHttpClient(mock_auth_manager_for_http)
         
         print("Action: Getting client...")
-        with patch('kiro.http_client.httpx.AsyncClient') as mock_async_client:
+        with patch('aigw.http_client.httpx.AsyncClient') as mock_async_client:
             mock_instance = AsyncMock()
             mock_instance.is_closed = False
             mock_async_client.return_value = mock_instance
@@ -113,7 +113,7 @@ class TestKiroHttpClientGetClient:
         http_client.client = mock_closed
         
         print("Action: Getting client...")
-        with patch('kiro.http_client.httpx.AsyncClient') as mock_async_client:
+        with patch('aigw.http_client.httpx.AsyncClient') as mock_async_client:
             mock_new = AsyncMock()
             mock_new.is_closed = False
             mock_async_client.return_value = mock_new
@@ -203,7 +203,7 @@ class TestKiroHttpClientRequestWithRetry:
         
         print("Action: Executing request...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
+            with patch('aigw.http_client.get_kiro_headers', return_value={}):
                 response = await http_client.request_with_retry(
                     "POST",
                     "https://api.example.com/test",
@@ -235,7 +235,7 @@ class TestKiroHttpClientRequestWithRetry:
         
         print("Action: Executing request...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
+            with patch('aigw.http_client.get_kiro_headers', return_value={}):
                 response = await http_client.request_with_retry(
                     "POST",
                     "https://api.example.com/test",
@@ -267,8 +267,8 @@ class TestKiroHttpClientRequestWithRetry:
         
         print("Action: Executing request...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
-                with patch('kiro.http_client.asyncio.sleep', new_callable=AsyncMock) as mock_sleep:
+            with patch('aigw.http_client.get_kiro_headers', return_value={}):
+                with patch('aigw.http_client.asyncio.sleep', new_callable=AsyncMock) as mock_sleep:
                     response = await http_client.request_with_retry(
                         "POST",
                         "https://api.example.com/test",
@@ -300,8 +300,8 @@ class TestKiroHttpClientRequestWithRetry:
         
         print("Action: Executing request...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
-                with patch('kiro.http_client.asyncio.sleep', new_callable=AsyncMock) as mock_sleep:
+            with patch('aigw.http_client.get_kiro_headers', return_value={}):
+                with patch('aigw.http_client.asyncio.sleep', new_callable=AsyncMock) as mock_sleep:
                     response = await http_client.request_with_retry(
                         "POST",
                         "https://api.example.com/test",
@@ -333,8 +333,8 @@ class TestKiroHttpClientRequestWithRetry:
         
         print("Action: Executing request...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
-                with patch('kiro.http_client.asyncio.sleep', new_callable=AsyncMock) as mock_sleep:
+            with patch('aigw.http_client.get_kiro_headers', return_value={}):
+                with patch('aigw.http_client.asyncio.sleep', new_callable=AsyncMock) as mock_sleep:
                     response = await http_client.request_with_retry(
                         "POST",
                         "https://api.example.com/test",
@@ -366,8 +366,8 @@ class TestKiroHttpClientRequestWithRetry:
         
         print("Action: Executing request...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
-                with patch('kiro.http_client.asyncio.sleep', new_callable=AsyncMock) as mock_sleep:
+            with patch('aigw.http_client.get_kiro_headers', return_value={}):
+                with patch('aigw.http_client.asyncio.sleep', new_callable=AsyncMock) as mock_sleep:
                     response = await http_client.request_with_retry(
                         "POST",
                         "https://api.example.com/test",
@@ -393,8 +393,8 @@ class TestKiroHttpClientRequestWithRetry:
         
         print("Action: Executing request...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
-                with patch('kiro.http_client.asyncio.sleep', new_callable=AsyncMock):
+            with patch('aigw.http_client.get_kiro_headers', return_value={}):
+                with patch('aigw.http_client.asyncio.sleep', new_callable=AsyncMock):
                     with pytest.raises(HTTPException) as exc_info:
                         await http_client.request_with_retry(
                             "POST",
@@ -425,7 +425,7 @@ class TestKiroHttpClientRequestWithRetry:
         
         print("Action: Executing request...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
+            with patch('aigw.http_client.get_kiro_headers', return_value={}):
                 response = await http_client.request_with_retry(
                     "POST",
                     "https://api.example.com/test",
@@ -457,7 +457,7 @@ class TestKiroHttpClientRequestWithRetry:
         
         print("Action: Executing streaming request...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
+            with patch('aigw.http_client.get_kiro_headers', return_value={}):
                 response = await http_client.request_with_retry(
                     "POST",
                     "https://api.example.com/test",
@@ -544,8 +544,8 @@ class TestKiroHttpClientExponentialBackoff:
         
         print("Action: Executing request with multiple retries...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
-                with patch('kiro.http_client.asyncio.sleep', side_effect=capture_sleep):
+            with patch('aigw.http_client.get_kiro_headers', return_value={}):
+                with patch('aigw.http_client.asyncio.sleep', side_effect=capture_sleep):
                     response = await http_client.request_with_retry(
                         "POST",
                         "https://api.example.com/test",
@@ -582,10 +582,10 @@ class TestKiroHttpClientStreamingTimeout:
         mock_client.send = AsyncMock(return_value=mock_response)
         
         print("Action: Executing streaming request...")
-        with patch('kiro.http_client.httpx.AsyncClient') as mock_async_client:
+        with patch('aigw.http_client.httpx.AsyncClient') as mock_async_client:
             mock_async_client.return_value = mock_client
             
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
+            with patch('aigw.http_client.get_kiro_headers', return_value={}):
                 response = await http_client.request_with_retry(
                     "POST",
                     "https://api.example.com/test",
@@ -621,9 +621,9 @@ class TestKiroHttpClientStreamingTimeout:
         mock_client.send = AsyncMock(side_effect=httpx.TimeoutException("Timeout"))
         
         print("Action: Executing streaming request with timeouts...")
-        with patch('kiro.http_client.httpx.AsyncClient', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
-                with patch('kiro.http_client.asyncio.sleep', new_callable=AsyncMock):
+        with patch('aigw.http_client.httpx.AsyncClient', return_value=mock_client):
+            with patch('aigw.http_client.get_kiro_headers', return_value={}):
+                with patch('aigw.http_client.asyncio.sleep', new_callable=AsyncMock):
                     with pytest.raises(HTTPException) as exc_info:
                         await http_client.request_with_retry(
                             "POST",
@@ -669,9 +669,9 @@ class TestKiroHttpClientStreamingTimeout:
             sleep_called = True
         
         print("Action: Executing streaming request with one timeout...")
-        with patch('kiro.http_client.httpx.AsyncClient', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
-                with patch('kiro.http_client.asyncio.sleep', side_effect=capture_sleep):
+        with patch('aigw.http_client.httpx.AsyncClient', return_value=mock_client):
+            with patch('aigw.http_client.get_kiro_headers', return_value={}):
+                with patch('aigw.http_client.asyncio.sleep', side_effect=capture_sleep):
                     response = await http_client.request_with_retry(
                         "POST",
                         "https://api.example.com/test",
@@ -700,10 +700,10 @@ class TestKiroHttpClientStreamingTimeout:
         mock_client.request = AsyncMock(return_value=mock_response)
         
         print("Action: Executing non-streaming request...")
-        with patch('kiro.http_client.httpx.AsyncClient') as mock_async_client:
+        with patch('aigw.http_client.httpx.AsyncClient') as mock_async_client:
             mock_async_client.return_value = mock_client
             
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
+            with patch('aigw.http_client.get_kiro_headers', return_value={}):
                 response = await http_client.request_with_retry(
                     "POST",
                     "https://api.example.com/test",
@@ -745,10 +745,10 @@ class TestKiroHttpClientStreamingTimeout:
         ])
         
         print("Action: Executing streaming request with ConnectTimeout...")
-        with patch('kiro.http_client.httpx.AsyncClient', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
-                with patch('kiro.http_client.asyncio.sleep', new_callable=AsyncMock):
-                    with patch('kiro.http_client.logger') as mock_logger:
+        with patch('aigw.http_client.httpx.AsyncClient', return_value=mock_client):
+            with patch('aigw.http_client.get_kiro_headers', return_value={}):
+                with patch('aigw.http_client.asyncio.sleep', new_callable=AsyncMock):
+                    with patch('aigw.http_client.logger') as mock_logger:
                         response = await http_client.request_with_retry(
                             "POST",
                             "https://api.example.com/test",
@@ -785,10 +785,10 @@ class TestKiroHttpClientStreamingTimeout:
         ])
         
         print("Action: Executing streaming request with ReadTimeout...")
-        with patch('kiro.http_client.httpx.AsyncClient', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
-                with patch('kiro.http_client.asyncio.sleep', new_callable=AsyncMock):
-                    with patch('kiro.http_client.logger') as mock_logger:
+        with patch('aigw.http_client.httpx.AsyncClient', return_value=mock_client):
+            with patch('aigw.http_client.get_kiro_headers', return_value={}):
+                with patch('aigw.http_client.asyncio.sleep', new_callable=AsyncMock):
+                    with patch('aigw.http_client.logger') as mock_logger:
                         response = await http_client.request_with_retry(
                             "POST",
                             "https://api.example.com/test",
@@ -818,9 +818,9 @@ class TestKiroHttpClientStreamingTimeout:
         mock_client.send = AsyncMock(side_effect=httpx.ReadTimeout("Timeout"))
         
         print("Action: Executing streaming request with persistent timeouts...")
-        with patch('kiro.http_client.httpx.AsyncClient', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
-                with patch('kiro.http_client.asyncio.sleep', new_callable=AsyncMock):
+        with patch('aigw.http_client.httpx.AsyncClient', return_value=mock_client):
+            with patch('aigw.http_client.get_kiro_headers', return_value={}):
+                with patch('aigw.http_client.asyncio.sleep', new_callable=AsyncMock):
                     with pytest.raises(HTTPException) as exc_info:
                         await http_client.request_with_retry(
                             "POST",
@@ -850,9 +850,9 @@ class TestKiroHttpClientStreamingTimeout:
         mock_client.request = AsyncMock(side_effect=httpx.TimeoutException("Timeout"))
         
         print("Action: Executing non-streaming request with persistent timeouts...")
-        with patch('kiro.http_client.httpx.AsyncClient', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
-                with patch('kiro.http_client.asyncio.sleep', new_callable=AsyncMock):
+        with patch('aigw.http_client.httpx.AsyncClient', return_value=mock_client):
+            with patch('aigw.http_client.get_kiro_headers', return_value={}):
+                with patch('aigw.http_client.asyncio.sleep', new_callable=AsyncMock):
                     with pytest.raises(HTTPException) as exc_info:
                         await http_client.request_with_retry(
                             "POST",
@@ -930,7 +930,7 @@ class TestKiroHttpClientSharedClient:
         http_client = KiroHttpClient(mock_auth_manager_for_http, shared_client=mock_shared)
         
         print("Action: Getting client...")
-        with patch('kiro.http_client.httpx.AsyncClient') as mock_async_client:
+        with patch('aigw.http_client.httpx.AsyncClient') as mock_async_client:
             client = await http_client._get_client(stream=True)
             
             print("Verification: Shared client returned, no new client created...")
@@ -1019,7 +1019,7 @@ class TestKiroHttpClientGracefulClose:
         http_client.client = mock_client
         
         print("Action: Closing client with logger mock...")
-        with patch('kiro.http_client.logger') as mock_logger:
+        with patch('aigw.http_client.logger') as mock_logger:
             await http_client.close()
             
             print("Verification: logger.warning called...")
@@ -1058,7 +1058,7 @@ class TestKiroHttpClientConnectionCloseHeader:
         
         print("Action: Executing streaming request...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={"Authorization": "Bearer test"}):
+            with patch('aigw.http_client.get_kiro_headers', return_value={"Authorization": "Bearer test"}):
                 response = await http_client.request_with_retry(
                     "POST",
                     "https://api.example.com/test",
@@ -1097,7 +1097,7 @@ class TestKiroHttpClientConnectionCloseHeader:
         
         print("Action: Executing non-streaming request...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={"Authorization": "Bearer test"}):
+            with patch('aigw.http_client.get_kiro_headers', return_value={"Authorization": "Bearer test"}):
                 response = await http_client.request_with_retry(
                     "POST",
                     "https://api.example.com/test",
@@ -1142,7 +1142,7 @@ class TestKiroHttpClientConnectionCloseHeader:
         
         print("Action: Executing streaming request with multiple headers...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value=original_headers.copy()):
+            with patch('aigw.http_client.get_kiro_headers', return_value=original_headers.copy()):
                 response = await http_client.request_with_retry(
                     "POST",
                     "https://api.example.com/test",
@@ -1187,7 +1187,7 @@ class TestKiroHttpClientRequestParameters:
         
         print("Action: Executing GET request with params...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={"Authorization": "Bearer test"}):
+            with patch('aigw.http_client.get_kiro_headers', return_value={"Authorization": "Bearer test"}):
                 response = await http_client.request_with_retry(
                     "GET",
                     "https://api.example.com/ListAvailableModels",
@@ -1227,7 +1227,7 @@ class TestKiroHttpClientRequestParameters:
         
         print("Action: Executing POST request without json_data...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={"Authorization": "Bearer test"}):
+            with patch('aigw.http_client.get_kiro_headers', return_value={"Authorization": "Bearer test"}):
                 response = await http_client.request_with_retry(
                     "POST",
                     "https://api.example.com/test",
@@ -1266,7 +1266,7 @@ class TestKiroHttpClientRequestParameters:
         
         print("Action: Executing request with both params and json...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={"Authorization": "Bearer test"}):
+            with patch('aigw.http_client.get_kiro_headers', return_value={"Authorization": "Bearer test"}):
                 response = await http_client.request_with_retry(
                     "POST",
                     "https://api.example.com/test",

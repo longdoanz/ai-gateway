@@ -21,7 +21,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from kiro.service_accounts import (
+from aigw.service_accounts import (
     ServiceAccountContext,
     is_model_allowed,
     make_service_account_usage_cb,
@@ -87,14 +87,14 @@ class TestResolveServiceAccount:
 
     @pytest.mark.asyncio
     async def test_non_izisa_token_returns_none_without_db_lookup(self):
-        with patch("kiro.service_accounts._is_db_configured") as mock_configured:
+        with patch("aigw.service_accounts._is_db_configured") as mock_configured:
             result = await resolve_service_account("iziaigw_sometoken")
             assert result is None
             mock_configured.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_returns_none_when_db_not_configured(self):
-        with patch("kiro.service_accounts._is_db_configured", return_value=False):
+        with patch("aigw.service_accounts._is_db_configured", return_value=False):
             result = await resolve_service_account("izisa_sometoken")
             assert result is None
 
@@ -106,9 +106,9 @@ class TestResolveServiceAccount:
         mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
 
         with (
-            patch("kiro.service_accounts._is_db_configured", return_value=True),
-            patch("kiro.db.engine.async_session_factory", mock_factory),
-            patch("kiro.db.repositories.get_service_account_key_by_hash", AsyncMock(return_value=None)),
+            patch("aigw.service_accounts._is_db_configured", return_value=True),
+            patch("aigw.db.engine.async_session_factory", mock_factory),
+            patch("aigw.db.repositories.get_service_account_key_by_hash", AsyncMock(return_value=None)),
         ):
             result = await resolve_service_account("izisa_sometoken")
             assert result is None
@@ -125,10 +125,10 @@ class TestResolveServiceAccount:
         service_account.name = "ci-bot"  # "name" is a reserved Mock() constructor kwarg
 
         with (
-            patch("kiro.service_accounts._is_db_configured", return_value=True),
-            patch("kiro.db.engine.async_session_factory", mock_factory),
-            patch("kiro.db.repositories.get_service_account_key_by_hash", AsyncMock(return_value=sa_key)),
-            patch("kiro.db.repositories.get_service_account_by_id", AsyncMock(return_value=service_account)),
+            patch("aigw.service_accounts._is_db_configured", return_value=True),
+            patch("aigw.db.engine.async_session_factory", mock_factory),
+            patch("aigw.db.repositories.get_service_account_key_by_hash", AsyncMock(return_value=sa_key)),
+            patch("aigw.db.repositories.get_service_account_by_id", AsyncMock(return_value=service_account)),
         ):
             result = await resolve_service_account("izisa_sometoken")
 
@@ -140,8 +140,8 @@ class TestResolveServiceAccount:
     @pytest.mark.asyncio
     async def test_never_raises_on_unexpected_error(self):
         with (
-            patch("kiro.service_accounts._is_db_configured", return_value=True),
-            patch("kiro.db.engine.async_session_factory", side_effect=Exception("boom")),
+            patch("aigw.service_accounts._is_db_configured", return_value=True),
+            patch("aigw.db.engine.async_session_factory", side_effect=Exception("boom")),
         ):
             result = await resolve_service_account("izisa_sometoken")
             assert result is None
@@ -153,7 +153,7 @@ class TestResolveServiceAccount:
 
 class TestMakeServiceAccountUsageCb:
     def test_returns_none_when_db_not_configured(self):
-        with patch("kiro.service_accounts._is_db_configured", return_value=False):
+        with patch("aigw.service_accounts._is_db_configured", return_value=False):
             assert make_service_account_usage_cb(1) is None
 
     @pytest.mark.asyncio
@@ -167,10 +167,10 @@ class TestMakeServiceAccountUsageCb:
         mock_increment_daily = AsyncMock()
 
         with (
-            patch("kiro.service_accounts._is_db_configured", return_value=True),
-            patch("kiro.db.engine.async_session_factory", mock_factory),
-            patch("kiro.db.repositories.increment_service_account_usage", mock_increment_usage),
-            patch("kiro.db.repositories.increment_service_account_daily_usage", mock_increment_daily),
+            patch("aigw.service_accounts._is_db_configured", return_value=True),
+            patch("aigw.db.engine.async_session_factory", mock_factory),
+            patch("aigw.db.repositories.increment_service_account_usage", mock_increment_usage),
+            patch("aigw.db.repositories.increment_service_account_daily_usage", mock_increment_daily),
         ):
             cb = make_service_account_usage_cb(7)
             assert cb is not None
@@ -190,8 +190,8 @@ class TestMakeServiceAccountUsageCb:
         mock_factory = MagicMock(side_effect=Exception("db down"))
 
         with (
-            patch("kiro.service_accounts._is_db_configured", return_value=True),
-            patch("kiro.db.engine.async_session_factory", mock_factory),
+            patch("aigw.service_accounts._is_db_configured", return_value=True),
+            patch("aigw.db.engine.async_session_factory", mock_factory),
         ):
             cb = make_service_account_usage_cb(7)
             # Must not raise even though the DB call fails internally.
@@ -212,8 +212,8 @@ class TestOpenAIChatCompletionsServiceAccountEnforcement:
         mock_forward = AsyncMock(return_value=MagicMock(status_code=200))
 
         with (
-            patch("kiro.service_accounts.resolve_service_account", AsyncMock(return_value=sa)),
-            patch("kiro.routes_openai.forward_to_nine_router", mock_forward),
+            patch("aigw.service_accounts.resolve_service_account", AsyncMock(return_value=sa)),
+            patch("aigw.routes_openai.forward_to_nine_router", mock_forward),
         ):
             test_client.post(
                 "/v1/chat/completions",
@@ -233,8 +233,8 @@ class TestOpenAIChatCompletionsServiceAccountEnforcement:
         mock_forward = AsyncMock()
 
         with (
-            patch("kiro.service_accounts.resolve_service_account", AsyncMock(return_value=sa)),
-            patch("kiro.routes_openai.forward_to_nine_router", mock_forward),
+            patch("aigw.service_accounts.resolve_service_account", AsyncMock(return_value=sa)),
+            patch("aigw.routes_openai.forward_to_nine_router", mock_forward),
         ):
             response = test_client.post(
                 "/v1/chat/completions",
@@ -254,8 +254,8 @@ class TestOpenAIChatCompletionsServiceAccountEnforcement:
         mock_forward = AsyncMock()
 
         with (
-            patch("kiro.service_accounts.resolve_service_account", AsyncMock(return_value=sa)),
-            patch("kiro.routes_openai.forward_to_nine_router", mock_forward),
+            patch("aigw.service_accounts.resolve_service_account", AsyncMock(return_value=sa)),
+            patch("aigw.routes_openai.forward_to_nine_router", mock_forward),
         ):
             response = test_client.post(
                 "/v1/chat/completions",
@@ -277,8 +277,8 @@ class TestOpenAIChatCompletionsServiceAccountEnforcement:
         mock_forward = AsyncMock(return_value=MagicMock(status_code=200))
 
         with (
-            patch("kiro.service_accounts.resolve_service_account", AsyncMock(return_value=None)),
-            patch("kiro.routes_openai.forward_to_nine_router", mock_forward),
+            patch("aigw.service_accounts.resolve_service_account", AsyncMock(return_value=None)),
+            patch("aigw.routes_openai.forward_to_nine_router", mock_forward),
         ):
             response = test_client.post(
                 "/v1/chat/completions",
@@ -298,7 +298,7 @@ class TestOpenAIModelsServiceAccount:
     def test_models_endpoint_returns_allowlist_for_service_account(self, test_client):
         sa = _sa_context(["kiro/claude-sonnet-4", "openai/gpt-5"])
 
-        with patch("kiro.service_accounts.resolve_service_account", AsyncMock(return_value=sa)):
+        with patch("aigw.service_accounts.resolve_service_account", AsyncMock(return_value=sa)):
             response = test_client.get(
                 "/v1/models",
                 headers={"Authorization": "Bearer izisa_testtoken"},
@@ -311,7 +311,7 @@ class TestOpenAIModelsServiceAccount:
     def test_models_endpoint_returns_empty_list_for_empty_allowlist(self, test_client):
         sa = _sa_context([])
 
-        with patch("kiro.service_accounts.resolve_service_account", AsyncMock(return_value=sa)):
+        with patch("aigw.service_accounts.resolve_service_account", AsyncMock(return_value=sa)):
             response = test_client.get(
                 "/v1/models",
                 headers={"Authorization": "Bearer izisa_testtoken"},
@@ -319,6 +319,19 @@ class TestOpenAIModelsServiceAccount:
 
         assert response.status_code == 200
         assert response.json()["data"] == []
+
+    def test_models_endpoint_search_filters_service_account_allowlist(self, test_client):
+        sa = _sa_context(["kiro/claude-sonnet-4", "openai/gpt-5"])
+
+        with patch("aigw.service_accounts.resolve_service_account", AsyncMock(return_value=sa)):
+            response = test_client.get(
+                "/v1/models?search=claude",
+                headers={"Authorization": "Bearer izisa_testtoken"},
+            )
+
+        assert response.status_code == 200
+        model_ids = {m["id"] for m in response.json()["data"]}
+        assert model_ids == {"kiro/claude-sonnet-4"}
 
 
 # ---------------------------------------------------------------------------
@@ -331,8 +344,8 @@ class TestAnthropicMessagesServiceAccountEnforcement:
         mock_forward = AsyncMock(return_value=MagicMock(status_code=200))
 
         with (
-            patch("kiro.service_accounts.resolve_service_account", AsyncMock(return_value=sa)),
-            patch("kiro.routes_anthropic.forward_to_nine_router", mock_forward),
+            patch("aigw.service_accounts.resolve_service_account", AsyncMock(return_value=sa)),
+            patch("aigw.routes_anthropic.forward_to_nine_router", mock_forward),
         ):
             test_client.post(
                 "/v1/messages",
@@ -353,8 +366,8 @@ class TestAnthropicMessagesServiceAccountEnforcement:
         mock_forward = AsyncMock()
 
         with (
-            patch("kiro.service_accounts.resolve_service_account", AsyncMock(return_value=sa)),
-            patch("kiro.routes_anthropic.forward_to_nine_router", mock_forward),
+            patch("aigw.service_accounts.resolve_service_account", AsyncMock(return_value=sa)),
+            patch("aigw.routes_anthropic.forward_to_nine_router", mock_forward),
         ):
             response = test_client.post(
                 "/v1/messages",
@@ -378,8 +391,8 @@ class TestAnthropicMessagesServiceAccountEnforcement:
         mock_forward = AsyncMock()
 
         with (
-            patch("kiro.service_accounts.resolve_service_account", AsyncMock(return_value=sa)),
-            patch("kiro.routes_anthropic.forward_to_nine_router", mock_forward),
+            patch("aigw.service_accounts.resolve_service_account", AsyncMock(return_value=sa)),
+            patch("aigw.routes_anthropic.forward_to_nine_router", mock_forward),
         ):
             response = test_client.post(
                 "/v1/messages",
@@ -413,8 +426,8 @@ class TestAnthropicMessagesServiceAccountEnforcement:
 class TestRevokedServiceAccountKeyRejected:
     def test_openai_rejects_unresolvable_service_account_token(self, test_client):
         with (
-            patch("kiro.routes_openai.API_KEY_MODE", True),
-            patch("kiro.service_accounts.resolve_service_account", AsyncMock(return_value=None)),
+            patch("aigw.routes_openai.API_KEY_MODE", True),
+            patch("aigw.service_accounts.resolve_service_account", AsyncMock(return_value=None)),
         ):
             response = test_client.get(
                 "/v1/models",
@@ -427,9 +440,9 @@ class TestRevokedServiceAccountKeyRejected:
         mock_forward = AsyncMock(return_value=MagicMock(status_code=200))
 
         with (
-            patch("kiro.routes_openai.API_KEY_MODE", True),
-            patch("kiro.service_accounts.resolve_service_account", AsyncMock(return_value=None)),
-            patch("kiro.routes_openai.forward_to_nine_router", mock_forward),
+            patch("aigw.routes_openai.API_KEY_MODE", True),
+            patch("aigw.service_accounts.resolve_service_account", AsyncMock(return_value=None)),
+            patch("aigw.routes_openai.forward_to_nine_router", mock_forward),
         ):
             response = test_client.post(
                 "/v1/chat/completions",
@@ -444,9 +457,9 @@ class TestRevokedServiceAccountKeyRejected:
         mock_forward = AsyncMock(return_value=MagicMock(status_code=200))
 
         with (
-            patch("kiro.routes_anthropic.API_KEY_MODE", True),
-            patch("kiro.service_accounts.resolve_service_account", AsyncMock(return_value=None)),
-            patch("kiro.routes_anthropic.forward_to_nine_router", mock_forward),
+            patch("aigw.routes_anthropic.API_KEY_MODE", True),
+            patch("aigw.service_accounts.resolve_service_account", AsyncMock(return_value=None)),
+            patch("aigw.routes_anthropic.forward_to_nine_router", mock_forward),
         ):
             response = test_client.post(
                 "/v1/messages",
@@ -465,8 +478,8 @@ class TestRevokedServiceAccountKeyRejected:
         """The rejection must be scoped to our own prefix — existing Kiro-key
         clients must keep working, since the feature is soft-deprecated only."""
         with (
-            patch("kiro.routes_openai.API_KEY_MODE", True),
-            patch("kiro.service_accounts.resolve_service_account", AsyncMock(return_value=None)),
+            patch("aigw.routes_openai.API_KEY_MODE", True),
+            patch("aigw.service_accounts.resolve_service_account", AsyncMock(return_value=None)),
         ):
             response = test_client.get(
                 "/v1/models",

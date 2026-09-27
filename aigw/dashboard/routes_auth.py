@@ -1,0 +1,145 @@
+import secrets
+import time
+from collections import defaultdict
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+from google.auth.exceptions import GoogleAuthError
+
+from aigw.config import GOOGLE_CLIENT_ID, GOOGLE_ALLOWED_DOMAIN, GOOGLE_ALLOWED_EMAILS, JWT_ACCESS_EXPIRY
+from aigw.dashboard.jwt_auth import create_access_token, create_refresh_token, decode_token
+from aigw.dashboard.schemas import GoogleLoginRequest, LoginRequest, RefreshRequest, TokenResponse
+from aigw.db.engine import get_session
+from aigw.db.repositories import create_user, get_user_by_email, get_user_by_google_id, get_user_by_id, get_user_by_username, update_user, verify_password
+
+_login_attempts: dict[str, list[float]] = defaultdict(list)
+MAX_LOGIN_ATTEMPTS = 5
+LOGIN_WINDOW_SECONDS = 300  # 5 minutes
+
+GW_COOKIE = "gw_token"
+
+
+def _set_auth_cookie(response: Response, request: Request, access_token: str) -> None:
+    """Set the httponly gateway session cookie so browser-initiated requests (popups,
+    iframes) are authenticated without needing a JS-injected Authorization header."""
+    secure = request.headers.get("x-forwarded-proto", request.url.scheme) == "https"
+    response.set_cookie(
+        key=GW_COOKIE,
+        value=access_token,
+        httponly=True,
+        samesite="lax",
+        secure=secure,
+        max_age=JWT_ACCESS_EXPIRY,
+        path="/",
+    )
+
+
+def _check_rate_limit(key: str) -> None:
+    now = time.time()
+    attempts = _login_attempts[key]
+    # Remove old attempts outside the window
+    _login_attempts[key] = [t for t in attempts if now - t < LOGIN_WINDOW_SECONDS]
+    if len(_login_attempts[key]) >= MAX_LOGIN_ATTEMPTS:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Too many login attempts. Try again in {LOGIN_WINDOW_SECONDS // 60} minutes.",
+        )
+    _login_attempts[key].append(now)
+
+
+router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.post("/login", response_model=TokenResponse)
+async def login(body: LoginRequest, request: Request, response: Response, session: AsyncSession = Depends(get_session)):
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(f"ip:{client_ip}")
+    _check_rate_limit(f"user:{body.username}")
+    user = await get_user_by_username(session, body.username)
+    if user is None or not user.is_active or not verify_password(body.password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+    access_token = create_access_token(user.id, user.role, user.username, user.can_create_gateway_key)
+    _set_auth_cookie(response, request, access_token)
+    return TokenResponse(access_token=access_token, refresh_token=create_refresh_token(user.id))
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh(body: RefreshRequest, request: Request, response: Response, session: AsyncSession = Depends(get_session)):
+    payload = decode_token(body.refresh_token)
+    if payload is None or payload.get("type") != "refresh":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+    user = await get_user_by_id(session, int(payload["sub"]))
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+    access_token = create_access_token(user.id, user.role, user.username, user.can_create_gateway_key)
+    _set_auth_cookie(response, request, access_token)
+    return TokenResponse(access_token=access_token, refresh_token=create_refresh_token(user.id))
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(response: Response):
+    response.delete_cookie(key=GW_COOKIE, path="/", samesite="lax")
+    return None
+
+
+@router.post("/google", response_model=TokenResponse)
+async def google_login(body: GoogleLoginRequest, request: Request, response: Response, session: AsyncSession = Depends(get_session)):
+    if not GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Google OAuth not configured")
+    try:
+        payload = id_token.verify_oauth2_token(
+            body.credential,
+            google_requests.Request(),
+            GOOGLE_CLIENT_ID,
+        )
+    except (GoogleAuthError, ValueError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Google token")
+
+
+    google_id = payload["sub"]
+    email = payload.get("email", "")
+
+    # Check if user is allowed: either by email whitelist or domain
+    allowed_emails = set(filter(None, GOOGLE_ALLOWED_EMAILS.split(",")))
+    allowed_emails = {e.strip().lower() for e in allowed_emails}
+    
+    email_in_whitelist = email.lower() in allowed_emails if allowed_emails else False
+    domain_allowed = True
+    
+    if GOOGLE_ALLOWED_DOMAIN:
+        hd = payload.get("hd", "")
+        domain_allowed = hd == GOOGLE_ALLOWED_DOMAIN
+    
+    if not (email_in_whitelist or domain_allowed):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: email or domain not in allowed list",
+        )
+    
+    user = await get_user_by_google_id(session, google_id)
+    if user is None:
+        # Check if a pre-provisioned account exists for this email
+        user = await get_user_by_email(session, email)
+        if user is not None:
+            # Link the Google ID to the existing pre-provisioned account
+            if not user.is_active:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account is disabled")
+            await update_user(session, user.id, google_id=google_id, username=email if user.username == email else user.username)
+            user = await get_user_by_google_id(session, google_id)
+        else:
+            user = await create_user(
+                session,
+                username=email,
+                password=secrets.token_hex(32),
+                role="user",
+                google_id=google_id,
+                email=email,
+            )
+    elif not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account is disabled")
+
+    access_token = create_access_token(user.id, user.role, user.username, user.can_create_gateway_key)
+    _set_auth_cookie(response, request, access_token)
+    return TokenResponse(access_token=access_token, refresh_token=create_refresh_token(user.id))

@@ -15,7 +15,7 @@ Tests for Anthropic Messages API to Kiro format conversion:
 import pytest
 from unittest.mock import patch, MagicMock
 
-from kiro.converters_anthropic import (
+from aigw.converters_anthropic import (
     convert_anthropic_content_to_text,
     extract_system_prompt,
     extract_tool_results_from_anthropic_content,
@@ -26,8 +26,8 @@ from kiro.converters_anthropic import (
     anthropic_to_kiro,
     extract_thinking_config_from_anthropic,
 )
-from kiro.converters_core import UnifiedMessage, UnifiedTool
-from kiro.models_anthropic import (
+from aigw.converters_core import UnifiedMessage, UnifiedTool
+from aigw.models_anthropic import (
     AnthropicMessagesRequest,
     AnthropicMessage,
     AnthropicTool,
@@ -1458,10 +1458,10 @@ class TestAnthropicToKiro:
 
         print("Action: Converting to Kiro payload...")
         with patch(
-            "kiro.converters_anthropic.get_model_id_for_kiro",
+            "aigw.converters_anthropic.get_model_id_for_kiro",
             return_value="claude-sonnet-4.5",
         ):
-            with patch("kiro.converters_core.FAKE_REASONING_ENABLED", False):
+            with patch("aigw.converters_core.FAKE_REASONING_ENABLED", False):
                 result = anthropic_to_kiro(request, "conv-123", "arn:aws:test")
 
         print(f"Result: {result}")
@@ -1486,10 +1486,10 @@ class TestAnthropicToKiro:
 
         print("Action: Converting to Kiro payload...")
         with patch(
-            "kiro.converters_anthropic.get_model_id_for_kiro",
+            "aigw.converters_anthropic.get_model_id_for_kiro",
             return_value="claude-sonnet-4.5",
         ):
-            with patch("kiro.converters_core.FAKE_REASONING_ENABLED", False):
+            with patch("aigw.converters_core.FAKE_REASONING_ENABLED", False):
                 result = anthropic_to_kiro(request, "conv-123", "arn:aws:test")
 
         print(f"Result: {result}")
@@ -1523,10 +1523,10 @@ class TestAnthropicToKiro:
 
         print("Action: Converting to Kiro payload...")
         with patch(
-            "kiro.converters_anthropic.get_model_id_for_kiro",
+            "aigw.converters_anthropic.get_model_id_for_kiro",
             return_value="claude-sonnet-4.5",
         ):
-            with patch("kiro.converters_core.FAKE_REASONING_ENABLED", False):
+            with patch("aigw.converters_core.FAKE_REASONING_ENABLED", False):
                 result = anthropic_to_kiro(request, "conv-123", "arn:aws:test")
 
         print(f"Result: {result}")
@@ -1556,10 +1556,10 @@ class TestAnthropicToKiro:
 
         print("Action: Converting to Kiro payload...")
         with patch(
-            "kiro.converters_anthropic.get_model_id_for_kiro",
+            "aigw.converters_anthropic.get_model_id_for_kiro",
             return_value="claude-sonnet-4.5",
         ):
-            with patch("kiro.converters_core.FAKE_REASONING_ENABLED", False):
+            with patch("aigw.converters_core.FAKE_REASONING_ENABLED", False):
                 result = anthropic_to_kiro(request, "conv-123", "arn:aws:test")
 
         print(f"Result: {result}")
@@ -1618,10 +1618,10 @@ class TestAnthropicToKiro:
 
         print("Action: Converting to Kiro payload...")
         with patch(
-            "kiro.converters_anthropic.get_model_id_for_kiro",
+            "aigw.converters_anthropic.get_model_id_for_kiro",
             return_value="claude-sonnet-4.5",
         ):
-            with patch("kiro.converters_core.FAKE_REASONING_ENABLED", False):
+            with patch("aigw.converters_core.FAKE_REASONING_ENABLED", False):
                 result = anthropic_to_kiro(request, "conv-123", "arn:aws:test")
 
         print(f"Result: {result}")
@@ -1673,11 +1673,11 @@ class TestAnthropicToKiro:
 
         print("Action: Converting to Kiro payload with fake reasoning...")
         with patch(
-            "kiro.converters_anthropic.get_model_id_for_kiro",
+            "aigw.converters_anthropic.get_model_id_for_kiro",
             return_value="claude-sonnet-4.5",
         ):
-            with patch("kiro.converters_core.FAKE_REASONING_ENABLED", True):
-                with patch("kiro.converters_core.FAKE_REASONING_MAX_TOKENS", 4000):
+            with patch("aigw.converters_core.FAKE_REASONING_ENABLED", True):
+                with patch("aigw.converters_core.FAKE_REASONING_MAX_TOKENS", 4000):
                     result = anthropic_to_kiro(request, "conv-123", "arn:aws:test")
 
         print(f"Result: {result}")
@@ -1723,11 +1723,11 @@ class TestAnthropicToKiro:
 
         print("Action: Converting to Kiro payload...")
         with patch(
-            "kiro.converters_anthropic.get_model_id_for_kiro",
+            "aigw.converters_anthropic.get_model_id_for_kiro",
             return_value="claude-sonnet-4.5",
         ):
-            with patch("kiro.converters_core.FAKE_REASONING_ENABLED", True):
-                with patch("kiro.converters_core.FAKE_REASONING_MAX_TOKENS", 4000):
+            with patch("aigw.converters_core.FAKE_REASONING_ENABLED", True):
+                with patch("aigw.converters_core.FAKE_REASONING_MAX_TOKENS", 4000):
                     result = anthropic_to_kiro(request, "conv-123", "arn:aws:test")
 
         print(f"Result: {result}")
@@ -1872,9 +1872,9 @@ class TestAnthropicToKiroIntegration:
         )
         
         print("Calling anthropic_to_kiro...")
-        with patch("kiro.converters_anthropic.get_model_id_for_kiro", return_value="claude-sonnet-4.5"):
-            with patch("kiro.converters_core.FAKE_REASONING_ENABLED", True):
-                with patch("kiro.converters_core.FAKE_REASONING_BUDGET_CAP", 10000):
+        with patch("aigw.converters_anthropic.get_model_id_for_kiro", return_value="claude-sonnet-4.5"):
+            with patch("aigw.converters_core.FAKE_REASONING_ENABLED", True):
+                with patch("aigw.converters_core.FAKE_REASONING_BUDGET_CAP", 10000):
                     payload = anthropic_to_kiro(request, "test-conv-123", "arn:aws:test")
         
         print("Extracting userInputMessage content...")

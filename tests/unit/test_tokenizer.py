@@ -15,7 +15,7 @@ Tests:
 import pytest
 from unittest.mock import patch, MagicMock
 
-from kiro.tokenizer import (
+from aigw.tokenizer import (
     count_tokens,
     count_message_tokens,
     count_tools_tokens,
@@ -164,7 +164,7 @@ class TestCountTokensFallback:
         print("Test: Fallback without tiktoken...")
         
         # Mock _get_encoding to return None
-        with patch('kiro.tokenizer._get_encoding', return_value=None):
+        with patch('aigw.tokenizer._get_encoding', return_value=None):
             result = count_tokens("Hello world test")
             print(f"Result: {result}")
             
@@ -181,7 +181,7 @@ class TestCountTokensFallback:
         """
         print("Test: Fallback without correction...")
         
-        with patch('kiro.tokenizer._get_encoding', return_value=None):
+        with patch('aigw.tokenizer._get_encoding', return_value=None):
             result = count_tokens("Test", apply_claude_correction=False)
             print(f"Result: {result}")
             
@@ -924,7 +924,7 @@ class TestGetEncoding:
         print("Test: tiktoken available...")
         
         # Reset global variable for clean test
-        import kiro.tokenizer as tokenizer_module
+        import aigw.tokenizer as tokenizer_module
         original_encoding = tokenizer_module._encoding
         tokenizer_module._encoding = None
         
@@ -962,7 +962,7 @@ class TestGetEncoding:
         """
         print("Test: ImportError...")
         
-        import kiro.tokenizer as tokenizer_module
+        import aigw.tokenizer as tokenizer_module
         original_encoding = tokenizer_module._encoding
         tokenizer_module._encoding = None
         

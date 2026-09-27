@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Unit tests for kiro.db.engine.init_db schema bootstrap.
+Unit tests for aigw.db.engine.init_db schema bootstrap.
 
 init_db used to call Base.metadata.create_all, which raced the production
 `alembic upgrade head` service: whichever ran first created the tables, and the
@@ -26,9 +26,9 @@ import logging
 
 import pytest
 
-# `import kiro.db.engine as x` binds the AsyncEngine that kiro/db/__init__.py
+# `import aigw.db.engine as x` binds the AsyncEngine that aigw/db/__init__.py
 # re-exports, not the module. import_module gives back the module itself.
-db_engine = importlib.import_module("kiro.db.engine")
+db_engine = importlib.import_module("aigw.db.engine")
 
 
 @pytest.fixture
@@ -62,7 +62,7 @@ class TestInitDbRunsMigrations:
         """The regression: create_all must not run at startup any more."""
         wired(lambda cfg, rev: None)
 
-        from kiro.db import models
+        from aigw.db import models
 
         def boom(*a, **kw):
             raise AssertionError("init_db must not call create_all")
@@ -86,7 +86,7 @@ class TestLegacyDatabaseRecoveryHint:
 
         wired(fail)
 
-        with caplog.at_level(logging.ERROR, logger="kiro.db.engine"):
+        with caplog.at_level(logging.ERROR, logger="aigw.db.engine"):
             with pytest.raises(RuntimeError):
                 run(db_engine.init_db())
 
@@ -100,7 +100,7 @@ class TestLegacyDatabaseRecoveryHint:
 
         wired(fail)
 
-        with caplog.at_level(logging.ERROR, logger="kiro.db.engine"):
+        with caplog.at_level(logging.ERROR, logger="aigw.db.engine"):
             with pytest.raises(RuntimeError):
                 run(db_engine.init_db())
 

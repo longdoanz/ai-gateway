@@ -1,9 +1,9 @@
 services:
-  kiro-gateway:
+  aigw-gateway:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: kiro-gateway
+    container_name: aigw-gateway
     user: "1000:1000"
     ports:
       - "11000:8000"
@@ -84,4 +84,4 @@ services:
 
 networks:
   default:
-    name: kiro-gateway-network
+    name: aigw-gateway-network

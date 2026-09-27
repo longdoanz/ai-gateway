@@ -38,7 +38,7 @@ jobs:
         if: success()
         run: |
           pip install pytest-cov
-          pytest --cov=kiro --cov-report=xml --cov-report=term
+          pytest --cov=aigw --cov-report=xml --cov-report=term
       
       - name: Upload coverage to artifacts
         if: success()
@@ -95,14 +95,14 @@ jobs:
           context: .
           push: false
           load: true
-          tags: kiro-gateway:test
+          tags: aigw-gateway:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
       
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: kiro-gateway:test
+          image-ref: aigw-gateway:test
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
@@ -120,22 +120,21 @@ jobs:
           echo "=== Testing Docker image structure ==="
           
           # Test 1: File structure and permissions (verifies our chown fix)
-          docker run --rm kiro-gateway:test sh -c "
+          docker run --rm aigw-gateway:test sh -c "
             test -f /app/main.py && \
-            test -d /app/kiro && \
+            test -d /app/aigw && \
             test -w /app && \
             touch /app/test.tmp && rm /app/test.tmp && \
             echo '✓ File structure and write permissions OK'
           "
-          
+
           # Test 2: Python imports (verifies all dependencies installed)
-          docker run --rm kiro-gateway:test python -c "
-          import kiro
-          import kiro.auth
-          import kiro.account_manager
-          import kiro.config
-          import kiro.routes_openai
-          import kiro.routes_anthropic
+          docker run --rm aigw-gateway:test python -c "
+          import aigw
+          import aigw.auth
+          import aigw.config
+          import aigw.routes_openai
+          import aigw.routes_anthropic
           import fastapi
           import httpx
           import loguru

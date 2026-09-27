@@ -17,7 +17,7 @@ from typing import List
 
 import pytest
 
-from kiro.truncation_state import (
+from aigw.truncation_state import (
     save_tool_truncation,
     get_tool_truncation,
     save_content_truncation,

@@ -18,7 +18,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: Kiro Gateway Version
+      label: AI Gateway Version
       description: Which version are you using?
       placeholder: "e.g. latest or v2.0.0-rc.1"
     validations:

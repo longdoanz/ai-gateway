@@ -1,4 +1,4 @@
-# Architectural Overview: Kiro Gateway
+# Architectural Overview: AI Gateway
 
 ## 1. System Purpose and Goals
 
@@ -27,7 +27,7 @@ The main goal of the system is to provide transparent compatibility between mult
               │                              │
               ▼                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Kiro Gateway                               │
+│                      AI Gateway                               │
 │  ┌─────────────────────┐       ┌─────────────────────┐         │
 │  │  OpenAI Adapter     │       │  Anthropic Adapter  │         │
 │  │  /v1/chat/...       │       │  /v1/messages       │         │
@@ -53,15 +53,15 @@ The system acts as a "translator", allowing the use of any tools, libraries, and
 
 ## 2. Project Structure
 
-The project is organized as a modular Python package `kiro/`:
+The project is organized as a modular Python package `aigw/`:
 
 ```
-kiro-gateway/
+ai-gateway/
 ├── main.py                    # Entry point, FastAPI application creation
 ├── requirements.txt           # Python dependencies
 ├── .env.example               # Environment configuration example
 │
-├── kiro/              # Main package
+├── aigw/              # Main package
 │   ├── __init__.py            # Package exports, version
 │   │
 │   │   # ═══════════════════════════════════════════════════════
@@ -140,7 +140,7 @@ The `main.py` file is responsible for:
 4. **Error handler registration** — `validation_exception_handler` for 422 errors
 5. **Route connection** — `app.include_router(router)`
 
-### 3.2. Configuration Module (`kiro/config.py`)
+### 3.2. Configuration Module (`aigw/config.py`)
 
 Centralized storage of all settings:
 
@@ -167,7 +167,7 @@ Centralized storage of all settings:
 - `get_kiro_q_host(region)` — Q API host
 - `get_internal_model_id(external_model)` — model name conversion
 
-### 3.3. Pydantic Models (`kiro/models_openai.py`)
+### 3.3. Pydantic Models (`aigw/models_openai.py`)
 
 #### Models for `/v1/models`
 
@@ -198,7 +198,7 @@ Centralized storage of all settings:
 
 ### 3.4. State Management Layer
 
-#### KiroAuthManager (`kiro/auth.py`)
+#### KiroAuthManager (`aigw/auth.py`)
 
 **Role:** Stateful singleton encapsulating Kiro token management logic.
 
@@ -234,7 +234,7 @@ auth_manager = KiroAuthManager(
 token = await auth_manager.get_access_token()
 ```
 
-#### ModelInfoCache (`kiro/cache.py`)
+#### ModelInfoCache (`aigw/cache.py`)
 
 **Role:** Thread-safe storage for model configurations.
 
@@ -250,7 +250,7 @@ token = await auth_manager.get_access_token()
 - `is_empty()` / `is_stale()` — cache state check
 - `get_all_model_ids()` — list of all model IDs
 
-### 3.5. Helper Utilities (`kiro/utils.py`)
+### 3.5. Helper Utilities (`aigw/utils.py`)
 
 | Function | Description |
 |----------|-------------|
@@ -260,7 +260,7 @@ token = await auth_manager.get_access_token()
 | `generate_conversation_id()` | UUID for conversation |
 | `generate_tool_call_id()` | ID in format `call_{uuid_hex[:8]}` |
 
-### 3.6. Conversion Layer (`kiro/converters_openai.py`)
+### 3.6. Conversion Layer (`aigw/converters_openai.py`)
 
 #### Message Conversion
 
@@ -310,7 +310,7 @@ External model names are converted to internal Kiro IDs:
 | `claude-3-7-sonnet-20250219` | `CLAUDE_3_7_SONNET_20250219_V1_0` |
 | `auto` | `claude-sonnet-4.5` (alias) |
 
-### 3.7. Parsing Layer (`kiro/parsers.py`)
+### 3.7. Parsing Layer (`aigw/parsers.py`)
 
 #### AwsEventStreamParser
 
@@ -340,7 +340,7 @@ Advanced AWS SSE format parser with support for:
 | `parse_bracket_tool_calls(response_text)` | Parse `[Called func with args: {...}]` |
 | `deduplicate_tool_calls(tool_calls)` | Remove duplicate tool calls |
 
-### 3.8. Streaming (`kiro/streaming_openai.py`)
+### 3.8. Streaming (`aigw/streaming_openai.py`)
 
 #### stream_kiro_to_openai
 
@@ -357,7 +357,7 @@ Async generator for transforming Kiro stream to OpenAI format.
 
 Collects full response from streaming for non-streaming mode.
 
-### 3.9. HTTP Client (`kiro/http_client.py`)
+### 3.9. HTTP Client (`aigw/http_client.py`)
 
 #### KiroHttpClient
 
@@ -378,7 +378,7 @@ Automatic error handling with exponential backoff:
 
 Supports async context manager (`async with`).
 
-### 3.10. Routes (`kiro/routes_openai.py`)
+### 3.10. Routes (`aigw/routes_openai.py`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -389,14 +389,14 @@ Supports async context manager (`async with`).
 
 **Authentication:** Bearer token in `Authorization` header
 
-### 3.11. Exception Handling (`kiro/exceptions.py`)
+### 3.11. Exception Handling (`aigw/exceptions.py`)
 
 | Function | Description |
 |----------|-------------|
 | `sanitize_validation_errors(errors)` | Convert bytes to strings for JSON serialization |
 | `validation_exception_handler(request, exc)` | Pydantic validation error handler (422) |
 
-### 3.12. Debug Logging (`kiro/debug_logger.py`)
+### 3.12. Debug Logging (`aigw/debug_logger.py`)
 
 **Class:** `DebugLogger` (singleton)
 
@@ -417,7 +417,7 @@ Supports async context manager (`async with`).
 - `response_stream_raw.txt` — raw stream from Kiro
 - `response_stream_modified.txt` — transformed stream (OpenAI format)
 
-### 3.13. Tokenizer (`kiro/tokenizer.py`)
+### 3.13. Tokenizer (`aigw/tokenizer.py`)
 
 **Problem:** Kiro API does not return token counts directly. Instead, the API only provides `context_usage_percentage` — the percentage of model context usage.
 
@@ -749,7 +749,7 @@ The modular architecture allows easy addition of support for other API formats. 
 
 2. **Create conversion adapter** — `converters_gemini.py`
    ```python
-   from kiro.converters_core import build_kiro_payload
+   from aigw.converters_core import build_kiro_payload
    
    def gemini_to_kiro(request: GeminiRequest, ...) -> dict:
        """Converts Gemini request to Kiro payload."""
@@ -769,7 +769,7 @@ The modular architecture allows easy addition of support for other API formats. 
 
 3. **Create streaming formatter** — `streaming_gemini.py`
    ```python
-   from kiro.streaming_core import parse_kiro_stream
+   from aigw.streaming_core import parse_kiro_stream
    
    async def stream_to_gemini(response, ...) -> AsyncGenerator[str, None]:
        """Formats Kiro events to Gemini SSE."""
@@ -788,7 +788,7 @@ The modular architecture allows easy addition of support for other API formats. 
 
 5. **Connect in main.py**
    ```python
-   from kiro.routes_gemini import router as gemini_router
+   from aigw.routes_gemini import router as gemini_router
    app.include_router(gemini_router)
    ```
 

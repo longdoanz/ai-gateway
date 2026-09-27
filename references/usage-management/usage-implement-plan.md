@@ -1,6 +1,6 @@
 # AI Credit Management - Implementation Plan
 
-Tài liệu này mô tả chi tiết các bước triển khai kỹ thuật (Implementation Plan) cho hệ thống Credit Management System tích hợp trong Kiro Gateway, dựa trên các yêu cầu nghiệp vụ từ BRD và cấu hình linh hoạt của hệ thống.
+Tài liệu này mô tả chi tiết các bước triển khai kỹ thuật (Implementation Plan) cho hệ thống Credit Management System tích hợp trong AI Gateway, dựa trên các yêu cầu nghiệp vụ từ BRD và cấu hình linh hoạt của hệ thống.
 
 ## 1. Kiến trúc Dữ liệu & Database Schema
 

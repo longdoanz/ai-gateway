@@ -12,7 +12,7 @@ Covers:
 import pytest
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
-from kiro.usage.token_cache import token_cache
+from aigw.usage.token_cache import token_cache
 
 
 @pytest.fixture(autouse=True)
@@ -23,7 +23,7 @@ def _clear_token_cache():
 
 from fastapi import HTTPException
 
-from kiro.api_key_mode import (
+from aigw.api_key_mode import (
     build_api_key_headers,
     extract_bearer_token,
     get_api_key_from_request,

@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from kiro.payload_guards import (
+from aigw.payload_guards import (
     PayloadTrimStats,
     check_payload_size,
     trim_payload_to_limit,

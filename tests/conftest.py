@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Common fixtures and utilities for testing Kiro Gateway.
+Common fixtures and utilities for testing AI Gateway.
 
 Provides test isolation from external services and global state.
 All tests MUST be completely isolated from the network.
@@ -88,10 +88,10 @@ def valid_proxy_api_key():
     """
     Returns the actual PROXY_API_KEY that the application is using.
     
-    This reads the value from kiro.config, which was loaded when the app
+    This reads the value from aigw.config, which was loaded when the app
     was imported. This ensures tests use the same key the app validates against.
     """
-    from kiro.config import PROXY_API_KEY
+    from aigw.config import PROXY_API_KEY
     return PROXY_API_KEY
 
 
@@ -433,9 +433,9 @@ def block_all_network_calls():
 
     # Patch AsyncClient in modules where it's used
     patchers = [
-        patch('kiro.auth.httpx.AsyncClient', return_value=mock_async_client),
-        patch('kiro.http_client.httpx.AsyncClient', return_value=mock_async_client),
-        patch('kiro.streaming_openai.httpx.AsyncClient', return_value=mock_async_client),
+        patch('aigw.auth.httpx.AsyncClient', return_value=mock_async_client),
+        patch('aigw.http_client.httpx.AsyncClient', return_value=mock_async_client),
+        patch('aigw.streaming_openai.httpx.AsyncClient', return_value=mock_async_client),
     ]
     
     # Start patchers
@@ -477,8 +477,8 @@ def test_client(clean_app):
 
     Forces API_KEY_MODE=False regardless of .env settings.
     """
-    import kiro.routes_openai as _routes_openai
-    import kiro.routes_anthropic as _routes_anthropic
+    import aigw.routes_openai as _routes_openai
+    import aigw.routes_anthropic as _routes_anthropic
     original_openai_mode = _routes_openai.API_KEY_MODE
     original_anthropic_mode = _routes_anthropic.API_KEY_MODE
     _routes_openai.API_KEY_MODE = False
@@ -517,7 +517,7 @@ def mock_auth_manager():
     """
     Creates a mocked KiroAuthManager for tests.
     """
-    from kiro.auth import KiroAuthManager
+    from aigw.auth import KiroAuthManager
     
     manager = KiroAuthManager(
         refresh_token="test_refresh_token",
@@ -539,7 +539,7 @@ def expired_auth_manager():
     """
     Creates a KiroAuthManager with an expired token.
     """
-    from kiro.auth import KiroAuthManager
+    from aigw.auth import KiroAuthManager
     
     manager = KiroAuthManager(
         refresh_token="test_refresh_token",
@@ -598,7 +598,7 @@ def empty_model_cache():
     """
     Creates an empty ModelInfoCache.
     """
-    from kiro.cache import ModelInfoCache
+    from aigw.cache import ModelInfoCache
     return ModelInfoCache()
 
 
@@ -607,7 +607,7 @@ async def populated_model_cache(mock_kiro_models_response):
     """
     Creates a ModelInfoCache with pre-populated data.
     """
-    from kiro.cache import ModelInfoCache
+    from aigw.cache import ModelInfoCache
     
     cache = ModelInfoCache()
     await cache.update(mock_kiro_models_response["models"])
@@ -636,7 +636,7 @@ def mock_datetime():
     """
     fixed_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
     
-    with patch('kiro.auth.datetime') as mock_dt:
+    with patch('aigw.auth.datetime') as mock_dt:
         mock_dt.now.return_value = fixed_time
         mock_dt.fromisoformat = datetime.fromisoformat
         mock_dt.fromtimestamp = datetime.fromtimestamp
@@ -839,7 +839,7 @@ def aws_event_parser():
     """
     Creates an AwsEventStreamParser instance for tests.
     """
-    from kiro.parsers import AwsEventStreamParser
+    from aigw.parsers import AwsEventStreamParser
     return AwsEventStreamParser()
 
 

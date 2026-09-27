@@ -14,14 +14,14 @@ Tests 5-layer model resolution architecture:
 import pytest
 from dataclasses import FrozenInstanceError
 
-from kiro.model_resolver import (
+from aigw.model_resolver import (
     normalize_model_name,
     get_model_id_for_kiro,
     extract_model_family,
     ModelResolver,
     ModelResolution,
 )
-from kiro.cache import ModelInfoCache
+from aigw.cache import ModelInfoCache
 
 
 # =============================================================================

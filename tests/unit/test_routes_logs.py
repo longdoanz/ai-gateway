@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Unit tests for the log viewer routes (kiro.dashboard.routes_logs).
+Unit tests for the log viewer routes (aigw.dashboard.routes_logs).
 
 Verifies admin gating, recent-log JSON, and the SSE stream (backlog then
 live events) with client-disconnect cleanup.
@@ -16,10 +16,10 @@ from httpx import ASGITransport, AsyncClient
 from loguru import logger
 from unittest.mock import MagicMock, patch
 
-from kiro.dashboard import routes_logs as routes_logs_module
-from kiro.dashboard.routes_logs import router
-from kiro.dashboard.deps import require_admin
-from kiro.log_stream import LogStream
+from aigw.dashboard import routes_logs as routes_logs_module
+from aigw.dashboard.routes_logs import router
+from aigw.dashboard.deps import require_admin
+from aigw.log_stream import LogStream
 
 app = FastAPI()
 app.include_router(router)
@@ -90,7 +90,7 @@ class TestStream:
         await stream.start()  # drain task forwards inbox -> subscriber queues
         try:
             _emit("ERROR", "backlog entry")
-            with patch("kiro.dashboard.routes_logs.log_stream", stream):
+            with patch("aigw.dashboard.routes_logs.log_stream", stream):
                 gen = routes_logs_module._event_stream()
                 # First frame: backlog entry.
                 first = await asyncio.wait_for(anext(gen), timeout=2)
@@ -113,7 +113,7 @@ class TestStream:
         old_interval = routes_logs_module._HEARTBEAT_INTERVAL_SECONDS
         routes_logs_module._HEARTBEAT_INTERVAL_SECONDS = 0.05
         try:
-            with patch("kiro.dashboard.routes_logs.log_stream", stream), \
+            with patch("aigw.dashboard.routes_logs.log_stream", stream), \
                  patch.object(stream, "unsubscribe", wraps=stream.unsubscribe) as spy:
                 gen = routes_logs_module._event_stream()
                 # First anext drives the generator to the subscribe point; with
@@ -130,7 +130,7 @@ class TestStream:
         old_interval = routes_logs_module._HEARTBEAT_INTERVAL_SECONDS
         routes_logs_module._HEARTBEAT_INTERVAL_SECONDS = 0.05
         try:
-            with patch("kiro.dashboard.routes_logs.log_stream", stream):
+            with patch("aigw.dashboard.routes_logs.log_stream", stream):
                 gen = routes_logs_module._event_stream()
                 frame = await asyncio.wait_for(anext(gen), timeout=2)
                 assert frame == ": ping\n\n"

@@ -36,7 +36,7 @@ class TestLogLevelConfig:
         with patch.object(os, 'getenv', side_effect=mock_getenv):
             # Reload config module with mocked getenv
             import importlib
-            import kiro.config as config_module
+            import aigw.config as config_module
             importlib.reload(config_module)
             
             print(f"LOG_LEVEL: {config_module.LOG_LEVEL}")
@@ -45,7 +45,7 @@ class TestLogLevelConfig:
         
         # Restore module with real values
         import importlib
-        import kiro.config as config_module
+        import aigw.config as config_module
         importlib.reload(config_module)
     
     def test_log_level_from_environment(self):
@@ -57,7 +57,7 @@ class TestLogLevelConfig:
         
         with patch.dict(os.environ, {"LOG_LEVEL": "DEBUG"}):
             import importlib
-            import kiro.config as config_module
+            import aigw.config as config_module
             importlib.reload(config_module)
             
             print(f"LOG_LEVEL: {config_module.LOG_LEVEL}")
@@ -73,7 +73,7 @@ class TestLogLevelConfig:
         
         with patch.dict(os.environ, {"LOG_LEVEL": "warning"}):
             import importlib
-            import kiro.config as config_module
+            import aigw.config as config_module
             importlib.reload(config_module)
             
             print(f"LOG_LEVEL: {config_module.LOG_LEVEL}")
@@ -89,7 +89,7 @@ class TestLogLevelConfig:
         
         with patch.dict(os.environ, {"LOG_LEVEL": "TRACE"}):
             import importlib
-            import kiro.config as config_module
+            import aigw.config as config_module
             importlib.reload(config_module)
             
             print(f"LOG_LEVEL: {config_module.LOG_LEVEL}")
@@ -104,7 +104,7 @@ class TestLogLevelConfig:
         
         with patch.dict(os.environ, {"LOG_LEVEL": "ERROR"}):
             import importlib
-            import kiro.config as config_module
+            import aigw.config as config_module
             importlib.reload(config_module)
             
             print(f"LOG_LEVEL: {config_module.LOG_LEVEL}")
@@ -119,7 +119,7 @@ class TestLogLevelConfig:
         
         with patch.dict(os.environ, {"LOG_LEVEL": "CRITICAL"}):
             import importlib
-            import kiro.config as config_module
+            import aigw.config as config_module
             importlib.reload(config_module)
             
             print(f"LOG_LEVEL: {config_module.LOG_LEVEL}")
@@ -141,7 +141,7 @@ class TestToolDescriptionMaxLengthConfig:
                 del os.environ["TOOL_DESCRIPTION_MAX_LENGTH"]
             
             import importlib
-            import kiro.config as config_module
+            import aigw.config as config_module
             importlib.reload(config_module)
             
             print(f"TOOL_DESCRIPTION_MAX_LENGTH: {config_module.TOOL_DESCRIPTION_MAX_LENGTH}")
@@ -156,7 +156,7 @@ class TestToolDescriptionMaxLengthConfig:
         
         with patch.dict(os.environ, {"TOOL_DESCRIPTION_MAX_LENGTH": "5000"}):
             import importlib
-            import kiro.config as config_module
+            import aigw.config as config_module
             importlib.reload(config_module)
             
             print(f"TOOL_DESCRIPTION_MAX_LENGTH: {config_module.TOOL_DESCRIPTION_MAX_LENGTH}")
@@ -171,7 +171,7 @@ class TestToolDescriptionMaxLengthConfig:
         
         with patch.dict(os.environ, {"TOOL_DESCRIPTION_MAX_LENGTH": "0"}):
             import importlib
-            import kiro.config as config_module
+            import aigw.config as config_module
             importlib.reload(config_module)
             
             print(f"TOOL_DESCRIPTION_MAX_LENGTH: {config_module.TOOL_DESCRIPTION_MAX_LENGTH}")
@@ -193,7 +193,7 @@ class TestTimeoutConfigurationWarning:
             "STREAMING_READ_TIMEOUT": "300"
         }):
             import importlib
-            import kiro.config as config_module
+            import aigw.config as config_module
             importlib.reload(config_module)
             
             # Call the warning function
@@ -218,7 +218,7 @@ class TestTimeoutConfigurationWarning:
             "STREAMING_READ_TIMEOUT": "300"
         }):
             import importlib
-            import kiro.config as config_module
+            import aigw.config as config_module
             importlib.reload(config_module)
             
             # Call the warning function
@@ -242,7 +242,7 @@ class TestTimeoutConfigurationWarning:
             "STREAMING_READ_TIMEOUT": "300"
         }):
             import importlib
-            import kiro.config as config_module
+            import aigw.config as config_module
             importlib.reload(config_module)
             
             # Call the warning function
@@ -269,7 +269,7 @@ class TestTimeoutConfigurationWarning:
             "STREAMING_READ_TIMEOUT": "300"
         }):
             import importlib
-            import kiro.config as config_module
+            import aigw.config as config_module
             importlib.reload(config_module)
             
             # Call the warning function
@@ -292,7 +292,7 @@ class TestAwsSsoOidcUrlConfig:
         """
         print("Setup: Importing config module...")
         import importlib
-        import kiro.config as config_module
+        import aigw.config as config_module
         importlib.reload(config_module)
         
         print("Verification: AWS_SSO_OIDC_URL_TEMPLATE exists...")
@@ -309,7 +309,7 @@ class TestAwsSsoOidcUrlConfig:
         Purpose: Ensure the function formats URL correctly.
         """
         print("Setup: Importing get_aws_sso_oidc_url...")
-        from kiro.config import get_aws_sso_oidc_url
+        from aigw.config import get_aws_sso_oidc_url
         
         print("Action: Calling get_aws_sso_oidc_url('us-east-1')...")
         url = get_aws_sso_oidc_url("us-east-1")
@@ -325,7 +325,7 @@ class TestAwsSsoOidcUrlConfig:
         Purpose: Ensure the function works with various AWS regions.
         """
         print("Setup: Importing get_aws_sso_oidc_url...")
-        from kiro.config import get_aws_sso_oidc_url
+        from aigw.config import get_aws_sso_oidc_url
         
         test_cases = [
             ("us-east-1", "https://oidc.us-east-1.amazonaws.com/token"),
@@ -356,7 +356,7 @@ class TestServerHostConfig:
                 del os.environ["SERVER_HOST"]
             
             import importlib
-            import kiro.config as config_module
+            import aigw.config as config_module
             importlib.reload(config_module)
             
             print(f"SERVER_HOST: {config_module.SERVER_HOST}")
@@ -374,7 +374,7 @@ class TestServerHostConfig:
         
         with patch.dict(os.environ, {"SERVER_HOST": "127.0.0.1"}):
             import importlib
-            import kiro.config as config_module
+            import aigw.config as config_module
             importlib.reload(config_module)
             
             print(f"SERVER_HOST: {config_module.SERVER_HOST}")
@@ -390,7 +390,7 @@ class TestServerHostConfig:
         
         with patch.dict(os.environ, {"SERVER_HOST": "192.168.1.100"}):
             import importlib
-            import kiro.config as config_module
+            import aigw.config as config_module
             importlib.reload(config_module)
             
             print(f"SERVER_HOST: {config_module.SERVER_HOST}")
@@ -412,7 +412,7 @@ class TestServerPortConfig:
                 del os.environ["SERVER_PORT"]
 
             import importlib
-            import kiro.config as config_module
+            import aigw.config as config_module
             importlib.reload(config_module)
 
             print(f"SERVER_PORT: {config_module.SERVER_PORT}")
@@ -430,7 +430,7 @@ class TestServerPortConfig:
         
         with patch.dict(os.environ, {"SERVER_PORT": "9000"}):
             import importlib
-            import kiro.config as config_module
+            import aigw.config as config_module
             importlib.reload(config_module)
             
             print(f"SERVER_PORT: {config_module.SERVER_PORT}")
@@ -446,7 +446,7 @@ class TestServerPortConfig:
         
         with patch.dict(os.environ, {"SERVER_PORT": "3000"}):
             import importlib
-            import kiro.config as config_module
+            import aigw.config as config_module
             importlib.reload(config_module)
             
             print(f"SERVER_PORT: {config_module.SERVER_PORT}")
@@ -461,7 +461,7 @@ class TestServerPortConfig:
         
         with patch.dict(os.environ, {"SERVER_PORT": "8080"}):
             import importlib
-            import kiro.config as config_module
+            import aigw.config as config_module
             importlib.reload(config_module)
             
             print(f"SERVER_PORT: {config_module.SERVER_PORT}")
@@ -480,7 +480,7 @@ class TestKiroCliDbFileConfig:
         """
         print("Setup: Importing config module...")
         import importlib
-        import kiro.config as config_module
+        import aigw.config as config_module
         importlib.reload(config_module)
         
         print("Verification: KIRO_CLI_DB_FILE exists...")
@@ -497,7 +497,7 @@ class TestKiroCliDbFileConfig:
         """
         print("Setup: Importing config module...")
         import importlib
-        import kiro.config as config_module
+        import aigw.config as config_module
         
         # Test that KIRO_CLI_DB_FILE is loaded and is a string
         print(f"KIRO_CLI_DB_FILE: {config_module.KIRO_CLI_DB_FILE}")
@@ -512,182 +512,6 @@ class TestKiroCliDbFileConfig:
             path = Path(config_module.KIRO_CLI_DB_FILE)
             # Path should be constructable (doesn't raise exception)
             assert str(path) == config_module.KIRO_CLI_DB_FILE
-
-
-class TestFallbackModelsConfig:
-    """Tests for FALLBACK_MODELS configuration."""
-    
-    def test_fallback_models_exists(self):
-        """
-        What it does: Verifies that FALLBACK_MODELS constant exists.
-        Purpose: Ensure the fallback model list is defined in config.
-        """
-        print("Setup: Importing config module...")
-        import importlib
-        import kiro.config as config_module
-        importlib.reload(config_module)
-        
-        print("Verification: FALLBACK_MODELS exists...")
-        assert hasattr(config_module, 'FALLBACK_MODELS')
-        
-        print(f"FALLBACK_MODELS type: {type(config_module.FALLBACK_MODELS)}")
-        assert isinstance(config_module.FALLBACK_MODELS, list)
-    
-    def test_fallback_models_not_empty(self):
-        """
-        What it does: Verifies that FALLBACK_MODELS contains at least one model.
-        Purpose: Ensure fallback list is populated for DNS failure recovery.
-        """
-        print("Setup: Importing FALLBACK_MODELS...")
-        from kiro.config import FALLBACK_MODELS
-        
-        print(f"FALLBACK_MODELS length: {len(FALLBACK_MODELS)}")
-        print(f"Comparing: Expected > 0, Got {len(FALLBACK_MODELS)}")
-        assert len(FALLBACK_MODELS) > 0
-    
-    def test_fallback_models_structure(self):
-        """
-        What it does: Verifies that each fallback model has required modelId field.
-        Purpose: Ensure fallback models have correct structure for cache.update().
-        """
-        print("Setup: Importing FALLBACK_MODELS...")
-        from kiro.config import FALLBACK_MODELS
-        
-        print(f"Action: Checking structure of {len(FALLBACK_MODELS)} models...")
-        for i, model in enumerate(FALLBACK_MODELS):
-            print(f"Checking model {i}: {model}")
-            
-            print(f"  Verification: model is dict...")
-            assert isinstance(model, dict), f"Model {i} is not a dict"
-            
-            print(f"  Verification: model has 'modelId'...")
-            assert "modelId" in model, f"Model {i} missing 'modelId'"
-            
-            print(f"  Verification: modelId is string...")
-            assert isinstance(model["modelId"], str), f"Model {i} modelId is not string"
-            
-            print(f"  Verification: modelId is not empty...")
-            assert len(model["modelId"]) > 0, f"Model {i} modelId is empty"
-    
-    def test_fallback_models_contain_claude_models(self):
-        """
-        What it does: Verifies that fallback models include Claude models.
-        Purpose: Ensure fallback list contains expected Claude 4/4.5 models.
-        """
-        print("Setup: Importing FALLBACK_MODELS...")
-        from kiro.config import FALLBACK_MODELS
-        
-        model_ids = [m["modelId"] for m in FALLBACK_MODELS]
-        print(f"Model IDs in fallback list: {model_ids}")
-        
-        print("Verification: Contains at least one Claude model...")
-        has_claude = any("claude" in mid.lower() for mid in model_ids)
-        assert has_claude, "No Claude models in fallback list"
-    
-    def test_fallback_models_use_dot_format(self):
-        """
-        What it does: Verifies that model IDs use dot format (e.g., claude-4.5).
-        Purpose: Ensure consistency with Kiro API format.
-        """
-        print("Setup: Importing FALLBACK_MODELS...")
-        from kiro.config import FALLBACK_MODELS
-        
-        print("Action: Checking model ID format...")
-        for model in FALLBACK_MODELS:
-            model_id = model["modelId"]
-            print(f"Checking: {model_id}")
-            
-            # If model has version number, it should use dot format
-            if any(char.isdigit() for char in model_id):
-                # Check for patterns like "4.5" or "4-5"
-                if "-4-5" in model_id or "-4-0" in model_id:
-                    print(f"  WARNING: {model_id} uses dash format instead of dot")
-                    # This is acceptable but not ideal
-                    pass
-
-
-class TestFallbackModelsIntegration:
-    """Integration tests for FALLBACK_MODELS with ModelResolver."""
-    
-    @pytest.mark.asyncio
-    async def test_fallback_models_work_with_model_resolver(self):
-        """
-        What it does: Verifies that fallback models work with ModelResolver normalization.
-        Purpose: Ensure that model name normalization (claude-opus-4-5 → claude-opus-4.5)
-                 works correctly with fallback models, just like with API models.
-        """
-        print("Setup: Importing FALLBACK_MODELS and creating cache...")
-        from kiro.config import FALLBACK_MODELS
-        from kiro.cache import ModelInfoCache
-        from kiro.model_resolver import ModelResolver
-        
-        # Simulate DNS failure scenario - populate cache with fallback models
-        cache = ModelInfoCache()
-        await cache.update(FALLBACK_MODELS)
-        
-        print(f"Cache populated with {cache.size} fallback models")
-        print(f"Model IDs in cache: {cache.get_all_model_ids()}")
-        
-        # Create resolver
-        resolver = ModelResolver(cache=cache, hidden_models={})
-        
-        print("\nAction: Testing normalization with dash format...")
-        # Test that dash format (claude-opus-4-6) is normalized and found
-        test_cases = [
-            ("claude-opus-4-6", "claude-opus-4.6"),  # Dash → Dot
-            ("claude-sonnet-4-6", "claude-sonnet-4.6"),  # Dash → Dot
-            ("claude-haiku-4-5", "claude-haiku-4.5"),  # Dash → Dot
-        ]
-        
-        for input_name, expected_normalized in test_cases:
-            print(f"\n  Testing: {input_name} → {expected_normalized}")
-            resolution = resolver.resolve(input_name)
-            
-            print(f"    Resolution source: {resolution.source}")
-            print(f"    Normalized: {resolution.normalized}")
-            print(f"    Internal ID: {resolution.internal_id}")
-            print(f"    Is verified: {resolution.is_verified}")
-            
-            # Verify normalization happened
-            print(f"    Comparing normalized: Expected '{expected_normalized}', Got '{resolution.normalized}'")
-            assert resolution.normalized == expected_normalized
-            
-            # Verify model was found in cache (not passthrough)
-            print(f"    Comparing source: Expected 'cache', Got '{resolution.source}'")
-            assert resolution.source == "cache", f"Model {input_name} should be found in fallback cache"
-            
-            print(f"    Comparing is_verified: Expected True, Got {resolution.is_verified}")
-            assert resolution.is_verified is True
-    
-    @pytest.mark.asyncio
-    async def test_fallback_models_appear_in_available_models(self):
-        """
-        What it does: Verifies that fallback models appear in get_available_models().
-        Purpose: Ensure that /v1/models endpoint will show fallback models.
-        """
-        print("Setup: Importing FALLBACK_MODELS and creating cache...")
-        from kiro.config import FALLBACK_MODELS
-        from kiro.cache import ModelInfoCache
-        from kiro.model_resolver import ModelResolver
-        
-        cache = ModelInfoCache()
-        await cache.update(FALLBACK_MODELS)
-        
-        resolver = ModelResolver(cache=cache, hidden_models={})
-        
-        print("Action: Getting available models...")
-        available = resolver.get_available_models()
-        
-        print(f"Available models: {available}")
-        print(f"Comparing length: Expected {len(FALLBACK_MODELS)}, Got {len(available)}")
-        assert len(available) == len(FALLBACK_MODELS)
-        
-        # Verify all fallback models are present
-        fallback_ids = {m["modelId"] for m in FALLBACK_MODELS}
-        available_set = set(available)
-        
-        print(f"Comparing sets: Expected {fallback_ids}, Got {available_set}")
-        assert fallback_ids == available_set
 
 
 # ==================================================================================================
@@ -707,7 +531,7 @@ class TestWebSearchConfig:
         
         print("Action: Reloading config module...")
         from importlib import reload
-        import kiro.config as config_module
+        import aigw.config as config_module
         reload(config_module)
         
         print(f"Comparing WEB_SEARCH_ENABLED: Expected True, Got {config_module.WEB_SEARCH_ENABLED}")
@@ -723,7 +547,7 @@ class TestWebSearchConfig:
         
         print("Action: Reloading config module...")
         from importlib import reload
-        import kiro.config as config_module
+        import aigw.config as config_module
         reload(config_module)
         
         print(f"Comparing WEB_SEARCH_ENABLED: Expected False, Got {config_module.WEB_SEARCH_ENABLED}")
@@ -739,7 +563,7 @@ class TestWebSearchConfig:
         
         print("Action: Reloading config module...")
         from importlib import reload
-        import kiro.config as config_module
+        import aigw.config as config_module
         reload(config_module)
         
         print(f"Comparing WEB_SEARCH_ENABLED: Expected True, Got {config_module.WEB_SEARCH_ENABLED}")
@@ -754,7 +578,7 @@ class TestWebSearchConfig:
         monkeypatch.setenv("WEB_SEARCH_ENABLED", "1")
         
         from importlib import reload
-        import kiro.config as config_module
+        import aigw.config as config_module
         reload(config_module)
         
         print(f"Comparing WEB_SEARCH_ENABLED: Expected True, Got {config_module.WEB_SEARCH_ENABLED}")
@@ -777,7 +601,7 @@ class TestWebSearchConfig:
         
         print("Action: Reloading config module...")
         from importlib import reload
-        import kiro.config as config_module
+        import aigw.config as config_module
         reload(config_module)
         
         print(f"Comparing WEB_SEARCH_ENABLED: Expected True, Got {config_module.WEB_SEARCH_ENABLED}")
@@ -792,7 +616,7 @@ class TestWebSearchConfig:
         monkeypatch.setenv("WEB_SEARCH_ENABLED", "TRUE")
         
         from importlib import reload
-        import kiro.config as config_module
+        import aigw.config as config_module
         reload(config_module)
         
         print(f"Comparing WEB_SEARCH_ENABLED: Expected True, Got {config_module.WEB_SEARCH_ENABLED}")
@@ -808,14 +632,14 @@ class TestWebSearchConfig:
 def test_api_key_mode_default_false(monkeypatch):
     monkeypatch.delenv("API_KEY_MODE", raising=False)
     monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **kw: None)
-    import importlib, kiro.config as cfg
+    import importlib, aigw.config as cfg
     importlib.reload(cfg)
     assert cfg.API_KEY_MODE is False
 
 def test_api_key_mode_true_when_set(monkeypatch):
     monkeypatch.setenv("API_KEY_MODE", "true")
     monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **kw: None)
-    import importlib, kiro.config as cfg
+    import importlib, aigw.config as cfg
     importlib.reload(cfg)
     assert cfg.API_KEY_MODE is True
 

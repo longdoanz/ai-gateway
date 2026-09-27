@@ -93,33 +93,6 @@ test.describe("Analytics Page - Charts and Sections", () => {
     await expect(areaPanel).toBeVisible();
   });
 
-  test("should render the Kiro User Credit Usage table", async ({ page }) => {
-    const main = page.locator("main");
-    const heading = main.getByText("Kiro User Credit Usage");
-    await expect(heading).toBeVisible();
-
-    const tablePanel = main
-      .locator(".glass-panel")
-      .filter({ hasText: "Kiro User Credit Usage" });
-    await expect(tablePanel).toBeVisible();
-
-    // Verify table headers
-    const expectedHeaders = ["User", "Used", "Quota", "Remaining", "Shared Usage"];
-    for (const header of expectedHeaders) {
-      await expect(
-        tablePanel
-          .getByRole("columnheader", { name: header })
-          .or(tablePanel.locator("th", { hasText: header }))
-          .first()
-      ).toBeVisible({ timeout: 5000 });
-    }
-
-    // Verify at least one data row is present (display names, not dashboard usernames)
-    const rows = tablePanel.locator("tbody tr");
-    const rowCount = await rows.count();
-    expect(rowCount).toBeGreaterThan(0);
-  });
-
   test("should switch date ranges", async ({ page }) => {
     const main = page.locator("main");
 

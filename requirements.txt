@@ -13,7 +13,7 @@ bcrypt>=4.0
 cryptography>=42.0
 python-multipart>=0.0.9
 google-auth>=2.0.0
-# NOTE: the PII guardrail (kiro/guardrails/) has no third-party dependency.
+# NOTE: the PII guardrail (aigw/guardrails/) has no third-party dependency.
 # presidio-anonymizer was used and then dropped — its AnonymizerEngine is
 # quadratic in span count (25 -> 800 spans cost 0.73ms -> 225ms on a fixed
 # text) and its DeanonymizeEngine cannot restore a custom operator's output at

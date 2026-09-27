@@ -2,7 +2,7 @@
 
 ## Overview
 
-Backend cho hệ thống Credit Management tích hợp vào Kiro Gateway. Cung cấp database layer, usage tracking, fallback routing, và Dashboard API phục vụ frontend.
+Backend cho hệ thống Credit Management tích hợp vào AI Gateway. Cung cấp database layer, usage tracking, fallback routing, và Dashboard API phục vụ frontend.
 
 **Decisions:**
 - PostgreSQL only (no Redis) — atomic UPDATE cho usage tracking, single async worker model

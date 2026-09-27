@@ -7,7 +7,7 @@ Tests enhance_kiro_error() function and KiroErrorInfo dataclass.
 
 import pytest
 
-from kiro.kiro_errors import (
+from aigw.kiro_errors import (
     KiroErrorInfo,
     enhance_kiro_error
 )

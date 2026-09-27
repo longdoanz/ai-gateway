@@ -66,8 +66,6 @@ export interface ApiKeyCreate {
 export interface ApiKeyResponse {
   id: number;
   user_id: number;
-  kiro_user_id: string | null;
-  kiro_email: string | null;
   key_prefix: string;
   key_suffix: string;
   is_active: boolean;
@@ -150,14 +148,6 @@ export interface SystemConfigUpdate {
   pii_restore_tool_args?: boolean;
 }
 
-// --- Import ---
-
-export interface ImportResult {
-  imported: number;
-  updated: number;
-  errors: string[];
-}
-
 // --- Analytics ---
 
 export interface DailySeries {
@@ -167,7 +157,6 @@ export interface DailySeries {
 }
 
 export interface UserTokenUsage {
-  kiro_user_id: string;
   display_name: string;
   username: string | null;
   email: string | null;
@@ -177,7 +166,6 @@ export interface UserTokenUsage {
 
 export interface TopUser {
   rank: number;
-  kiro_user_id: string;
   display_name: string;
   username: string | null;
   email: string | null;
@@ -187,7 +175,6 @@ export interface TopUser {
 }
 
 export interface TokenShare {
-  kiro_user_id: string;
   display_name: string;
   username: string | null;
   email: string | null;

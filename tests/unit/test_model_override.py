@@ -8,7 +8,7 @@ Covers:
 
 import pytest
 
-from kiro.model_override import (
+from aigw.model_override import (
     OverrideConfig,
     resolve_model,
     resolve_models,

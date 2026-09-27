@@ -1,4 +1,4 @@
-# AGENTS.md - AI Agent Guide for Kiro Gateway
+# AGENTS.md - AI Agent Guide for AI Gateway
 
 ## Project Philosophy
 
@@ -113,7 +113,7 @@ Python FastAPI reverse proxy providing OpenAI/Anthropic-compatible APIs for Kiro
 
 - **Stack**: Python 3.10+ / FastAPI / uvicorn / PostgreSQL (optional dashboard)
 - **Entry**: `main.py`
-- **Package**: `kiro/`
+- **Package**: `aigw/`
 
 ## Essential Commands
 
@@ -248,9 +248,9 @@ docker run -d \
 ## Project Structure
 
 ```
-kiro-gateway/
+ai-gateway/
 ├── main.py                          # Application entry point
-├── kiro/                            # Main package
+├── aigw/                            # Main package
 │   ├── __init__.py                  # Package exports
 │   ├── config.py                    # Configuration and constants
 │   ├── auth.py                      # Authentication manager
@@ -390,14 +390,14 @@ DEBUG_MODE="off"  # "off" | "errors" | "all"
 
 **Debugging**: Enable `DEBUG_MODE="errors"` → Check `debug_logs/` → Run tests
 
-**Refreshing the secret ruleset**: `kiro/guardrails/secret_rules.py` is vendored
+**Refreshing the secret ruleset**: `aigw/guardrails/secret_rules.py` is vendored
 from [gitleaks](https://github.com/gitleaks/gitleaks)'s `config/gitleaks.toml`,
 pinned to a tag (currently `v8.30.1`, see `GITLEAKS_VERSION` in that file), not
 tracked against `master`. Regenerate with
 `python3 scripts/gen_secret_rules.py` after bumping `GITLEAKS_VERSION` in that
 script to a newer release tag, then re-run
 `python3 -m pytest tests/unit/test_guardrails.py -q` and re-check
-`_DISABLED_RULES` in `kiro/guardrails/patterns.py` — a rule that was fine
+`_DISABLED_RULES` in `aigw/guardrails/patterns.py` — a rule that was fine
 upstream can still need disabling here if it fires on this repo's own source.
 Gitleaks updates its ruleset continuously; check for a newer tag at least
 quarterly, since a pin that's never revisited loses most of its value.

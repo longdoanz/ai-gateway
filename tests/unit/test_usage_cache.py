@@ -1,7 +1,7 @@
 import time
 
 import pytest
-from kiro.usage.usage_cache import UsageCache, UsageEntry
+from aigw.usage.usage_cache import UsageCache, UsageEntry
 
 
 class TestUsageCache:

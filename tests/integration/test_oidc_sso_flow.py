@@ -39,7 +39,7 @@ def _build_app(user: object | None = None, client_secret: str = "integration-sec
         },
         clear=False,
     ):
-        import kiro.oidc_provider as mod
+        import aigw.oidc_provider as mod
         importlib.reload(mod)
 
     app = FastAPI()
@@ -78,9 +78,9 @@ class TestFullSsoFlow:
 
         # Step 1: authorize with prompt=none
         with (
-            patch("kiro.oidc_provider.decode_token", return_value={"sub": "42", "type": "access"}),
-            patch("kiro.oidc_provider._get_session", _fake_session),
-            patch("kiro.oidc_provider.get_user_by_id", new=AsyncMock(return_value=user)),
+            patch("aigw.oidc_provider.decode_token", return_value={"sub": "42", "type": "access"}),
+            patch("aigw.oidc_provider._get_session", _fake_session),
+            patch("aigw.oidc_provider.get_user_by_id", new=AsyncMock(return_value=user)),
         ):
             resp = client.get(
                 "/oauth/authorize",
@@ -179,7 +179,7 @@ class TestUnauthenticated:
         app, _ = _build_app()
         client = TestClient(app, follow_redirects=False)
 
-        with patch("kiro.oidc_provider.decode_token", return_value=None):
+        with patch("aigw.oidc_provider.decode_token", return_value=None):
             resp = client.get(
                 "/oauth/authorize",
                 params={
