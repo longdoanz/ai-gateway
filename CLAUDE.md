@@ -19,7 +19,7 @@ pip install -r requirements.txt
 pytest                                    # All tests
 
 # Run with coverage
-pytest --cov=kiro --cov-report=html
+pytest --cov=aigw --cov-report=html
 
 # Database migrations (when DATABASE_URL is set)
 alembic upgrade head
