@@ -506,6 +506,13 @@ TELEGRAM_MIN_INTERVAL: float = float(os.getenv("TELEGRAM_MIN_INTERVAL", "3"))
 # forwards here (see aigw.nine_router_client.forward_to_nine_router).
 NINE_ROUTER_URL: str = os.getenv("NINE_ROUTER_URL", "")
 
+# Read timeout (seconds) for non-streaming requests forwarded to 9router.
+# Upstream returns nothing until the whole completion is generated, which can
+# take several minutes for large prompts. Order the layers inner < outer so
+# the innermost one fails first with a proper error: 9router
+# FETCH_NONSTREAM_TIMEOUT_MS (540s) < this (570s) < nginx proxy_read_timeout (600s).
+NINE_ROUTER_NONSTREAM_READ_TIMEOUT: float = float(os.getenv("NINE_ROUTER_NONSTREAM_READ_TIMEOUT", "570"))
+
 # API key for 9router's /v1/* endpoints (REQUIRE_API_KEY=true in 9router)
 NINE_ROUTER_API_KEY: str = os.getenv("NINE_ROUTER_API_KEY", "")
 

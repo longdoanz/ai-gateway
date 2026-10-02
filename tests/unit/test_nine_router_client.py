@@ -8,6 +8,7 @@ Tests cover:
 - Error handling: connect error, timeout, non-200 upstream, disabled
 """
 
+import httpx
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import Request
@@ -55,6 +56,7 @@ def _mock_stream_response(status_code: int = 200, chunks: list[bytes] | None = N
 
 def _mock_client(response=None, send_side_effect=None):
     client = MagicMock()
+    client.timeout = httpx.Timeout(connect=30.0, read=300.0, write=30.0, pool=10.0)
     client.build_request = MagicMock(side_effect=lambda **kwargs: kwargs)
     client.send = AsyncMock(side_effect=send_side_effect) if send_side_effect else AsyncMock(return_value=response)
     client.aclose = AsyncMock()
@@ -105,6 +107,35 @@ class TestForwardToNineRouter:
             resp = await mod.forward_to_nine_router(req, b"{}")
             assert isinstance(resp, StreamingResponse)
             assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("body", [b'{"model":"m","stream":false}', b'{"model":"m"}'])
+    async def test_non_stream_uses_long_read_timeout(self, body):
+        """Non-stream: 9router replies only after full generation — read timeout is extended."""
+        import aigw.nine_router_client as mod
+        client = _mock_client(response=_mock_stream_response(200))
+
+        with (
+            patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
+            patch.object(mod, "NINE_ROUTER_NONSTREAM_READ_TIMEOUT", 570.0),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
+        ):
+            await mod.forward_to_nine_router(_mock_request(), body)
+            timeout = client.build_request.call_args.kwargs["timeout"]
+            assert timeout.read == 570.0
+            assert timeout.connect == 30.0 and timeout.pool == 10.0
+
+    @pytest.mark.asyncio
+    async def test_stream_keeps_client_timeout(self):
+        import aigw.nine_router_client as mod
+        client = _mock_client(response=_mock_stream_response(200))
+
+        with (
+            patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
+        ):
+            await mod.forward_to_nine_router(_mock_request(), b'{"model":"m","stream":true}')
+            assert "timeout" not in client.build_request.call_args.kwargs
 
     @pytest.mark.asyncio
     async def test_adds_api_key_header_when_configured(self):

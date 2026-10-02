@@ -23,7 +23,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from loguru import logger
 
-from aigw.config import NINE_ROUTER_API_KEY, NINE_ROUTER_URL
+from aigw.config import NINE_ROUTER_API_KEY, NINE_ROUTER_NONSTREAM_READ_TIMEOUT, NINE_ROUTER_URL
 
 # ---------------------------------------------------------------------------
 # 9router model override — own config (toggle, rules, default), cached in-process
@@ -333,11 +333,13 @@ async def forward_to_nine_router(
     enabled, rules, default_model = await _get_nine_router_override()
     original_model: Optional[str] = None
     raw_model: Optional[str] = None
+    is_stream = False
     try:
         parsed = json.loads(body)
         if isinstance(parsed, dict):
             original_model = parsed.get("model")
             raw_model = original_model
+            is_stream = parsed.get("stream") is True
     except Exception:
         pass
 
@@ -378,6 +380,18 @@ async def forward_to_nine_router(
         client = httpx.AsyncClient(timeout=httpx.Timeout(connect=30.0, read=300.0, write=30.0, pool=10.0))
         owns_client = True
 
+    # Non-streaming: 9router sends nothing until the full completion is ready,
+    # so the client's streaming read timeout (between chunks) is too short.
+    request_kwargs: dict = {}
+    base = getattr(client, "timeout", None)
+    if not is_stream and isinstance(base, httpx.Timeout) and base.read is not None:
+        request_kwargs["timeout"] = httpx.Timeout(
+            connect=base.connect,
+            read=max(base.read, NINE_ROUTER_NONSTREAM_READ_TIMEOUT),
+            write=base.write,
+            pool=base.pool,
+        )
+
     async def _maybe_close_client() -> None:
         # Never close the shared pooled client — only a private one we created.
         if owns_client:
@@ -406,6 +420,7 @@ async def forward_to_nine_router(
                     url=target_url,
                     headers=headers,
                     content=request_body,
+                    **request_kwargs,
                 ),
                 stream=True,
             )
