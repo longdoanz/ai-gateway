@@ -112,7 +112,9 @@ export function UsagePanel({ accountId }: { accountId: number }) {
                     <tr>
                       <th className="py-2 px-3 font-medium text-on-surface-variant">Date</th>
                       <th className="py-2 px-3 font-medium text-on-surface-variant">Model</th>
-                      <th className="py-2 px-3 font-medium text-on-surface-variant text-right">Input</th>
+                      <th className="py-2 px-3 font-medium text-on-surface-variant text-right" title="Full prompt, cached tokens included">Input</th>
+                      <th className="py-2 px-3 font-medium text-on-surface-variant text-right" title="Part of input served from the prompt cache">Cache Read</th>
+                      <th className="py-2 px-3 font-medium text-on-surface-variant text-right" title="Part of input written to the prompt cache">Cache Write</th>
                       <th className="py-2 px-3 font-medium text-on-surface-variant text-right">Output</th>
                     </tr>
                   </thead>
@@ -122,6 +124,8 @@ export function UsagePanel({ accountId }: { accountId: number }) {
                         <td className="py-2 px-3">{d.date}</td>
                         <td className="py-2 px-3 font-mono">{d.model}</td>
                         <td className="py-2 px-3 text-right font-mono">{formatCredits(d.input_tokens)}</td>
+                        <td className="py-2 px-3 text-right font-mono">{formatCredits(d.cache_read_tokens)}</td>
+                        <td className="py-2 px-3 text-right font-mono">{formatCredits(d.cache_creation_tokens)}</td>
                         <td className="py-2 px-3 text-right font-mono">{formatCredits(d.output_tokens)}</td>
                       </tr>
                     ))}

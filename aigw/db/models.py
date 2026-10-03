@@ -118,7 +118,12 @@ class GatewayKey(Base):
 class GatewayKeyUsage(Base):
     __tablename__ = "gateway_key_usage"
     __table_args__ = (
-        UniqueConstraint("gateway_key_id", "month", "key_id", name="uq_gw_key_usage_gwkey_month_poolkey"),
+        # NULLS NOT DISTINCT: 9router usage has key_id NULL, and with plain UNIQUE
+        # the upsert never conflicted — one new row per request.
+        UniqueConstraint(
+            "gateway_key_id", "month", "key_id",
+            name="uq_gw_key_usage_gwkey_month_poolkey", postgresql_nulls_not_distinct=True,
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -134,7 +139,10 @@ class GatewayKeyUsage(Base):
 class GatewayKeyDailyUsage(Base):
     __tablename__ = "gateway_key_daily_usage"
     __table_args__ = (
-        UniqueConstraint("gateway_key_id", "date", "key_id", "model", name="uq_gw_daily_usage_gwkey_date_poolkey_model"),
+        UniqueConstraint(
+            "gateway_key_id", "date", "key_id", "model",
+            name="uq_gw_daily_usage_gwkey_date_poolkey_model", postgresql_nulls_not_distinct=True,
+        ),
         Index("ix_gw_daily_usage_date", "date"),
         Index("ix_gw_daily_usage_key_id", "key_id"),
     )
@@ -143,8 +151,8 @@ class GatewayKeyDailyUsage(Base):
     gateway_key_id: Mapped[int] = mapped_column(Integer, ForeignKey("gateway_keys.id"), nullable=False)
     date: Mapped[str] = mapped_column(String(10), nullable=False)
     model: Mapped[str] = mapped_column(String(100), nullable=False, default="unknown")
-    input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    input_tokens: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+    output_tokens: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
     # Breakdown of input_tokens: the part served from / written to the
     # provider's prompt cache (already INCLUDED in input_tokens — don't add).
     # BigInteger: cache reads on an agent loop run ~100k per request.
@@ -240,8 +248,8 @@ class ServiceAccountDailyUsage(Base):
     service_account_id: Mapped[int] = mapped_column(Integer, ForeignKey("service_accounts.id"), nullable=False)
     date: Mapped[str] = mapped_column(String(10), nullable=False)
     model: Mapped[str] = mapped_column(String(100), nullable=False, default="unknown")
-    input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    input_tokens: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+    output_tokens: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
     cache_read_tokens: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0", nullable=False)
     cache_creation_tokens: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)

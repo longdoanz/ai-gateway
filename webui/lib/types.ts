@@ -220,6 +220,9 @@ export interface GatewayKeyDailySeries {
   date: string;
   input_tokens: number;
   output_tokens: number;
+  /** Cached part of input_tokens (already included in it). */
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
 }
 
 export interface GatewayKeyUserUsage {
@@ -227,6 +230,9 @@ export interface GatewayKeyUserUsage {
   username: string;
   input_tokens: number;
   output_tokens: number;
+  /** Cached part of input_tokens (already included in it). */
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
   last_active_at: string | null;
 }
 
@@ -234,6 +240,8 @@ export interface GatewayKeyAnalyticsResponse {
   time_range: string;
   total_input_tokens: number;
   total_output_tokens: number;
+  total_cache_read_tokens: number;
+  total_cache_creation_tokens: number;
   total_gateway_users: number;
   active_gateway_users: number;
   daily_series: GatewayKeyDailySeries[];
@@ -291,6 +299,9 @@ export interface ServiceAccountDailyUsage {
   model: string;
   input_tokens: number;
   output_tokens: number;
+  /** Cached part of input_tokens (already included in it). */
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
 }
 
 export interface ServiceAccountUsageHistoryResponse {

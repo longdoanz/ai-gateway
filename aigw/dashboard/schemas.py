@@ -237,6 +237,9 @@ class GatewayKeyDailySeries(BaseModel):
     date: str
     input_tokens: int
     output_tokens: int
+    # Cached part of input_tokens (already included in it).
+    cache_read_tokens: int = 0
+    cache_creation_tokens: int = 0
 
 
 class GatewayKeyUserUsage(BaseModel):
@@ -244,6 +247,9 @@ class GatewayKeyUserUsage(BaseModel):
     username: str
     input_tokens: int
     output_tokens: int
+    # Cached part of input_tokens (already included in it).
+    cache_read_tokens: int = 0
+    cache_creation_tokens: int = 0
     last_active_at: datetime | None = None
 
 
@@ -251,6 +257,8 @@ class GatewayKeyAnalyticsResponse(BaseModel):
     time_range: str
     total_input_tokens: int
     total_output_tokens: int
+    total_cache_read_tokens: int = 0
+    total_cache_creation_tokens: int = 0
     total_gateway_users: int
     active_gateway_users: int
     daily_series: list[GatewayKeyDailySeries]
@@ -314,6 +322,9 @@ class ServiceAccountDailyUsageResponse(BaseModel):
     model: str
     input_tokens: int
     output_tokens: int
+    # Cached part of input_tokens (already included in it).
+    cache_read_tokens: int = 0
+    cache_creation_tokens: int = 0
 
     model_config = {"from_attributes": True}
 

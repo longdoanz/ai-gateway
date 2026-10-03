@@ -35,7 +35,9 @@ export function GatewayKeyUsageTable({ data }: { data: GatewayKeyUserUsage[] }) 
         <thead>
           <tr className="text-on-surface-variant text-xs border-b border-outline-variant/30">
             <th className="text-left px-4 py-3 font-medium">User</th>
-            <th className="text-right px-4 py-3 font-medium">Input Tokens</th>
+            <th className="text-right px-4 py-3 font-medium" title="Full prompt, cached tokens included">Input Tokens</th>
+            <th className="text-right px-4 py-3 font-medium" title="Part of input served from the prompt cache">Cache Read</th>
+            <th className="text-right px-4 py-3 font-medium" title="Part of input written to the prompt cache">Cache Write</th>
             <th className="text-right px-4 py-3 font-medium">Output Tokens</th>
             <th className="text-right px-4 py-3 font-medium">Last Active</th>
           </tr>
@@ -55,6 +57,8 @@ export function GatewayKeyUsageTable({ data }: { data: GatewayKeyUserUsage[] }) 
                   )}
                 </td>
                 <td className="text-right px-4 py-3 text-on-surface">{formatTokens(user.input_tokens)}</td>
+                <td className="text-right px-4 py-3 text-on-surface-variant">{formatTokens(user.cache_read_tokens)}</td>
+                <td className="text-right px-4 py-3 text-on-surface-variant">{formatTokens(user.cache_creation_tokens)}</td>
                 <td className="text-right px-4 py-3 text-on-surface-variant">{formatTokens(user.output_tokens)}</td>
                 <td
                   className="text-right px-4 py-3 text-on-surface-variant"

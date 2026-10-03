@@ -229,24 +229,31 @@ async def get_gateway_key_analytics(
             GatewayKeyDailyUsage.date,
             func.sum(GatewayKeyDailyUsage.input_tokens).label("input_tokens"),
             func.sum(GatewayKeyDailyUsage.output_tokens).label("output_tokens"),
+            func.sum(GatewayKeyDailyUsage.cache_read_tokens).label("cache_read_tokens"),
+            func.sum(GatewayKeyDailyUsage.cache_creation_tokens).label("cache_creation_tokens"),
         )
         .where(GatewayKeyDailyUsage.date >= start_str, GatewayKeyDailyUsage.date <= end_str)
         .group_by(GatewayKeyDailyUsage.date)
         .order_by(GatewayKeyDailyUsage.date)
     )).all()
 
-    daily_map = {row.date: (row.input_tokens, row.output_tokens) for row in daily_rows}
-    daily_series = [
-        GatewayKeyDailySeries(
-            date=(start + timedelta(days=i)).isoformat(),
-            input_tokens=daily_map.get((start + timedelta(days=i)).isoformat(), (0, 0))[0],
-            output_tokens=daily_map.get((start + timedelta(days=i)).isoformat(), (0, 0))[1],
-        )
-        for i in range(days)
-    ]
+    daily_map = {row.date: row for row in daily_rows}
+    daily_series = []
+    for i in range(days):
+        day = (start + timedelta(days=i)).isoformat()
+        row = daily_map.get(day)
+        daily_series.append(GatewayKeyDailySeries(
+            date=day,
+            input_tokens=row.input_tokens if row else 0,
+            output_tokens=row.output_tokens if row else 0,
+            cache_read_tokens=row.cache_read_tokens if row else 0,
+            cache_creation_tokens=row.cache_creation_tokens if row else 0,
+        ))
 
     total_input = sum(ds.input_tokens for ds in daily_series)
     total_output = sum(ds.output_tokens for ds in daily_series)
+    total_cache_read = sum(ds.cache_read_tokens for ds in daily_series)
+    total_cache_creation = sum(ds.cache_creation_tokens for ds in daily_series)
 
     # Token usage within the selected period, per gateway key.
     usage_subq = (
@@ -254,6 +261,8 @@ async def get_gateway_key_analytics(
             GatewayKeyDailyUsage.gateway_key_id.label("gateway_key_id"),
             func.sum(GatewayKeyDailyUsage.input_tokens).label("input_tokens"),
             func.sum(GatewayKeyDailyUsage.output_tokens).label("output_tokens"),
+            func.sum(GatewayKeyDailyUsage.cache_read_tokens).label("cache_read_tokens"),
+            func.sum(GatewayKeyDailyUsage.cache_creation_tokens).label("cache_creation_tokens"),
         )
         .where(GatewayKeyDailyUsage.date >= start_str, GatewayKeyDailyUsage.date <= end_str)
         .group_by(GatewayKeyDailyUsage.gateway_key_id)
@@ -278,6 +287,8 @@ async def get_gateway_key_analytics(
             User.username,
             func.coalesce(usage_subq.c.input_tokens, 0).label("input_tokens"),
             func.coalesce(usage_subq.c.output_tokens, 0).label("output_tokens"),
+            func.coalesce(usage_subq.c.cache_read_tokens, 0).label("cache_read_tokens"),
+            func.coalesce(usage_subq.c.cache_creation_tokens, 0).label("cache_creation_tokens"),
             last_used_subq.c.last_active_at,
         )
         .join(User, User.id == GatewayKey.user_id)
@@ -293,6 +304,7 @@ async def get_gateway_key_analytics(
         GatewayKeyUserUsage(
             user_id=r.user_id,
             username=r.username, input_tokens=r.input_tokens, output_tokens=r.output_tokens,
+            cache_read_tokens=r.cache_read_tokens, cache_creation_tokens=r.cache_creation_tokens,
             last_active_at=r.last_active_at,
         )
         for r in user_rows
@@ -305,6 +317,7 @@ async def get_gateway_key_analytics(
 
     return GatewayKeyAnalyticsResponse(
         time_range=range_key, total_input_tokens=total_input, total_output_tokens=total_output,
+        total_cache_read_tokens=total_cache_read, total_cache_creation_tokens=total_cache_creation,
         total_gateway_users=total_gw_users, active_gateway_users=active_gw_users,
         daily_series=daily_series, user_usages=user_usages,
     )
