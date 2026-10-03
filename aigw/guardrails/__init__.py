@@ -13,6 +13,7 @@ request body and the response stream — rather than into each of the four
 route call sites.
 """
 
+import asyncio
 import time
 from typing import NamedTuple
 
@@ -117,6 +118,13 @@ async def get_pii_policy() -> PiiPolicy:
     return _policy_cache
 
 
+# Above this size the scrub (json.loads + every regex over every text slot,
+# ~180ms/MB) runs in a worker thread so it does not freeze the event loop — and
+# with it every other in-flight stream of this single-process gateway. Below it
+# the thread hop costs more than it saves.
+_OFFLOAD_MIN_BYTES = 64 * 1024
+
+
 async def scrub_request(body: bytes) -> ScrubResult:
     """
     Apply the configured guard policy to an outbound request body.
@@ -139,12 +147,11 @@ async def scrub_request(body: bytes) -> ScrubResult:
     from aigw.config import PII_ENTITIES
 
     redact_only = policy.mode == "redact"
-    scrubbed, vault = anonymize_payload(
-        body,
-        entities=PII_ENTITIES,
-        redact_only=redact_only,
-        secret_action=policy.secret_action,
-    )
+    kwargs = dict(entities=PII_ENTITIES, redact_only=redact_only, secret_action=policy.secret_action)
+    if len(body) >= _OFFLOAD_MIN_BYTES:
+        scrubbed, vault = await asyncio.to_thread(anonymize_payload, body, **kwargs)
+    else:
+        scrubbed, vault = anonymize_payload(body, **kwargs)
     return ScrubResult(
         scrubbed,
         vault if vault and not redact_only else None,

@@ -20,6 +20,15 @@ from starlette.datastructures import Headers
 # Helpers
 # ---------------------------------------------------------------------------
 
+@pytest.fixture(autouse=True)
+def _reset_model_cooldown():
+    """Cooldown state is module-global — keep tests independent."""
+    import aigw.nine_router_client as mod
+    mod._model_cooldown.clear()
+    yield
+    mod._model_cooldown.clear()
+
+
 def _mock_request(
     method: str = "POST",
     path: str = "/v1/chat/completions",
@@ -126,16 +135,47 @@ class TestForwardToNineRouter:
             assert timeout.connect == 30.0 and timeout.pool == 10.0
 
     @pytest.mark.asyncio
-    async def test_stream_keeps_client_timeout(self):
+    async def test_stream_read_timeout_outlasts_9router_stall_watchdog(self):
+        """Stream: read timeout is raised past 9router's stall watchdog (360s)."""
         import aigw.nine_router_client as mod
         client = _mock_client(response=_mock_stream_response(200))
 
         with (
             patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
+            patch.object(mod, "NINE_ROUTER_STREAM_READ_TIMEOUT", 420.0),
             patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
         ):
             await mod.forward_to_nine_router(_mock_request(), b'{"model":"m","stream":true}')
-            assert "timeout" not in client.build_request.call_args.kwargs
+            timeout = client.build_request.call_args.kwargs["timeout"]
+            assert timeout.read == 420.0
+            assert timeout.connect == 30.0 and timeout.pool == 10.0
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "path,marker",
+        [("/v1/messages", b"event: error"), ("/v1/chat/completions", b'"type": "upstream_error"')],
+    )
+    async def test_mid_stream_failure_emits_sse_error_event(self, path, marker):
+        import aigw.nine_router_client as mod
+        resp_up = _mock_stream_response(200)
+
+        async def _broken():
+            yield b"data: partial\n\n"
+            raise httpx.ReadTimeout("stalled")
+
+        resp_up.aiter_bytes = _broken
+        client = _mock_client(response=resp_up)
+
+        with (
+            patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
+        ):
+            resp = await mod.forward_to_nine_router(_mock_request(path=path), b'{"model":"m","stream":true}')
+            chunks = [c async for c in resp.body_iterator]
+
+        assert chunks[0] == b"data: partial\n\n"
+        assert marker in chunks[-1]
+        resp_up.aclose.assert_awaited()
 
     @pytest.mark.asyncio
     async def test_adds_api_key_header_when_configured(self):
@@ -569,6 +609,99 @@ class TestMultiLevelFailover:
             await _drain(resp)
 
         assert seen == {"input": 5, "output": 3, "model": "good-model"}
+
+
+class TestOverrideCooldown:
+    """Failed override targets are skipped on later requests (aigw.model_cooldown)."""
+
+    async def _forward(self, mod, client, rules):
+        with (
+            patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
+            patch.object(mod, "_get_nine_router_override", AsyncMock(return_value=(True, rules, "auto"))),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
+        ):
+            return await mod.forward_to_nine_router(_mock_request(), b'{"model":"gpt-4","messages":[]}')
+
+    @pytest.mark.asyncio
+    async def test_transient_failure_skips_model_on_next_request(self):
+        import aigw.nine_router_client as mod
+        rules = [{"from": "gpt", "to": ["bad-model", "good-model"]}]
+
+        client1 = _mock_client(send_side_effect=[_mock_stream_response(503), _mock_stream_response(200)])
+        await self._forward(mod, client1, rules)
+        assert client1.send.await_count == 2
+
+        # Second request goes straight to good-model.
+        client2 = _mock_client(response=_mock_stream_response(200))
+        resp = await self._forward(mod, client2, rules)
+        assert isinstance(resp, StreamingResponse)
+        assert client2.send.await_count == 1
+        assert b'"model":"good-model"' in client2.build_request.call_args_list[0].kwargs["content"]
+
+    @pytest.mark.asyncio
+    async def test_connect_error_puts_model_on_cooldown(self):
+        import aigw.nine_router_client as mod
+        rules = [{"from": "gpt", "to": ["bad-model", "good-model"]}]
+        client = _mock_client(send_side_effect=[httpx.ConnectError("refused"), _mock_stream_response(200)])
+        await self._forward(mod, client, rules)
+        assert mod._model_cooldown.remaining("bad-model") > 0
+        assert mod._model_cooldown.remaining("good-model") == 0
+
+    @pytest.mark.asyncio
+    async def test_pool_timeout_fails_fast_without_cooldown(self):
+        import aigw.nine_router_client as mod
+        rules = [{"from": "gpt", "to": ["m1", "m2"]}]
+        client = _mock_client(send_side_effect=[httpx.PoolTimeout("pool full")])
+        resp = await self._forward(mod, client, rules)
+        assert isinstance(resp, JSONResponse)
+        assert resp.status_code == 503
+        assert client.send.await_count == 1
+        assert mod._model_cooldown.remaining("m1") == 0
+
+    @pytest.mark.asyncio
+    async def test_deterministic_4xx_does_not_cool_down(self):
+        import aigw.nine_router_client as mod
+        rules = [{"from": "gpt", "to": ["m1", "m2"]}]
+        client = _mock_client(send_side_effect=[_mock_stream_response(400), _mock_stream_response(200)])
+        await self._forward(mod, client, rules)
+        assert mod._model_cooldown.remaining("m1") == 0
+
+    @pytest.mark.asyncio
+    async def test_retry_after_header_sets_cooldown(self):
+        import aigw.nine_router_client as mod
+        rules = [{"from": "gpt", "to": ["m1", "m2"]}]
+        limited = _mock_stream_response(429, headers={"content-type": "application/json", "retry-after": "120"})
+        client = _mock_client(send_side_effect=[limited, _mock_stream_response(200)])
+        await self._forward(mod, client, rules)
+        assert 100 < mod._model_cooldown.remaining("m1") <= 120
+
+    @pytest.mark.asyncio
+    async def test_all_cooling_down_probes_one_model(self):
+        import aigw.nine_router_client as mod
+        rules = [{"from": "gpt", "to": ["m1", "m2"]}]
+        mod._model_cooldown.record_failure("m1", retry_after=60)
+        mod._model_cooldown.record_failure("m2", retry_after=30)
+
+        client = _mock_client(response=_mock_stream_response(200))
+        resp = await self._forward(mod, client, rules)
+        assert isinstance(resp, StreamingResponse)
+        assert client.send.await_count == 1
+        assert b'"model":"m2"' in client.build_request.call_args_list[0].kwargs["content"]
+        # The successful probe clears m2's cooldown.
+        assert mod._model_cooldown.remaining("m2") == 0
+
+    @pytest.mark.asyncio
+    async def test_single_candidate_never_tracked(self):
+        import aigw.nine_router_client as mod
+        client = _mock_client(response=_mock_stream_response(503))
+        await self._forward(mod, client, [{"from": "gpt", "to": "only-model"}])
+        assert mod._model_cooldown.remaining("only-model") == 0
+
+    def test_invalidate_override_cache_clears_cooldown(self):
+        import aigw.nine_router_client as mod
+        mod._model_cooldown.record_failure("m1")
+        mod.invalidate_nine_router_override_cache()
+        assert mod._model_cooldown.remaining("m1") == 0
 
 
 # ---------------------------------------------------------------------------

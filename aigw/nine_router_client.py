@@ -23,7 +23,15 @@ from fastapi import Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from loguru import logger
 
-from aigw.config import NINE_ROUTER_API_KEY, NINE_ROUTER_NONSTREAM_READ_TIMEOUT, NINE_ROUTER_URL
+from aigw.config import (
+    NINE_ROUTER_API_KEY,
+    NINE_ROUTER_MODEL_COOLDOWN_BASE,
+    NINE_ROUTER_MODEL_COOLDOWN_MAX,
+    NINE_ROUTER_NONSTREAM_READ_TIMEOUT,
+    NINE_ROUTER_STREAM_READ_TIMEOUT,
+    NINE_ROUTER_URL,
+)
+from aigw.model_cooldown import ModelCooldown, is_transient_status, parse_retry_after
 
 # ---------------------------------------------------------------------------
 # 9router model override — own config (toggle, rules, default), cached in-process
@@ -31,9 +39,16 @@ from aigw.config import NINE_ROUTER_API_KEY, NINE_ROUTER_NONSTREAM_READ_TIMEOUT,
 _nine_router_override_cache: tuple[bool, list[dict], str] | None = None  # (enabled, rules, default_model)
 
 
+# Cooldown for multi-level override targets that keep failing transiently —
+# later requests skip them instead of retrying the broken model every time.
+_model_cooldown = ModelCooldown(NINE_ROUTER_MODEL_COOLDOWN_BASE, NINE_ROUTER_MODEL_COOLDOWN_MAX)
+
+
 def invalidate_nine_router_override_cache() -> None:
     global _nine_router_override_cache
     _nine_router_override_cache = None
+    # Rules changed — targets may differ, so stale cooldowns must not linger.
+    _model_cooldown.clear()
 
 
 async def _get_nine_router_override() -> tuple[bool, list[dict], str]:
@@ -69,6 +84,24 @@ def _strip_context_window_suffix(model: Optional[str]) -> Optional[str]:
     if model is None:
         return None
     return re.sub(r"\[\d+[mk]\]$", "", model, flags=re.IGNORECASE)
+
+
+def _sse_error_frame(path: str, message: str) -> bytes:
+    """Build a terminal SSE error event in the dialect of the requested API.
+
+    Args:
+        path: Upstream request path — ``/messages`` means Anthropic, anything
+            else is treated as OpenAI-compatible.
+        message: Human-readable error message.
+
+    Returns:
+        One complete SSE frame.
+    """
+    if "/messages" in path:
+        payload = {"type": "error", "error": {"type": "api_error", "message": message}}
+        return f"event: error\ndata: {json.dumps(payload)}\n\n".encode()
+    payload = {"error": {"message": message, "type": "upstream_error"}}
+    return f"data: {json.dumps(payload)}\n\n".encode()
 
 
 def _rewrite_model_in_body(body: bytes, override_model: str) -> bytes:
@@ -326,10 +359,11 @@ async def forward_to_nine_router(
         pii_vault = None
 
     # Apply 9router's own model override (independent of Global Model Enforcement).
-    # Returns an ordered list of candidate models — a multi-level override yields
-    # several targets tried in order, with the default (when configured) as the
-    # final level. `candidates` is a list of Optional[str]: None means "send the
-    # original body untouched" (no model key to rewrite).
+    # Returns an ordered list of candidate models — a matching multi-level rule
+    # yields its targets tried in order; with no matching rule the default (when
+    # configured) is the single candidate. `candidates` is a list of
+    # Optional[str]: None means "send the original body untouched" (no model key
+    # to rewrite).
     enabled, rules, default_model = await _get_nine_router_override()
     original_model: Optional[str] = None
     raw_model: Optional[str] = None
@@ -359,6 +393,12 @@ async def forward_to_nine_router(
     else:
         candidates = [original_model]
 
+    # Only a multi-level override has somewhere else to go; its targets come
+    # from admin config, which also keeps the cooldown cache bounded.
+    use_cooldown = len(candidates) > 1
+    if use_cooldown:
+        candidates = _model_cooldown.order(candidates)
+
     headers = _build_headers(original_request)
     logger.info(f"9router fallback: forwarding {original_request.method} {target_path}")
 
@@ -382,12 +422,15 @@ async def forward_to_nine_router(
 
     # Non-streaming: 9router sends nothing until the full completion is ready,
     # so the client's streaming read timeout (between chunks) is too short.
+    # Streaming: outlast 9router's stall watchdog so it reports the stall
+    # instead of us cutting the connection first.
     request_kwargs: dict = {}
     base = getattr(client, "timeout", None)
-    if not is_stream and isinstance(base, httpx.Timeout) and base.read is not None:
+    if isinstance(base, httpx.Timeout) and base.read is not None:
+        floor = NINE_ROUTER_STREAM_READ_TIMEOUT if is_stream else NINE_ROUTER_NONSTREAM_READ_TIMEOUT
         request_kwargs["timeout"] = httpx.Timeout(
             connect=base.connect,
-            read=max(base.read, NINE_ROUTER_NONSTREAM_READ_TIMEOUT),
+            read=max(base.read, floor),
             write=base.write,
             pool=base.pool,
         )
@@ -430,6 +473,15 @@ async def forward_to_nine_router(
                 status_code=503,
                 content={"error": {"message": f"9router fallback unavailable: {exc}", "type": "service_unavailable"}},
             )
+        except httpx.PoolTimeout as exc:
+            # Our own connection pool is saturated — not the model's fault, and
+            # the next candidate would wait on the same pool. Fail fast, no cooldown.
+            logger.error(f"9router fallback: connection pool exhausted: {exc}")
+            await _maybe_close_client()
+            return JSONResponse(
+                status_code=503,
+                content={"error": {"message": "Gateway is at connection capacity, retry shortly.", "type": "service_unavailable"}},
+            )
         except httpx.TimeoutException as exc:
             logger.error(f"9router fallback: timeout: {exc}")
             last_error = JSONResponse(
@@ -444,6 +496,8 @@ async def forward_to_nine_router(
             )
 
         if last_error is not None:
+            if use_cooldown and candidate is not None:
+                _model_cooldown.record_failure(candidate)
             has_more = idx < len(candidates) - 1
             if has_more:
                 logger.info(f"9router override failover: {candidate!r} failed, trying next candidate")
@@ -461,6 +515,12 @@ async def forward_to_nine_router(
             error_body = await response.aread()
             await response.aclose()
             logger.warning(f"9router fallback returned {response.status_code}: {error_body[:200]}")
+            # Deterministic 4xx (bad payload, context overflow...) would fail the
+            # same way later, so only transient errors put the model on cooldown.
+            if use_cooldown and candidate is not None and is_transient_status(response.status_code):
+                _model_cooldown.record_failure(
+                    candidate, parse_retry_after(response.headers.get("retry-after"))
+                )
             if idx < len(candidates) - 1:
                 logger.info(f"9router override failover: {candidate!r} failed ({response.status_code}), trying next candidate")
                 continue
@@ -474,6 +534,11 @@ async def forward_to_nine_router(
                 status_code=response.status_code,
                 content={"error": {"message": error_body.decode("utf-8", errors="replace"), "type": "nine_router_error"}},
             )
+
+        if use_cooldown and candidate is not None:
+            _model_cooldown.record_success(candidate)
+
+        is_sse = "event-stream" in response.headers.get("content-type", "")
 
         async def _stream_and_close() -> AsyncIterator[bytes]:
             token_counts = {"input": 0, "output": 0}
@@ -492,6 +557,13 @@ async def forward_to_nine_router(
                             text = chunk.decode("utf-8", errors="ignore")
                             if text:
                                 _accumulate_usage_from_chunk(text, token_counts, model_box)
+            except httpx.HTTPError as exc:
+                # Upstream died mid-stream (read timeout, reset...). Headers are
+                # already sent, so the status can't change — but an SSE client
+                # should still get a terminal error event, not a silent cut.
+                logger.error(f"9router stream interrupted after headers: {exc!r}")
+                if is_sse:
+                    yield _sse_error_frame(target_path, f"Upstream stream interrupted: {type(exc).__name__}")
             finally:
                 # aclose() returns the connection to the shared pool; the client itself
                 # is only closed when we privately own it.

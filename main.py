@@ -45,6 +45,8 @@ from aigw.config import (
     PROXY_API_KEY,
     LOG_LEVEL,
     SERVER_HOST,
+    HTTP_MAX_CONNECTIONS,
+    HTTP_MAX_KEEPALIVE_CONNECTIONS,
     SERVER_PORT,
     DEFAULT_SERVER_HOST,
     DEFAULT_SERVER_PORT,
@@ -295,10 +297,11 @@ async def lifespan(app: FastAPI):
     
     # Create shared HTTP client with connection pooling
     # This reduces memory usage and enables connection reuse across requests
-    # Limits: max 100 total connections, max 20 keep-alive connections
+    # Each in-flight stream holds a connection for its whole duration, so
+    # max_connections is the concurrent-stream ceiling (see aigw.config).
     limits = httpx.Limits(
-        max_connections=100,
-        max_keepalive_connections=20,
+        max_connections=HTTP_MAX_CONNECTIONS,
+        max_keepalive_connections=HTTP_MAX_KEEPALIVE_CONNECTIONS,
         keepalive_expiry=30.0  # Close idle connections after 30 seconds
     )
     # Timeout configuration for streaming (long read timeout for model "thinking")

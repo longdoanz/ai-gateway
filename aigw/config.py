@@ -313,6 +313,13 @@ FIRST_TOKEN_TIMEOUT: float = float(os.getenv("FIRST_TOKEN_TIMEOUT", "60"))
 
 # Read timeout for streaming responses (in seconds).
 # This is the maximum time to wait for data between chunks during streaming.
+# Shared upstream connection pool (main.py). Every in-flight stream holds one
+# connection for its whole duration, so HTTP_MAX_CONNECTIONS caps concurrent
+# streams; each also costs ~2 file descriptors (client + upstream socket), so
+# keep it well under the container's nofile limit.
+HTTP_MAX_CONNECTIONS: int = int(os.getenv("HTTP_MAX_CONNECTIONS", "300"))
+HTTP_MAX_KEEPALIVE_CONNECTIONS: int = int(os.getenv("HTTP_MAX_KEEPALIVE_CONNECTIONS", "50"))
+
 # Should be longer than FIRST_TOKEN_TIMEOUT since the model may pause between chunks
 # while "thinking" (especially for tool calls or complex reasoning).
 # Default: 300 seconds (5 minutes) - generous timeout to avoid premature disconnects.
@@ -508,6 +515,18 @@ NINE_ROUTER_URL: str = os.getenv("NINE_ROUTER_URL", "")
 
 # Read timeout (seconds) for non-streaming requests forwarded to 9router.
 # Upstream returns nothing until the whole completion is generated, which can
+# Cooldown for multi-level model override targets (aigw.model_cooldown): a
+# target that fails with 429/5xx/timeout is skipped for BASE seconds, doubling
+# per consecutive failure up to MAX (Retry-After wins, capped at MAX).
+# BASE=0 disables the cooldown (every request retries every target).
+NINE_ROUTER_MODEL_COOLDOWN_BASE: float = float(os.getenv("NINE_ROUTER_MODEL_COOLDOWN_BASE", "10"))
+NINE_ROUTER_MODEL_COOLDOWN_MAX: float = float(os.getenv("NINE_ROUTER_MODEL_COOLDOWN_MAX", "300"))
+
+# Read timeout (seconds) between chunks of a STREAMING response from 9router.
+# Must exceed 9router's STREAM_STALL_TIMEOUT_MS (default 360s) so 9router's own
+# watchdog fires first and reports a real error instead of us cutting the stream.
+NINE_ROUTER_STREAM_READ_TIMEOUT: float = float(os.getenv("NINE_ROUTER_STREAM_READ_TIMEOUT", "420"))
+
 # take several minutes for large prompts. Order the layers inner < outer so
 # the innermost one fails first with a proper error: 9router
 # FETCH_NONSTREAM_TIMEOUT_MS (540s) < this (570s) < nginx proxy_read_timeout (600s).
