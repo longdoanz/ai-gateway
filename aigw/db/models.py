@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -145,6 +145,11 @@ class GatewayKeyDailyUsage(Base):
     model: Mapped[str] = mapped_column(String(100), nullable=False, default="unknown")
     input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Breakdown of input_tokens: the part served from / written to the
+    # provider's prompt cache (already INCLUDED in input_tokens — don't add).
+    # BigInteger: cache reads on an agent loop run ~100k per request.
+    cache_read_tokens: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0", nullable=False)
+    cache_creation_tokens: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
     key_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("api_keys.id"), nullable=True)
 
@@ -237,6 +242,8 @@ class ServiceAccountDailyUsage(Base):
     model: Mapped[str] = mapped_column(String(100), nullable=False, default="unknown")
     input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    cache_read_tokens: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0", nullable=False)
+    cache_creation_tokens: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
     service_account: Mapped["ServiceAccount"] = relationship("ServiceAccount", back_populates="daily_usages")

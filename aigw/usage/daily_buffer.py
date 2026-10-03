@@ -75,14 +75,18 @@ daily_buffer = DailyBuffer()
 
 class GatewayKeyDailyBuffer:
     def __init__(self) -> None:
-        self._buffer: dict[tuple[int, str, int | None, str], tuple[int, int]] = {}
+        # value: (input, output, cache_read, cache_creation)
+        self._buffer: dict[tuple[int, str, int | None, str], tuple[int, int, int, int]] = {}
         self._lock = asyncio.Lock()
         self._task: asyncio.Task | None = None
 
-    def record(self, gateway_key_id: int, date_str: str, input_tokens: int, output_tokens: int, model: str = "unknown", key_id: int | None = None) -> None:
+    def record(self, gateway_key_id: int, date_str: str, input_tokens: int, output_tokens: int, model: str = "unknown", key_id: int | None = None, cache_read_tokens: int = 0, cache_creation_tokens: int = 0) -> None:
         key = (gateway_key_id, date_str, key_id, model)
-        cur = self._buffer.get(key, (0, 0))
-        self._buffer[key] = (cur[0] + input_tokens, cur[1] + output_tokens)
+        self._add(key, (input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens))
+
+    def _add(self, key: tuple[int, str, int | None, str], value: tuple[int, int, int, int]) -> None:
+        cur = self._buffer.get(key, (0, 0, 0, 0))
+        self._buffer[key] = tuple(a + b for a, b in zip(cur, value))
 
     async def flush(self) -> None:
         if not self._buffer:
@@ -97,9 +101,12 @@ class GatewayKeyDailyBuffer:
         try:
             from aigw.db.repositories import increment_gateway_key_daily_usage
             async with async_session_factory() as session:
-                for (gw_key_id, date_str, key_id, model), (in_tok, out_tok) in snapshot.items():
+                for (gw_key_id, date_str, key_id, model), (in_tok, out_tok, cache_read, cache_creation) in snapshot.items():
                     try:
-                        await increment_gateway_key_daily_usage(session, gw_key_id, date_str, in_tok, out_tok, model=model, key_id=key_id)
+                        await increment_gateway_key_daily_usage(
+                            session, gw_key_id, date_str, in_tok, out_tok, model=model, key_id=key_id,
+                            cache_read_tokens=cache_read, cache_creation_tokens=cache_creation,
+                        )
                     except IntegrityError as ie:
                         msg = str(ie)
                         if "foreign key" in msg.lower() and ("api_keys" in msg or "key_id" in msg.lower()):
@@ -111,8 +118,7 @@ class GatewayKeyDailyBuffer:
             logger.error(f"GatewayKeyDailyBuffer: flush failed: {e}")
             async with self._lock:
                 for k, v in snapshot.items():
-                    cur = self._buffer.get(k, (0, 0))
-                    self._buffer[k] = (cur[0] + v[0], cur[1] + v[1])
+                    self._add(k, v)
 
     async def _run_loop(self) -> None:
         while True:

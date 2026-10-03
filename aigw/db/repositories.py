@@ -492,11 +492,19 @@ async def increment_gateway_key_usage(session: AsyncSession, gateway_key_id: int
     await session.commit()
 
 
-async def increment_gateway_key_daily_usage(session: AsyncSession, gateway_key_id: int, date: str, input_tokens: int = 0, output_tokens: int = 0, model: str = "unknown", key_id: int | None = None) -> None:
-    stmt = pg_insert(GatewayKeyDailyUsage).values(gateway_key_id=gateway_key_id, date=date, model=model, input_tokens=input_tokens, output_tokens=output_tokens, key_id=key_id)
+async def increment_gateway_key_daily_usage(session: AsyncSession, gateway_key_id: int, date: str, input_tokens: int = 0, output_tokens: int = 0, model: str = "unknown", key_id: int | None = None, cache_read_tokens: int = 0, cache_creation_tokens: int = 0) -> None:
+    stmt = pg_insert(GatewayKeyDailyUsage).values(
+        gateway_key_id=gateway_key_id, date=date, model=model, input_tokens=input_tokens, output_tokens=output_tokens, key_id=key_id,
+        cache_read_tokens=cache_read_tokens, cache_creation_tokens=cache_creation_tokens,
+    )
     stmt = stmt.on_conflict_do_update(
         constraint="uq_gw_daily_usage_gwkey_date_poolkey_model",
-        set_={"input_tokens": GatewayKeyDailyUsage.input_tokens + input_tokens, "output_tokens": GatewayKeyDailyUsage.output_tokens + output_tokens},
+        set_={
+            "input_tokens": GatewayKeyDailyUsage.input_tokens + input_tokens,
+            "output_tokens": GatewayKeyDailyUsage.output_tokens + output_tokens,
+            "cache_read_tokens": GatewayKeyDailyUsage.cache_read_tokens + cache_read_tokens,
+            "cache_creation_tokens": GatewayKeyDailyUsage.cache_creation_tokens + cache_creation_tokens,
+        },
     )
     await session.execute(stmt)
     await session.commit()
@@ -810,6 +818,8 @@ async def increment_service_account_daily_usage(
     input_tokens: int = 0,
     output_tokens: int = 0,
     model: str = "unknown",
+    cache_read_tokens: int = 0,
+    cache_creation_tokens: int = 0,
 ) -> None:
     """Increment the daily per-model token usage for a service account.
 
@@ -817,9 +827,11 @@ async def increment_service_account_daily_usage(
         session: Active async database session.
         service_account_id: Service account whose usage to increment.
         date: Day bucket in "YYYY-MM-DD" format.
-        input_tokens: Input tokens to add.
+        input_tokens: Prompt tokens to add, cached ones included.
         output_tokens: Output tokens to add.
         model: Model id these tokens were consumed against.
+        cache_read_tokens: Part of input_tokens served from the provider cache.
+        cache_creation_tokens: Part of input_tokens written to the provider cache.
     """
     stmt = pg_insert(ServiceAccountDailyUsage).values(
         service_account_id=service_account_id,
@@ -827,12 +839,16 @@ async def increment_service_account_daily_usage(
         model=model,
         input_tokens=input_tokens,
         output_tokens=output_tokens,
+        cache_read_tokens=cache_read_tokens,
+        cache_creation_tokens=cache_creation_tokens,
     )
     stmt = stmt.on_conflict_do_update(
         constraint="uq_sa_daily_usage_sa_date_model",
         set_={
             "input_tokens": ServiceAccountDailyUsage.input_tokens + input_tokens,
             "output_tokens": ServiceAccountDailyUsage.output_tokens + output_tokens,
+            "cache_read_tokens": ServiceAccountDailyUsage.cache_read_tokens + cache_read_tokens,
+            "cache_creation_tokens": ServiceAccountDailyUsage.cache_creation_tokens + cache_creation_tokens,
         },
     )
     await session.execute(stmt)

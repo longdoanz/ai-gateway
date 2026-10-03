@@ -350,7 +350,7 @@ class TestOnUsageCallback:
         client = _mock_client(response=resp_mock)
         seen = {}
 
-        async def on_usage(it, ot, model):
+        async def on_usage(it, ot, model, **cache):
             seen["input"], seen["output"], seen["model"] = it, ot, model
 
         with (
@@ -375,7 +375,7 @@ class TestOnUsageCallback:
         client = _mock_client(response=resp_mock)
         seen = {}
 
-        async def on_usage(it, ot, model):
+        async def on_usage(it, ot, model, **cache):
             seen["input"], seen["output"], seen["model"] = it, ot, model
 
         with (
@@ -389,33 +389,55 @@ class TestOnUsageCallback:
         assert seen == {"input": 30, "output": 15, "model": "claude-opus-4-8"}
 
     @pytest.mark.parametrize(
-        "chunk, expected_input",
+        "chunk",
         [
             # Anthropic: cache reads/writes are reported beside input_tokens and
             # must be added back, or a cached agent loop bills ~16 input tokens.
-            (
-                'data: {"type":"message_start","message":{"usage":{"input_tokens":16,'
-                '"cache_creation_input_tokens":500,"cache_read_input_tokens":90000}}}\n\n',
-                90516,
-            ),
+            'data: {"type":"message_start","message":{"usage":{"input_tokens":16,'
+            '"cache_creation_input_tokens":500,"cache_read_input_tokens":90000}}}\n\n',
             # 9router's OpenAI translation carries both prompt_tokens (cache
             # included) and input_tokens (uncached only) — prompt_tokens wins.
-            (
-                'data: {"usage":{"prompt_tokens":90516,"input_tokens":16,'
-                '"completion_tokens":5}}\n\n',
-                90516,
-            ),
+            'data: {"usage":{"prompt_tokens":90516,"input_tokens":16,"completion_tokens":5,'
+            '"cache_read_input_tokens":90000,"cache_creation_input_tokens":500}}\n\n',
+            # Plain OpenAI: cache hits only in prompt_tokens_details.
+            'data: {"usage":{"prompt_tokens":90516,"completion_tokens":5,'
+            '"prompt_tokens_details":{"cached_tokens":90000,"cache_creation_tokens":500}}}\n\n',
         ],
     )
-    def test_input_includes_cached_tokens(self, chunk, expected_input):
+    def test_input_is_full_prompt_with_cache_breakdown(self, chunk):
         import aigw.nine_router_client as mod
-        counts = {"input": 0, "output": 0}
+        counts = {"input": 0, "output": 0, "cache_read": 0, "cache_creation": 0}
         mod._accumulate_usage_from_chunk(chunk, counts, [None])
-        assert counts["input"] == expected_input
+        assert (counts["input"], counts["cache_read"], counts["cache_creation"]) == (90516, 90000, 500)
+
+    @pytest.mark.asyncio
+    async def test_callback_receives_cache_breakdown(self):
+        import aigw.nine_router_client as mod
+        chunks = [
+            b'event: message_start\ndata: {"type":"message_start","message":{"model":"claude-opus-4-8",'
+            b'"usage":{"input_tokens":16,"cache_read_input_tokens":1000,"cache_creation_input_tokens":20}}}\n\n',
+            b'event: message_delta\ndata: {"type":"message_delta","usage":{"output_tokens":15}}\n\n',
+        ]
+        client = _mock_client(response=_mock_stream_response(200, chunks=chunks))
+        seen = {}
+
+        async def on_usage(it, ot, model, **cache):
+            seen.update(input=it, output=ot, **cache)
+
+        with (
+            patch.object(mod, "NINE_ROUTER_URL", "http://ninerouter:20128"),
+            patch("aigw.nine_router_client.httpx.AsyncClient", return_value=client),
+        ):
+            resp = await mod.forward_to_nine_router(_mock_request(path="/v1/messages"), b"{}", on_usage=on_usage)
+            await _drain(resp)
+
+        assert seen == {
+            "input": 1036, "output": 15, "cache_read_tokens": 1000, "cache_creation_tokens": 20,
+        }
 
     def test_output_only_delta_keeps_cached_input(self):
         import aigw.nine_router_client as mod
-        counts = {"input": 0, "output": 0}
+        counts = {"input": 0, "output": 0, "cache_read": 0, "cache_creation": 0}
         mod._accumulate_usage_from_chunk(
             'data: {"type":"message_start","message":{"usage":{"input_tokens":16,'
             '"cache_read_input_tokens":1000}}}\n\n',
@@ -425,7 +447,7 @@ class TestOnUsageCallback:
         mod._accumulate_usage_from_chunk(
             'data: {"type":"message_delta","usage":{"output_tokens":42}}\n\n', counts, [None]
         )
-        assert counts == {"input": 1016, "output": 42}
+        assert counts == {"input": 1016, "output": 42, "cache_read": 1000, "cache_creation": 0}
 
     @pytest.mark.asyncio
     async def test_callback_fired_with_zeroes_when_no_usage(self):
@@ -435,7 +457,7 @@ class TestOnUsageCallback:
         client = _mock_client(response=resp_mock)
         seen = {}
 
-        async def on_usage(it, ot, model):
+        async def on_usage(it, ot, model, **cache):
             seen["input"], seen["output"], seen["model"] = it, ot, model
 
         with (
@@ -458,7 +480,7 @@ class TestOnUsageCallback:
         resp_mock = _mock_stream_response(200, chunks=chunks)
         client = _mock_client(response=resp_mock)
 
-        async def on_usage(it, ot, model):
+        async def on_usage(it, ot, model, **cache):
             raise RuntimeError("tracking blew up")
 
         with (
@@ -635,7 +657,7 @@ class TestMultiLevelFailover:
         rules = [{"from": "gpt", "to": ["bad-model", "good-model"]}]
         seen = {}
 
-        async def on_usage(it, ot, model):
+        async def on_usage(it, ot, model, **cache):
             seen["input"], seen["output"], seen["model"] = it, ot, model
 
         with (

@@ -207,27 +207,44 @@ def is_nine_router_enabled() -> bool:
     return bool(NINE_ROUTER_URL)
 
 
-# Callback signature: (input_tokens, output_tokens, model) -> awaitable
-OnUsage = Callable[[int, int, str], Awaitable[None]]
+# Callback signature:
+#   (input_tokens, output_tokens, model, *, cache_read_tokens, cache_creation_tokens) -> awaitable
+# input_tokens is the FULL prompt (cached included); the cache_* kwargs are the
+# cached subset of it, reported for breakdown only — never add them to input.
+OnUsage = Callable[..., Awaitable[None]]
 
 
-def _prompt_tokens(usage: dict) -> int | None:
+def _split_prompt_usage(usage: dict) -> tuple[int, int, int] | None:
     """
-    Total prompt tokens from a usage object, cached tokens included.
+    Read a usage object's prompt side as (total prompt, cache read, cache write).
+
+    Anthropic reports the three disjointly (``input_tokens`` is only the
+    uncached tail — a few dozen tokens on a cached agent loop), so the total
+    is their sum. OpenAI's ``prompt_tokens`` is already the whole prompt, with
+    cache hits in ``prompt_tokens_details.cached_tokens``; 9router's translated
+    chunks carry both shapes at once, and ``prompt_tokens`` wins when present.
 
     Args:
         usage: An OpenAI or Anthropic ``usage`` dict.
 
     Returns:
-        The prompt token count, or None when the object carries no input field
-        (e.g. an Anthropic ``message_delta`` that only reports output).
+        (total_prompt, cache_read, cache_creation) — the cache parts are a
+        subset of the total — or None when the object carries no prompt-side
+        field (e.g. an Anthropic ``message_delta`` with only output).
     """
-    if usage.get("prompt_tokens") is not None:
-        return int(usage["prompt_tokens"])
-    keys = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
-    if all(usage.get(k) is None for k in keys):
+    details = usage.get("prompt_tokens_details")
+    details = details if isinstance(details, dict) else {}
+    cache_read = usage.get("cache_read_input_tokens", details.get("cached_tokens"))
+    cache_creation = usage.get("cache_creation_input_tokens", details.get("cache_creation_tokens"))
+    prompt = usage.get("prompt_tokens")
+    uncached = usage.get("input_tokens")
+    if prompt is None and uncached is None and cache_read is None and cache_creation is None:
         return None
-    return sum(int(usage.get(k) or 0) for k in keys)
+    cache_read = int(cache_read or 0)
+    cache_creation = int(cache_creation or 0)
+    if prompt is not None:
+        return int(prompt), cache_read, cache_creation
+    return int(uncached or 0) + cache_read + cache_creation, cache_read, cache_creation
 
 
 def _accumulate_usage_from_chunk(chunk: str, token_counts: dict, model_box: list) -> None:
@@ -239,35 +256,34 @@ def _accumulate_usage_from_chunk(chunk: str, token_counts: dict, model_box: list
     malformed JSON, handles both OpenAI (prompt_tokens/completion_tokens) and
     Anthropic (input_tokens/output_tokens, nested under "message").
 
-    Input is billed as the full prompt: Anthropic reports cache reads/writes
-    separately from ``input_tokens`` (which is only the uncached tail — often
-    a few dozen tokens on a cached agent loop), so they are added back in.
-    OpenAI's ``prompt_tokens`` already includes cached tokens and is preferred
-    when present (9router's translated chunks carry both fields).
+    ``input`` is the full prompt including cached tokens; ``cache_read`` /
+    ``cache_creation`` break out the cached part of it (see
+    ``_split_prompt_usage``).
     """
     import json
+
+    def _apply(usage: dict) -> None:
+        prompt = _split_prompt_usage(usage)
+        if prompt is not None:
+            # Overwrite the triple together so the breakdown always matches
+            # its total; an all-zero triple only means "not reported".
+            if prompt[0] > 0:
+                token_counts["input"], token_counts["cache_read"], token_counts["cache_creation"] = prompt
+        ot = usage.get("output_tokens") or usage.get("completion_tokens")
+        if ot is not None and int(ot) > 0:
+            token_counts["output"] = int(ot)
 
     def _scan(parsed: dict) -> None:
         usage = parsed.get("usage")
         if isinstance(usage, dict):
-            it = _prompt_tokens(usage)
-            ot = usage.get("output_tokens") or usage.get("completion_tokens")
-            if it is not None and int(it) > 0:
-                token_counts["input"] = int(it)
-            if ot is not None and int(ot) > 0:
-                token_counts["output"] = int(ot)
+            _apply(usage)
         msg = parsed.get("message")
         if isinstance(msg, dict):
             if model_box[0] is None and msg.get("model"):
                 model_box[0] = msg.get("model")
             msg_usage = msg.get("usage")
             if isinstance(msg_usage, dict):
-                it = _prompt_tokens(msg_usage)
-                ot = msg_usage.get("output_tokens")
-                if it is not None and int(it) > 0:
-                    token_counts["input"] = int(it)
-                if ot is not None and int(ot) > 0:
-                    token_counts["output"] = int(ot)
+                _apply(msg_usage)
         if model_box[0] is None and parsed.get("model"):
             model_box[0] = parsed.get("model")
 
@@ -566,7 +582,7 @@ async def forward_to_nine_router(
         is_sse = "event-stream" in response.headers.get("content-type", "")
 
         async def _stream_and_close() -> AsyncIterator[bytes]:
-            token_counts = {"input": 0, "output": 0}
+            token_counts = {"input": 0, "output": 0, "cache_read": 0, "cache_creation": 0}
             model_box: list = [None]
             try:
                 async for chunk in response.aiter_bytes():
@@ -597,7 +613,13 @@ async def forward_to_nine_router(
                 if on_usage is not None:
                     try:
                         await asyncio.shield(
-                            on_usage(token_counts["input"], token_counts["output"], model_box[0] or "unknown")
+                            on_usage(
+                                token_counts["input"],
+                                token_counts["output"],
+                                model_box[0] or "unknown",
+                                cache_read_tokens=token_counts["cache_read"],
+                                cache_creation_tokens=token_counts["cache_creation"],
+                            )
                         )
                     except Exception as exc:  # never let tracking break the stream
                         logger.debug(f"9router usage callback failed: {exc}")

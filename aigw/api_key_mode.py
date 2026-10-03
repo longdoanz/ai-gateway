@@ -201,7 +201,7 @@ def build_api_key_headers(
     }
 
 
-async def _track_gateway_key_usage(gateway_key_id: int, input_tokens: int = 0, output_tokens: int = 0, model: str = "unknown", key_id: int | None = None) -> None:
+async def _track_gateway_key_usage(gateway_key_id: int, input_tokens: int = 0, output_tokens: int = 0, model: str = "unknown", key_id: int | None = None, cache_read_tokens: int = 0, cache_creation_tokens: int = 0) -> None:
     if not is_db_configured():
         return
     try:
@@ -213,7 +213,10 @@ async def _track_gateway_key_usage(gateway_key_id: int, input_tokens: int = 0, o
         async with async_session_factory() as session:
             await increment_gateway_key_usage(session, gateway_key_id, month, 1, key_id=key_id)
         today = time.strftime("%Y-%m-%d")
-        gateway_key_daily_buffer.record(gateway_key_id, today, input_tokens, output_tokens, model=model, key_id=key_id)
+        gateway_key_daily_buffer.record(
+            gateway_key_id, today, input_tokens, output_tokens, model=model, key_id=key_id,
+            cache_read_tokens=cache_read_tokens, cache_creation_tokens=cache_creation_tokens,
+        )
     except Exception as e:
         logger.debug(f"Gateway key usage tracking failed: {e}")
 
@@ -253,10 +256,13 @@ def _make_nine_router_usage_cb(gateway_key_id: int | None):
     if gateway_key_id is None or not is_db_configured():
         return None
 
-    async def _cb(input_tokens: int, output_tokens: int, model: str) -> None:
+    async def _cb(
+        input_tokens: int, output_tokens: int, model: str, cache_read_tokens: int = 0, cache_creation_tokens: int = 0
+    ) -> None:
         # key_id=None: usage is attributed to the gateway key only, not a Kiro key.
         await _track_gateway_key_usage(
-            gateway_key_id, input_tokens, output_tokens, model=model, key_id=None
+            gateway_key_id, input_tokens, output_tokens, model=model, key_id=None,
+            cache_read_tokens=cache_read_tokens, cache_creation_tokens=cache_creation_tokens,
         )
 
     return _cb

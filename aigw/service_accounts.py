@@ -168,13 +168,16 @@ def make_service_account_usage_cb(service_account_id: int) -> OnUsage | None:
         service_account_id: The service account whose usage to record.
 
     Returns:
-        An async callback of (input_tokens, output_tokens, model) -> None,
+        An async callback of (input_tokens, output_tokens, model,
+        cache_read_tokens=0, cache_creation_tokens=0) -> None,
         or None when the database isn't configured (nothing to track).
     """
     if not _is_db_configured():
         return None
 
-    async def _cb(input_tokens: int, output_tokens: int, model: str) -> None:
+    async def _cb(
+        input_tokens: int, output_tokens: int, model: str, cache_read_tokens: int = 0, cache_creation_tokens: int = 0
+    ) -> None:
         import time
 
         from aigw.db.engine import async_session_factory
@@ -186,7 +189,8 @@ def make_service_account_usage_cb(service_account_id: int) -> OnUsage | None:
             async with async_session_factory() as session:
                 await increment_service_account_usage(session, service_account_id, month, 1)
                 await increment_service_account_daily_usage(
-                    session, service_account_id, today, input_tokens, output_tokens, model=model
+                    session, service_account_id, today, input_tokens, output_tokens, model=model,
+                    cache_read_tokens=cache_read_tokens, cache_creation_tokens=cache_creation_tokens,
                 )
         except Exception as e:
             logger.debug(f"Service account usage tracking failed: {e}")
