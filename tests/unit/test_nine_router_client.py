@@ -388,6 +388,45 @@ class TestOnUsageCallback:
 
         assert seen == {"input": 30, "output": 15, "model": "claude-opus-4-8"}
 
+    @pytest.mark.parametrize(
+        "chunk, expected_input",
+        [
+            # Anthropic: cache reads/writes are reported beside input_tokens and
+            # must be added back, or a cached agent loop bills ~16 input tokens.
+            (
+                'data: {"type":"message_start","message":{"usage":{"input_tokens":16,'
+                '"cache_creation_input_tokens":500,"cache_read_input_tokens":90000}}}\n\n',
+                90516,
+            ),
+            # 9router's OpenAI translation carries both prompt_tokens (cache
+            # included) and input_tokens (uncached only) — prompt_tokens wins.
+            (
+                'data: {"usage":{"prompt_tokens":90516,"input_tokens":16,'
+                '"completion_tokens":5}}\n\n',
+                90516,
+            ),
+        ],
+    )
+    def test_input_includes_cached_tokens(self, chunk, expected_input):
+        import aigw.nine_router_client as mod
+        counts = {"input": 0, "output": 0}
+        mod._accumulate_usage_from_chunk(chunk, counts, [None])
+        assert counts["input"] == expected_input
+
+    def test_output_only_delta_keeps_cached_input(self):
+        import aigw.nine_router_client as mod
+        counts = {"input": 0, "output": 0}
+        mod._accumulate_usage_from_chunk(
+            'data: {"type":"message_start","message":{"usage":{"input_tokens":16,'
+            '"cache_read_input_tokens":1000}}}\n\n',
+            counts,
+            [None],
+        )
+        mod._accumulate_usage_from_chunk(
+            'data: {"type":"message_delta","usage":{"output_tokens":42}}\n\n', counts, [None]
+        )
+        assert counts == {"input": 1016, "output": 42}
+
     @pytest.mark.asyncio
     async def test_callback_fired_with_zeroes_when_no_usage(self):
         import aigw.nine_router_client as mod

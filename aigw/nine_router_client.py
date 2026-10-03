@@ -211,6 +211,25 @@ def is_nine_router_enabled() -> bool:
 OnUsage = Callable[[int, int, str], Awaitable[None]]
 
 
+def _prompt_tokens(usage: dict) -> int | None:
+    """
+    Total prompt tokens from a usage object, cached tokens included.
+
+    Args:
+        usage: An OpenAI or Anthropic ``usage`` dict.
+
+    Returns:
+        The prompt token count, or None when the object carries no input field
+        (e.g. an Anthropic ``message_delta`` that only reports output).
+    """
+    if usage.get("prompt_tokens") is not None:
+        return int(usage["prompt_tokens"])
+    keys = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
+    if all(usage.get(k) is None for k in keys):
+        return None
+    return sum(int(usage.get(k) or 0) for k in keys)
+
+
 def _accumulate_usage_from_chunk(chunk: str, token_counts: dict, model_box: list) -> None:
     """
     Parse usage/model fields from an SSE chunk (or whole JSON body) and update
@@ -219,13 +238,19 @@ def _accumulate_usage_from_chunk(chunk: str, token_counts: dict, model_box: list
     Mirrors api_key_mode._accumulate_tokens_from_chunk: tolerant of partial /
     malformed JSON, handles both OpenAI (prompt_tokens/completion_tokens) and
     Anthropic (input_tokens/output_tokens, nested under "message").
+
+    Input is billed as the full prompt: Anthropic reports cache reads/writes
+    separately from ``input_tokens`` (which is only the uncached tail — often
+    a few dozen tokens on a cached agent loop), so they are added back in.
+    OpenAI's ``prompt_tokens`` already includes cached tokens and is preferred
+    when present (9router's translated chunks carry both fields).
     """
     import json
 
     def _scan(parsed: dict) -> None:
         usage = parsed.get("usage")
         if isinstance(usage, dict):
-            it = usage.get("input_tokens") or usage.get("prompt_tokens")
+            it = _prompt_tokens(usage)
             ot = usage.get("output_tokens") or usage.get("completion_tokens")
             if it is not None and int(it) > 0:
                 token_counts["input"] = int(it)
@@ -237,7 +262,7 @@ def _accumulate_usage_from_chunk(chunk: str, token_counts: dict, model_box: list
                 model_box[0] = msg.get("model")
             msg_usage = msg.get("usage")
             if isinstance(msg_usage, dict):
-                it = msg_usage.get("input_tokens")
+                it = _prompt_tokens(msg_usage)
                 ot = msg_usage.get("output_tokens")
                 if it is not None and int(it) > 0:
                     token_counts["input"] = int(it)

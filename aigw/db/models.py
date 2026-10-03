@@ -109,8 +109,10 @@ class GatewayKey(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
     owner: Mapped["User"] = relationship("User", back_populates="gateway_key")
-    usages: Mapped[list["GatewayKeyUsage"]] = relationship("GatewayKeyUsage", back_populates="gateway_key", lazy="selectin", cascade="all, delete-orphan")
-    daily_usages: Mapped[list["GatewayKeyDailyUsage"]] = relationship("GatewayKeyDailyUsage", back_populates="gateway_key", lazy="selectin", cascade="all, delete-orphan")
+    # noload: usage tables grow by one row per request and nothing reads them
+    # through the key — selectin here cost ~200ms on every auth lookup.
+    usages: Mapped[list["GatewayKeyUsage"]] = relationship("GatewayKeyUsage", back_populates="gateway_key", lazy="noload", cascade="all, delete-orphan", passive_deletes=True)
+    daily_usages: Mapped[list["GatewayKeyDailyUsage"]] = relationship("GatewayKeyDailyUsage", back_populates="gateway_key", lazy="noload", cascade="all, delete-orphan", passive_deletes=True)
 
 
 class GatewayKeyUsage(Base):
@@ -175,10 +177,10 @@ class ServiceAccount(Base):
         "ServiceAccountKey", back_populates="service_account", lazy="selectin", cascade="all, delete-orphan"
     )
     usages: Mapped[list["ServiceAccountUsage"]] = relationship(
-        "ServiceAccountUsage", back_populates="service_account", lazy="selectin", cascade="all, delete-orphan"
+        "ServiceAccountUsage", back_populates="service_account", lazy="noload", cascade="all, delete-orphan", passive_deletes=True
     )
     daily_usages: Mapped[list["ServiceAccountDailyUsage"]] = relationship(
-        "ServiceAccountDailyUsage", back_populates="service_account", lazy="selectin", cascade="all, delete-orphan"
+        "ServiceAccountDailyUsage", back_populates="service_account", lazy="noload", cascade="all, delete-orphan", passive_deletes=True
     )
 
 
