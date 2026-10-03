@@ -474,23 +474,11 @@ def test_client(clean_app):
     """
     Creates a FastAPI TestClient for synchronous endpoint tests,
     properly handling lifespan events.
-
-    Forces API_KEY_MODE=False regardless of .env settings.
     """
-    import aigw.routes_openai as _routes_openai
-    import aigw.routes_anthropic as _routes_anthropic
-    original_openai_mode = _routes_openai.API_KEY_MODE
-    original_anthropic_mode = _routes_anthropic.API_KEY_MODE
-    _routes_openai.API_KEY_MODE = False
-    _routes_anthropic.API_KEY_MODE = False
-
     print("Creating TestClient with lifespan support...")
     with TestClient(clean_app) as client:
         yield client
     print("Closing TestClient...")
-
-    _routes_openai.API_KEY_MODE = original_openai_mode
-    _routes_anthropic.API_KEY_MODE = original_anthropic_mode
 
 
 @pytest.fixture

@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import APIKeyHeader
 from loguru import logger
 
-from aigw.config import PROXY_API_KEY, API_KEY_MODE
+from aigw.config import PROXY_API_KEY
 from aigw.models_anthropic import (
     AnthropicMessagesRequest,
     AnthropicCountTokensRequest,
@@ -39,19 +39,23 @@ async def verify_anthropic_api_key(
     """
     Verify API key for Anthropic API.
 
-    In API_KEY_MODE the caller's token is the Kiro API key — we only check
-    that at least one auth header is present, not that it matches PROXY_API_KEY.
-
     Also resolves the token as a Service Account key (``izisa_`` prefix) and
     stashes the result on ``request.state.service_account`` (None when the
-    token is not a service-account key), independent of API_KEY_MODE, so
-    request-path enforcement in the endpoints can read it. A resolved
-    service account is accepted outright — it is a distinct token type from
-    PROXY_API_KEY / Kiro API keys, so this does not change accept/reject
-    behavior for any other token type. `request` defaults to None and is
-    placed last / optional so this function stays callable exactly as
-    before when invoked directly (e.g. in unit tests) without a real
-    Request object; FastAPI itself always injects it via DI.
+    token is not a service-account key), so request-path enforcement in the
+    endpoints can read it. A resolved service account is accepted outright —
+    it is a distinct token type from PROXY_API_KEY / Gateway Keys, so this
+    does not change accept/reject behavior for any other token type.
+
+    Also resolves the token as a Gateway Key (``iziaigw_`` prefix,
+    DB-registered via the dashboard) and stashes the resolved id on
+    ``request.state.gateway_key_id`` (None when not a gateway key) so the
+    endpoint can attribute 9router usage without a second DB lookup. A
+    resolved Gateway Key is accepted outright, same as a Service Account.
+
+    `request` defaults to None and is placed last / optional so this function
+    stays callable exactly as before when invoked directly (e.g. in unit
+    tests) without a real Request object; FastAPI itself always injects it
+    via DI.
 
     Supports two authentication methods:
     1. x-api-key header (Anthropic native)
@@ -69,7 +73,8 @@ async def verify_anthropic_api_key(
     Raises:
         HTTPException: 401 if key is invalid or missing
     """
-    from aigw.db.repositories import SERVICE_ACCOUNT_KEY_PREFIX
+    from aigw.api_key_mode import resolve_gateway_key_id
+    from aigw.db.repositories import GATEWAY_KEY_PREFIX, SERVICE_ACCOUNT_KEY_PREFIX
     from aigw.service_accounts import resolve_service_account
 
     token = x_api_key or (
@@ -82,9 +87,8 @@ async def verify_anthropic_api_key(
         return True
 
     # A token carrying our own prefix that did NOT resolve is revoked, disabled,
-    # or forged — reject it here. Without this it would fall through to the
-    # API_KEY_MODE branch below, which accepts any bearer token, so revoking a
-    # key or deactivating an account would have no effect whatsoever.
+    # or forged — reject it here rather than falling through to the generic
+    # "invalid API key" check below, so the error is unambiguous.
     if token and token.startswith(SERVICE_ACCOUNT_KEY_PREFIX):
         logger.warning("Rejected a service-account key that is revoked, disabled, or unknown.")
         raise HTTPException(
@@ -98,16 +102,23 @@ async def verify_anthropic_api_key(
             },
         )
 
-    if API_KEY_MODE:
-        if x_api_key or (authorization and authorization.startswith("Bearer ")):
-            return True
+    gateway_key_id = await resolve_gateway_key_id(token)
+    if request is not None:
+        request.state.gateway_key_id = gateway_key_id
+    if gateway_key_id is not None:
+        return True
+
+    # Same reasoning as the service-account check above: a forged/revoked
+    # Gateway Key must not silently fall through to any other acceptance path.
+    if token and token.startswith(GATEWAY_KEY_PREFIX):
+        logger.warning("Rejected a gateway key that is revoked, disabled, or unknown.")
         raise HTTPException(
             status_code=401,
             detail={
                 "type": "error",
                 "error": {
                     "type": "authentication_error",
-                    "message": "API_KEY_MODE is enabled: supply your Kiro API key via x-api-key or Authorization: Bearer",
+                    "message": "Invalid or revoked gateway key",
                 },
             },
         )
@@ -202,12 +213,10 @@ async def messages(
 
     # Every request forwards straight to 9router — the sole upstream now that
     # the legacy Kiro account/key pool has been fully retired.
-    from aigw.api_key_mode import extract_bearer_token, _resolve_gateway_key_id_only, _make_nine_router_usage_cb
-    # verify_anthropic_api_key already accepted this request via either
-    # x-api-key (Anthropic native) or Authorization: Bearer — check both,
-    # unlike the OpenAI endpoint which only ever sees Bearer tokens.
-    raw_token = request.headers.get("x-api-key") or extract_bearer_token(request.headers.get("Authorization"))
-    gateway_key_id = await _resolve_gateway_key_id_only(raw_token)
+    from aigw.api_key_mode import _make_nine_router_usage_cb
+    # verify_anthropic_api_key already resolved the Gateway Key (if any) and
+    # stashed its id on request.state — reuse it instead of a second DB hit.
+    gateway_key_id = getattr(request.state, "gateway_key_id", None)
     return await forward_to_nine_router(
         request, await request.body(), on_usage=_make_nine_router_usage_cb(gateway_key_id)
     )

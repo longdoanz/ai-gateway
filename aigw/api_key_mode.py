@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
 
 """
-API Key Mode support for AI Gateway.
+Gateway Key support for AI Gateway.
 
-Every request now forwards straight to 9router (see aigw.nine_router_client
-and aigw.routes_anthropic / aigw.routes_openai) — the legacy Kiro account/key
-pool request-handling path that used to live in this module has been
-removed. What remains here are the pieces still genuinely in use:
+Every request forwards straight to 9router (see aigw.nine_router_client and
+aigw.routes_anthropic / aigw.routes_openai) — the legacy "API_KEY_MODE" that
+let any caller-supplied bearer token through unchecked has been removed
+(callers must now authenticate with PROXY_API_KEY, a Service Account key, or
+a valid DB-registered Gateway Key). What remains here are the pieces still
+genuinely in use:
 
-- Extracting the caller's bearer token (Gateway Keys / Kiro keys) from a
-  request.
+- Extracting the caller's bearer token from a request.
 - Resolving a Gateway Key (``iziaigw_`` prefix) to its DB id and recording
   its usage, for requests forwarded to 9router.
 - ``get_usage_limits``/``build_api_key_headers``/``get_token_fingerprint``:
@@ -87,11 +88,12 @@ def extract_bearer_token(auth_header: Optional[str]) -> Optional[str]:
 
 def get_api_key_from_request(request: Request) -> str:
     """
-    Extract the Kiro API key from the incoming request's Authorization header.
+    Extract the bearer token from the incoming request's Authorization header.
 
-    The client's Bearer token IS the Kiro/Gateway API key and is forwarded
-    directly (to 9router, or to Kiro for the sync-worker's usage-limit
-    lookups) without any server-side refresh.
+    By the time this is called, ``verify_api_key``/``verify_anthropic_api_key``
+    has already accepted the request (PROXY_API_KEY, a Service Account key, or
+    a valid Gateway Key), so the header is guaranteed present; this just gets
+    the raw value back out for Gateway Key usage-attribution.
 
     Args:
         request: FastAPI Request object.
@@ -106,7 +108,7 @@ def get_api_key_from_request(request: Request) -> str:
     if not token:
         raise HTTPException(
             status_code=401,
-            detail="API_KEY_MODE is enabled: supply your Kiro API key as 'Authorization: Bearer <key>'"
+            detail="Supply your API key as 'Authorization: Bearer <key>'"
         )
     return token
 
@@ -221,14 +223,16 @@ async def _track_gateway_key_usage(gateway_key_id: int, input_tokens: int = 0, o
         logger.debug(f"Gateway key usage tracking failed: {e}")
 
 
-async def _resolve_gateway_key_id_only(token: str) -> int | None:
-    """Look up just the gateway_key_id for an iziaigw_ token, without resolving a Kiro key.
+async def resolve_gateway_key_id(token: str | None) -> int | None:
+    """Resolve an ``iziaigw_``-prefixed bearer token to its active Gateway Key id.
 
-    Used by the 503 fallback path (pool empty) so 9router usage can still be
-    attributed to the gateway key. Returns None when not a gateway key, DB is
+    Called from ``verify_api_key``/``verify_anthropic_api_key`` to decide
+    whether a Gateway Key authenticates the request, and the resolved id is
+    reused (via ``request.state.gateway_key_id``) to attribute 9router usage.
+    Returns None when the token is missing, not a gateway key, the DB is
     unconfigured, the key is unknown/inactive, or on any error.
     """
-    if not token.startswith("iziaigw_") or not is_db_configured():
+    if not token or not token.startswith("iziaigw_") or not is_db_configured():
         return None
     try:
         from aigw.db.engine import async_session_factory

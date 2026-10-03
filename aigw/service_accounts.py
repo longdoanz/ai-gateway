@@ -10,12 +10,10 @@ traffic always routes straight to 9router (see
 ``aigw.nine_router_client.forward_to_nine_router``), never the Kiro
 account/key pool.
 
-This module is deliberately independent of API_KEY_MODE: the resolver here
-is consulted by ``aigw.routes_openai.verify_api_key`` and
+The resolver here is consulted by ``aigw.routes_openai.verify_api_key`` and
 ``aigw.routes_anthropic.verify_anthropic_api_key`` *before* the
-direct-9router / API_KEY_MODE / Kiro-pool branch split in
-``chat_completions`` / ``messages``, so enforcement cannot be bypassed by an
-admin flipping the direct-9router-mode runtime toggle.
+direct-9router forwarding in ``chat_completions`` / ``messages``, so
+enforcement cannot be bypassed.
 """
 
 from dataclasses import dataclass, field
@@ -45,10 +43,9 @@ class ServiceAccountContext:
 def _is_db_configured() -> bool:
     """Return True when a database is available for service-account lookups.
 
-    Unlike ``aigw.usage.scheduler.is_db_configured()``, this does NOT also
-    require API_KEY_MODE — service accounts must resolve regardless of
-    whether the gateway is in API_KEY_MODE, account-manager mode, or
-    direct-9router mode.
+    Mirrors ``aigw.usage.scheduler.is_db_configured()`` (both just check
+    DATABASE_URL); kept as a separate helper so this module stays decoupled
+    from the usage-scheduler module.
 
     Returns:
         True if DATABASE_URL is configured (the async session factory
@@ -65,7 +62,7 @@ async def resolve_service_account(token: str | None) -> ServiceAccountContext | 
     is missing, does not carry the ``izisa_`` prefix, or no database is
     configured. Never raises — on any unexpected error this logs at debug
     level and returns None, mirroring the defensive style of
-    ``aigw.api_key_mode._resolve_gateway_key_id_only``.
+    ``aigw.api_key_mode.resolve_gateway_key_id``.
 
     Args:
         token: Raw bearer/x-api-key token value from the incoming request.

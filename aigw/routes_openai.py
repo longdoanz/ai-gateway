@@ -19,7 +19,6 @@ from loguru import logger
 from aigw.config import (
     PROXY_API_KEY,
     APP_VERSION,
-    API_KEY_MODE,
 )
 from aigw.models_openai import (
     OpenAIModel,
@@ -37,21 +36,25 @@ async def verify_api_key(auth_header: str = Security(api_key_header), request: R
     """
     Verify API key in Authorization header.
 
-    In API_KEY_MODE the Bearer token is the caller's Kiro API key — we only
-    check that it is present, not that it matches PROXY_API_KEY.
-
     Also resolves the token as a Service Account key (``izisa_`` prefix) and
     stashes the result on ``request.state.service_account`` (None when the
-    token is not a service-account key), independent of API_KEY_MODE, so
-    request-path enforcement in the endpoints can read it. A resolved
-    service account is accepted outright — it is a distinct token type from
-    PROXY_API_KEY / Kiro API keys, so this does not change accept/reject
-    behavior for any other token type. `request` defaults to None (rather
-    than being a required first positional param) so this function stays
-    callable exactly as before when invoked directly (e.g. in unit tests)
-    without a real Request object; FastAPI itself always injects it via DI.
+    token is not a service-account key), so request-path enforcement in the
+    endpoints can read it. A resolved service account is accepted outright —
+    it is a distinct token type from PROXY_API_KEY / Gateway Keys, so this
+    does not change accept/reject behavior for any other token type.
 
-    Expects format: "Bearer {PROXY_API_KEY}" (or any Bearer token in API_KEY_MODE)
+    Also resolves the token as a Gateway Key (``iziaigw_`` prefix,
+    DB-registered via the dashboard) and stashes the resolved id on
+    ``request.state.gateway_key_id`` (None when not a gateway key) so the
+    endpoint can attribute 9router usage without a second DB lookup. A
+    resolved Gateway Key is accepted outright, same as a Service Account.
+
+    `request` defaults to None (rather than being a required first positional
+    param) so this function stays callable exactly as before when invoked
+    directly (e.g. in unit tests) without a real Request object; FastAPI
+    itself always injects it via DI.
+
+    Expects format: "Bearer {PROXY_API_KEY}" (or a Service Account / Gateway Key)
 
     Args:
         auth_header: Authorization header value
@@ -64,7 +67,8 @@ async def verify_api_key(auth_header: str = Security(api_key_header), request: R
     Raises:
         HTTPException: 401 if key is invalid or missing
     """
-    from aigw.db.repositories import SERVICE_ACCOUNT_KEY_PREFIX
+    from aigw.api_key_mode import resolve_gateway_key_id
+    from aigw.db.repositories import GATEWAY_KEY_PREFIX, SERVICE_ACCOUNT_KEY_PREFIX
     from aigw.service_accounts import resolve_service_account
 
     token = auth_header[7:] if auth_header and auth_header.startswith("Bearer ") else None
@@ -75,20 +79,24 @@ async def verify_api_key(auth_header: str = Security(api_key_header), request: R
         return True
 
     # A token carrying our own prefix that did NOT resolve is revoked, disabled,
-    # or forged — reject it here. Without this it would fall through to the
-    # API_KEY_MODE branch below, which accepts any bearer token, so revoking a
-    # key or deactivating an account would have no effect whatsoever.
+    # or forged — reject it here rather than falling through to the generic
+    # "invalid API key" check below, so the error is unambiguous.
     if token and token.startswith(SERVICE_ACCOUNT_KEY_PREFIX):
         logger.warning("Rejected a service-account key that is revoked, disabled, or unknown.")
         raise HTTPException(status_code=401, detail="Invalid or revoked service account key")
 
-    if API_KEY_MODE:
-        if not auth_header or not auth_header.startswith("Bearer "):
-            raise HTTPException(
-                status_code=401,
-                detail="API_KEY_MODE is enabled: supply your Kiro API key as 'Authorization: Bearer <key>'"
-            )
+    gateway_key_id = await resolve_gateway_key_id(token)
+    if request is not None:
+        request.state.gateway_key_id = gateway_key_id
+    if gateway_key_id is not None:
         return True
+
+    # Same reasoning as the service-account check above: a forged/revoked
+    # Gateway Key must not silently fall through to any other acceptance path.
+    if token and token.startswith(GATEWAY_KEY_PREFIX):
+        logger.warning("Rejected a gateway key that is revoked, disabled, or unknown.")
+        raise HTTPException(status_code=401, detail="Invalid or revoked gateway key")
+
     if not auth_header or auth_header != f"Bearer {PROXY_API_KEY}":
         logger.warning("Access attempt with invalid API key.")
         raise HTTPException(status_code=401, detail="Invalid or missing API Key")
@@ -173,11 +181,10 @@ async def get_models(request: Request, search: str | None = None):
 @router.get("/v1/usage", dependencies=[Depends(verify_api_key)])
 async def get_usage(request: Request, resource_type: str = "AGENTIC_REQUEST"):
     """
-    Proxy to Kiro getUsageLimits API. Only available in API_KEY_MODE.
+    Legacy Kiro getUsageLimits proxy. Always unavailable now that every
+    request forwards straight to 9router — kept only so old clients get a
+    clear 404/501 instead of a 404 route-not-found.
     """
-    if not API_KEY_MODE:
-        raise HTTPException(status_code=501, detail="Usage endpoint is only available in API_KEY_MODE")
-
     # A service-account key is not a Kiro credential. Without this guard it
     # would be forwarded verbatim to Kiro's getUsageLimits, leaking our own
     # secret to a third party for a request that can only ever fail.
@@ -245,9 +252,10 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
 
     # Every request forwards straight to 9router — the sole upstream now that
     # the legacy Kiro account/key pool has been fully retired.
-    from aigw.api_key_mode import get_api_key_from_request, _resolve_gateway_key_id_only, _make_nine_router_usage_cb
-    raw_token = get_api_key_from_request(request)
-    gateway_key_id = await _resolve_gateway_key_id_only(raw_token)
+    from aigw.api_key_mode import _make_nine_router_usage_cb
+    # verify_api_key already resolved the Gateway Key (if any) and stashed
+    # its id on request.state — reuse it instead of a second DB hit.
+    gateway_key_id = getattr(request.state, "gateway_key_id", None)
     return await forward_to_nine_router(
         request, await request.body(), on_usage=_make_nine_router_usage_cb(gateway_key_id)
     )

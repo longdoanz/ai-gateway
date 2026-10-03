@@ -26,16 +26,6 @@ from aigw.routes_openai import verify_api_key, router
 from aigw.config import PROXY_API_KEY, APP_VERSION
 
 
-@pytest.fixture(autouse=True)
-def force_standard_auth_mode():
-    """Ensure API_KEY_MODE=False for all tests in this file regardless of .env."""
-    import aigw.routes_openai as _mod
-    original = _mod.API_KEY_MODE
-    _mod.API_KEY_MODE = False
-    yield
-    _mod.API_KEY_MODE = original
-
-
 # =============================================================================
 # Tests for verify_api_key function
 # =============================================================================

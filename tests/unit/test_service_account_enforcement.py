@@ -414,21 +414,19 @@ class TestAnthropicMessagesServiceAccountEnforcement:
 # Regression test for a bug found only by running the real gateway: a revoked
 # key kept working. resolve_service_account() correctly returns None for a
 # revoked key, a deactivated account, or a forged token — but the auth
-# dependencies then fell through to the API_KEY_MODE branch, which accepts ANY
-# bearer token, so the dead izisa_ key was silently reclassified as a valid
-# opaque Kiro key. Revocation had no effect at all.
+# dependencies then fell through to the (now-removed) API_KEY_MODE branch,
+# which used to accept ANY bearer token, so the dead izisa_ key was silently
+# reclassified as a valid opaque Kiro key. Revocation had no effect at all.
 #
-# The shared `test_client` fixture forces API_KEY_MODE=False, which is why the
-# original unit tests could not see this. Production runs with API_KEY_MODE=true
-# (.env), so these tests patch it back on.
+# API_KEY_MODE has since been deleted entirely: an unresolved izisa_/iziaigw_
+# key is rejected outright, and any other unrecognized bearer token now falls
+# through to the ordinary PROXY_API_KEY check and gets a 401 — there is no
+# longer an "accept any token" escape hatch to fall through to.
 # ---------------------------------------------------------------------------
 
 class TestRevokedServiceAccountKeyRejected:
     def test_openai_rejects_unresolvable_service_account_token(self, test_client):
-        with (
-            patch("aigw.routes_openai.API_KEY_MODE", True),
-            patch("aigw.service_accounts.resolve_service_account", AsyncMock(return_value=None)),
-        ):
+        with patch("aigw.service_accounts.resolve_service_account", AsyncMock(return_value=None)):
             response = test_client.get(
                 "/v1/models",
                 headers={"Authorization": "Bearer izisa_revoked"},
@@ -440,7 +438,6 @@ class TestRevokedServiceAccountKeyRejected:
         mock_forward = AsyncMock(return_value=MagicMock(status_code=200))
 
         with (
-            patch("aigw.routes_openai.API_KEY_MODE", True),
             patch("aigw.service_accounts.resolve_service_account", AsyncMock(return_value=None)),
             patch("aigw.routes_openai.forward_to_nine_router", mock_forward),
         ):
@@ -457,7 +454,6 @@ class TestRevokedServiceAccountKeyRejected:
         mock_forward = AsyncMock(return_value=MagicMock(status_code=200))
 
         with (
-            patch("aigw.routes_anthropic.API_KEY_MODE", True),
             patch("aigw.service_accounts.resolve_service_account", AsyncMock(return_value=None)),
             patch("aigw.routes_anthropic.forward_to_nine_router", mock_forward),
         ):
@@ -474,16 +470,14 @@ class TestRevokedServiceAccountKeyRejected:
         assert response.status_code == 401
         mock_forward.assert_not_called()
 
-    def test_ordinary_kiro_token_still_accepted_in_api_key_mode(self, test_client):
-        """The rejection must be scoped to our own prefix — existing Kiro-key
-        clients must keep working, since the feature is soft-deprecated only."""
-        with (
-            patch("aigw.routes_openai.API_KEY_MODE", True),
-            patch("aigw.service_accounts.resolve_service_account", AsyncMock(return_value=None)),
-        ):
+    def test_unrecognized_bearer_token_rejected(self, test_client):
+        """No more accept-any-token mode: an arbitrary bearer token that is
+        not PROXY_API_KEY, a resolvable Service Account key, or a resolvable
+        Gateway Key must be rejected, not silently treated as a legacy Kiro key."""
+        with patch("aigw.service_accounts.resolve_service_account", AsyncMock(return_value=None)):
             response = test_client.get(
                 "/v1/models",
-                headers={"Authorization": "Bearer some-ordinary-kiro-key"},
+                headers={"Authorization": "Bearer some-random-token"},
             )
 
-        assert response.status_code != 401
+        assert response.status_code == 401

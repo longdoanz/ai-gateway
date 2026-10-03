@@ -81,11 +81,6 @@ SERVER_PORT: int = int(os.getenv("SERVER_PORT", str(DEFAULT_SERVER_PORT)))
 # API key for proxy access (clients must pass it in Authorization header)
 PROXY_API_KEY: str = os.getenv("PROXY_API_KEY", "my-super-secret-password-123")
 
-# API Key Mode - users supply their own Kiro API key per-request
-# When enabled: Authorization: Bearer <kiro_api_key> is forwarded directly to Kiro
-# Server-side credentials (REFRESH_TOKEN, KIRO_CREDS_FILE, KIRO_CLI_DB_FILE) not required
-API_KEY_MODE: bool = os.getenv("API_KEY_MODE", "false").lower() in ("true", "1", "yes")
-
 # ==================================================================================================
 # VPN/Proxy Settings for Kiro API Access
 # ==================================================================================================
@@ -313,17 +308,17 @@ FIRST_TOKEN_TIMEOUT: float = float(os.getenv("FIRST_TOKEN_TIMEOUT", "60"))
 
 # Read timeout for streaming responses (in seconds).
 # This is the maximum time to wait for data between chunks during streaming.
+# Should be longer than FIRST_TOKEN_TIMEOUT since the model may pause between chunks
+# while "thinking" (especially for tool calls or complex reasoning).
+# Default: 300 seconds (5 minutes) - generous timeout to avoid premature disconnects.
+STREAMING_READ_TIMEOUT: float = float(os.getenv("STREAMING_READ_TIMEOUT", "300"))
+
 # Shared upstream connection pool (main.py). Every in-flight stream holds one
 # connection for its whole duration, so HTTP_MAX_CONNECTIONS caps concurrent
 # streams; each also costs ~2 file descriptors (client + upstream socket), so
 # keep it well under the container's nofile limit.
 HTTP_MAX_CONNECTIONS: int = int(os.getenv("HTTP_MAX_CONNECTIONS", "300"))
 HTTP_MAX_KEEPALIVE_CONNECTIONS: int = int(os.getenv("HTTP_MAX_KEEPALIVE_CONNECTIONS", "50"))
-
-# Should be longer than FIRST_TOKEN_TIMEOUT since the model may pause between chunks
-# while "thinking" (especially for tool calls or complex reasoning).
-# Default: 300 seconds (5 minutes) - generous timeout to avoid premature disconnects.
-STREAMING_READ_TIMEOUT: float = float(os.getenv("STREAMING_READ_TIMEOUT", "300"))
 
 # Maximum number of attempts on first token timeout.
 # After exhausting all attempts, an error will be returned.
@@ -515,6 +510,11 @@ NINE_ROUTER_URL: str = os.getenv("NINE_ROUTER_URL", "")
 
 # Read timeout (seconds) for non-streaming requests forwarded to 9router.
 # Upstream returns nothing until the whole completion is generated, which can
+# take several minutes for large prompts. Order the layers inner < outer so
+# the innermost one fails first with a proper error: 9router
+# FETCH_NONSTREAM_TIMEOUT_MS (540s) < this (570s) < nginx proxy_read_timeout (600s).
+NINE_ROUTER_NONSTREAM_READ_TIMEOUT: float = float(os.getenv("NINE_ROUTER_NONSTREAM_READ_TIMEOUT", "570"))
+
 # Cooldown for multi-level model override targets (aigw.model_cooldown): a
 # target that fails with 429/5xx/timeout is skipped for BASE seconds, doubling
 # per consecutive failure up to MAX (Retry-After wins, capped at MAX).
@@ -526,11 +526,6 @@ NINE_ROUTER_MODEL_COOLDOWN_MAX: float = float(os.getenv("NINE_ROUTER_MODEL_COOLD
 # Must exceed 9router's STREAM_STALL_TIMEOUT_MS (default 360s) so 9router's own
 # watchdog fires first and reports a real error instead of us cutting the stream.
 NINE_ROUTER_STREAM_READ_TIMEOUT: float = float(os.getenv("NINE_ROUTER_STREAM_READ_TIMEOUT", "420"))
-
-# take several minutes for large prompts. Order the layers inner < outer so
-# the innermost one fails first with a proper error: 9router
-# FETCH_NONSTREAM_TIMEOUT_MS (540s) < this (570s) < nginx proxy_read_timeout (600s).
-NINE_ROUTER_NONSTREAM_READ_TIMEOUT: float = float(os.getenv("NINE_ROUTER_NONSTREAM_READ_TIMEOUT", "570"))
 
 # API key for 9router's /v1/* endpoints (REQUIRE_API_KEY=true in 9router)
 NINE_ROUTER_API_KEY: str = os.getenv("NINE_ROUTER_API_KEY", "")
