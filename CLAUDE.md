@@ -17,6 +17,7 @@ pip install -r requirements.txt
 
 # Run tests
 pytest                                    # All tests
+pytest tests/db                           # Real Postgres 18 on tmpfs (needs Docker or TEST_PG_ADMIN_URL)
 
 # Run with coverage
 pytest --cov=aigw --cov-report=html
